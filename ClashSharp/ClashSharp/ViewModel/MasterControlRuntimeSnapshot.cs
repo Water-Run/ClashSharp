@@ -1,3 +1,4 @@
+using ClashSharp.ApplicationModel.Network;
 using ClashSharp.Model;
 
 namespace ClashSharp.ViewModel;
@@ -29,6 +30,9 @@ internal sealed record MasterControlRuntimeSnapshot(
     /// <summary>Whether the aggregate was read successfully; zero counts remain valid observations.</summary>
     public bool IsAvailable { get; init; } = true;
     public RuntimeDnsConfiguration? Dns { get; init; }
+
+    /// <summary>Independently verified network state; a saved preference is never a substitute.</summary>
+    public NetworkStateSnapshot? NetworkState { get; init; }
 
     public static MasterControlRuntimeSnapshot Unavailable { get; } = new(
         new CoreConfigurationState(string.Empty, string.Empty, false),

@@ -36,7 +36,7 @@ public sealed partial class MasterControlViewModelTests
     public async Task RuntimeSummaryTiles_UnavailableSnapshotCannotPublishResidualCountsOrOwnership()
     {
         FakeMasterSettings settings = new() { ActiveProfileId = "profile-a" };
-        FakeMasterRuntime runtime = new() { Snapshot = CreateAvailableSummaryForTiles() with { IsAvailable = false } };
+        FakeMasterRuntime runtime = new() { Snapshot = CreateAvailableSummaryForTiles() with { IsAvailable = false, NetworkState = null } };
         MasterControlViewModel viewModel = CreateViewModel(settings: settings, runtime: runtime);
 
         await viewModel.LoadAsync(CancellationToken.None);
@@ -221,5 +221,8 @@ public sealed partial class MasterControlViewModelTests
         TunRequested: true, TunEffective: true, ActiveProfileId: "profile-a", ActiveProfileName: "Profile A",
         ActiveSubscription: new ProfileSubscriptionLink("link-a", "Provider A", "https://example.invalid/sub", true, 24,
             DateTimeOffset.UnixEpoch, "ok", Usage: new SubscriptionUsage(1024, 2048, 8192, 0)),
-        ActiveProfileUpdatedAt: DateTimeOffset.UnixEpoch.AddDays(1));
+        ActiveProfileUpdatedAt: DateTimeOffset.UnixEpoch.AddDays(1))
+    {
+        NetworkState = new(ClashSharpMode.RuleTakeover, true, false, true, 7890, "verified-runtime"),
+    };
 }

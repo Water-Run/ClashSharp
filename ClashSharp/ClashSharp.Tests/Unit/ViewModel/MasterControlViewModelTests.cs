@@ -1,4 +1,5 @@
 using ClashSharp.ApplicationModel.Mutations;
+using ClashSharp.ApplicationModel.Network;
 using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.Diagnostics;
 using ClashSharp.Infrastructure.Networking;
@@ -24,7 +25,7 @@ public sealed partial class MasterControlViewModelTests
             heroStatusLayout: heroLayout,
             infoTileLayout: infoLayout);
 
-        Assert.Equal(ClashSharpMode.Disabled, viewModel.SelectedMode);
+        Assert.Equal(ClashSharpMode.Faulted, viewModel.SelectedMode);
         Assert.Empty(viewModel.HeroStatusItems);
         Assert.Empty(viewModel.InfoTiles);
         Assert.Equal(0, heroLayout.GetLayoutCount);
@@ -32,13 +33,14 @@ public sealed partial class MasterControlViewModelTests
         Assert.Equal(0, infoLayout.GetLayoutCount);
     }
 
-    /// <summary>Verifies construction loads localized static labels and persisted mode state.</summary>
+    /// <summary>Verifies loading uses localized labels and independently observed mode state.</summary>
     [Fact]
     public async Task LoadAsync_LoadsLocalizedLabelsAndSelectedMode()
     {
         FakeMasterSettings settings = new() { CurrentMode = ClashSharpMode.RuleTakeover };
 
-        MasterControlViewModel viewModel = CreateViewModel(settings: settings);
+        MasterControlViewModel viewModel = CreateViewModel(settings: settings,
+            runtime: new FakeMasterRuntime { Snapshot = ObservedNetwork(ClashSharpMode.RuleTakeover) });
         await viewModel.LoadAsync(CancellationToken.None);
 
         Assert.Equal("Master", viewModel.PageTitleText);
@@ -77,13 +79,14 @@ public sealed partial class MasterControlViewModelTests
         FakeMasterWindowsProxy proxy = new() { CurrentState = new WindowsProxyState(true, "127.0.0.1:7890") };
         FakeMasterSettings settings = new() { TransparentProxyEnabled = true };
         FakeMasterTrayStatus trayStatus = new() { Snapshot = new TrayStatusSnapshot("HK-01", 82) };
-        MasterControlViewModel viewModel = CreateViewModel(core, proxy, settings, trayStatus: trayStatus);
+        MasterControlViewModel viewModel = CreateViewModel(core, proxy, settings, trayStatus: trayStatus,
+            runtime: new FakeMasterRuntime { Snapshot = ObservedNetwork(ClashSharpMode.Disabled) });
 
         await viewModel.LoadAsync(CancellationToken.None);
 
         Assert.Equal("Core ready: v1.19.11", viewModel.CoreStatusText);
         Assert.Equal("On", viewModel.SystemProxyStatusText);
-        Assert.Equal("Unavailable", viewModel.TransparentProxyStatusText);
+        Assert.Equal("Off", viewModel.TransparentProxyStatusText);
         Assert.Equal("Ready", viewModel.BasicStatusText);
         Assert.Equal("HK-01", viewModel.CurrentNodeText);
         Assert.Equal("82 ms", viewModel.LatencySummaryText);
@@ -96,7 +99,7 @@ public sealed partial class MasterControlViewModelTests
     [InlineData(true, MihomoCoreOwner.None, "Not running")]
     [InlineData(true, MihomoCoreOwner.App, "Running")]
     [InlineData(true, MihomoCoreOwner.Service, "Running")]
-    public async Task CoreTileReportsObservedRuntimeRatherThanExecutableAvailability(
+    public async Task CoreTileReportsVerifiedNetworkStateRatherThanExecutableAvailability(
         bool ownershipKnown, MihomoCoreOwner owner, string expected)
     {
         FakeMasterRuntime runtime = new()
@@ -106,6 +109,9 @@ public sealed partial class MasterControlViewModelTests
                 IsAvailable = true,
                 RuntimeOwnershipKnown = ownershipKnown,
                 EffectiveOwner = owner,
+                NetworkState = new NetworkStateSnapshot(owner == MihomoCoreOwner.None ? ClashSharpMode.Disabled
+                    : owner == MihomoCoreOwner.Service ? ClashSharpMode.RuleTakeover : ClashSharpMode.Standby,
+                    owner != MihomoCoreOwner.None, false, owner == MihomoCoreOwner.Service, 7890, "observed", IsKnown: ownershipKnown),
             },
         };
         MasterControlViewModel viewModel = CreateViewModel(runtime: runtime);
@@ -507,12 +513,14 @@ public sealed partial class MasterControlViewModelTests
             (_, _) => Task.CompletedTask,
             (operation, token) => operation(token),
             new FakeMasterTrayStatus(),
+            runtime: new FakeMasterRuntime { Snapshot = ObservedNetwork(ClashSharpMode.Disabled) },
             modeApplied: _ =>
             {
                 notifiedCount++;
                 return Task.CompletedTask;
             });
 
+        await viewModel.LoadAsync(CancellationToken.None);
         await viewModel.ApplyModeAsync(ClashSharpMode.Disabled, CancellationToken.None);
 
         Assert.Equal(0, takeover.ApplyCount);
@@ -521,9 +529,9 @@ public sealed partial class MasterControlViewModelTests
         Assert.True(viewModel.IsDisabledModeSelected);
     }
 
-    /// <summary>Verifies expected takeover failures preserve displayed baseline state and log an error.</summary>
+    /// <summary>Verifies a failed transition is not presented as a confirmed rollback.</summary>
     [Fact]
-    public async Task ApplyModeAsync_WhenTakeoverFails_PreservesBaselineAndLogs()
+    public async Task ApplyModeAsync_WhenTakeoverFails_RequiresObservationAndLogs()
     {
         FakeMasterTakeover takeover = new()
         {
@@ -534,8 +542,8 @@ public sealed partial class MasterControlViewModelTests
 
         await viewModel.ApplyModeAsync(ClashSharpMode.Standby, CancellationToken.None);
 
-        Assert.Equal(ClashSharpMode.Disabled, viewModel.SelectedMode);
-        Assert.Equal(string.Empty, viewModel.CoreStatusText);
+        Assert.Equal(ClashSharpMode.Faulted, viewModel.SelectedMode);
+        Assert.Equal("Unavailable", viewModel.CoreStatusText);
         Assert.Equal("Mode failed", viewModel.OperationErrorText);
         Assert.Contains(log.Entries, entry => entry.Level == "Error" && entry.Detail == "missing core");
     }
@@ -559,7 +567,7 @@ public sealed partial class MasterControlViewModelTests
 
     /// <summary>Verifies post-apply publication failures cannot leave optimistic mode presentation behind.</summary>
     [Fact]
-    public async Task ModeCommand_WhenResultPublicationFails_RestoresPresentationAndReportsError()
+    public async Task ModeCommand_WhenResultPublicationFails_InvalidatesPresentationAndReportsError()
     {
         FakeMasterSettings settings = new() { CurrentMode = ClashSharpMode.Disabled };
         FakeMasterTakeover takeover = new()
@@ -577,10 +585,10 @@ public sealed partial class MasterControlViewModelTests
         viewModel.FullTakeoverModeCommand.Execute(null);
         await Assert.IsAssignableFrom<Task>(viewModel.FullTakeoverModeCommand.ExecutionTask);
 
-        Assert.Equal(ClashSharpMode.Disabled, viewModel.SelectedMode);
-        Assert.Equal(string.Empty, viewModel.CoreStatusText);
-        Assert.Equal(string.Empty, viewModel.SystemProxyStatusText);
-        Assert.Equal(string.Empty, viewModel.TransparentProxyStatusText);
+        Assert.Equal(ClashSharpMode.Faulted, viewModel.SelectedMode);
+        Assert.Equal("Unavailable", viewModel.CoreStatusText);
+        Assert.Equal("Unavailable", viewModel.SystemProxyStatusText);
+        Assert.Equal("Unavailable", viewModel.TransparentProxyStatusText);
         Assert.Equal("Unexpected error", viewModel.OperationErrorText);
         ApplicationError error = Assert.Single(errorSink.Errors);
         Assert.Equal("master-mode-full-takeover", error.OperationName);
@@ -675,12 +683,13 @@ public sealed partial class MasterControlViewModelTests
     [InlineData(ClashSharpMode.Standby, "Standby description")]
     [InlineData(ClashSharpMode.RuleTakeover, "Rule description")]
     [InlineData(ClashSharpMode.FullTakeover, "Full description")]
-    [InlineData(ClashSharpMode.Faulted, "Unavailable")]
+    [InlineData(ClashSharpMode.Faulted, "Unconfirmed")]
     public async Task CurrentModeTileDescriptionFollowsTheAppliedMode(
         ClashSharpMode mode, string expectedDescription)
     {
         FakeMasterSettings settings = new() { CurrentMode = ClashSharpMode.RuleTakeover };
-        MasterControlViewModel viewModel = CreateViewModel(settings: settings);
+        MasterControlViewModel viewModel = CreateViewModel(settings: settings,
+            runtime: new FakeMasterRuntime { Snapshot = ObservedNetwork(ClashSharpMode.RuleTakeover) });
         await viewModel.LoadAsync(CancellationToken.None);
         MasterControlInfoTileViewModel tile = viewModel.InfoTiles.Single(item => item.Id == "current-mode");
         Assert.Equal("Rule description", tile.Description);
@@ -949,6 +958,7 @@ public sealed partial class MasterControlViewModelTests
                 IsAvailable = true,
                 RuntimeOwnershipKnown = true,
                 EffectiveOwner = MihomoCoreOwner.None,
+                NetworkState = ObservedNetwork(ClashSharpMode.Disabled).NetworkState,
             },
         };
         FakeApplicationActionDispatcher actions = new()
@@ -1097,6 +1107,7 @@ public sealed partial class MasterControlViewModelTests
         await viewModel.LoadAsync(CancellationToken.None);
         Assert.Equal(1, runtime.SnapshotCount);
         settings.CurrentMode = ClashSharpMode.Standby;
+        runtime.Snapshot = ObservedNetwork(ClashSharpMode.Standby);
 
         viewModel.InvalidateAfterAction(settingsImported: true);
         await viewModel.LoadAsync(CancellationToken.None);
@@ -1187,6 +1198,7 @@ public sealed partial class MasterControlViewModelTests
                 "Master.Status.TransparentProxy" => "Transparent proxy",
                 "Master.Status.CurrentRuntime.Format" => "Current state: {0}",
                 "Master.BasicStatus.Unavailable" => "Unavailable",
+                "Master.BasicStatus.Unknown" => "Unconfirmed",
                 "Master.BasicStatus.Ready" => "Ready",
                 "Master.BasicStatus.Active" => "Active",
                 "Master.Tile.Core" => "Core",

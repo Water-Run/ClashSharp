@@ -35,7 +35,7 @@ using TriggerPresentationSummary =
 
 namespace ClashSharp.Tests.Unit.ViewModel;
 
-public sealed class MasterControlRuntimeAdapterTests
+public sealed partial class MasterControlRuntimeAdapterTests
 {
     [Fact]
     public void GetSnapshotAsync_CapturesOnCallingThreadAndAggregatesOnWorkerThread()

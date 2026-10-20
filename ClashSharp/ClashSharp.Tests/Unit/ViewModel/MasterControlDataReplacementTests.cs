@@ -81,6 +81,6 @@ public sealed partial class MasterControlViewModelTests
         await viewModel.RuleTakeoverModeCommand.ExecuteObservedAsync(null, CancellationToken.None);
 
         Assert.Equal(1, admitted);
-        Assert.Equal(ClashSharpMode.Disabled, viewModel.SelectedMode);
+        Assert.Equal(ClashSharpMode.Faulted, viewModel.SelectedMode);
     }
 }

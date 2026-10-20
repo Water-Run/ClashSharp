@@ -40,6 +40,8 @@ public sealed partial class MasterControlViewModelTests
     [Theory]
     [InlineData("unavailable", "Unavailable")]
     [InlineData("owner", "Unavailable")]
+    [InlineData("network", "Unavailable")]
+    [InlineData("disagreement", "Unavailable")]
     [InlineData("profile", "Unavailable")]
     [InlineData("stopped", "Off")]
     public async Task DnsTiles_DoNotReuseOldConfigurationAfterRuntimeBecomesUncertain(string change, string expected)
@@ -53,7 +55,9 @@ public sealed partial class MasterControlViewModelTests
         {
             "unavailable" => runtime.Snapshot with { IsAvailable = false },
             "owner" => runtime.Snapshot with { RuntimeOwnershipKnown = false },
-            "stopped" => runtime.Snapshot with { EffectiveOwner = MihomoCoreOwner.None },
+            "network" => runtime.Snapshot with { NetworkState = null },
+            "disagreement" => runtime.Snapshot with { NetworkState = ObservedNetwork(ClashSharpMode.Standby).NetworkState },
+            "stopped" => runtime.Snapshot with { EffectiveOwner = MihomoCoreOwner.None, NetworkState = ObservedNetwork(ClashSharpMode.Disabled).NetworkState },
             _ => runtime.Snapshot with { ActiveProfileId = "profile-b" },
         };
         viewModel.InvalidateAfterAction();

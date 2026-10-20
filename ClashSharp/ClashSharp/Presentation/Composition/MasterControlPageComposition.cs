@@ -104,7 +104,7 @@ internal static class MasterControlPageComposition
             tileActions.ExecuteAsync,
             tileActions.RunAsync,
             new MasterControlTrayStatusAdapter(context.TrayStatus),
-            new MasterControlRuntimeAdapter(runtimeSnapshotSource),
+            new MasterControlRuntimeAdapter(runtimeSnapshotSource, context.NetworkState),
             new MasterControlActionsAdapter(applicationActions),
             mode => applicationActions.PublishProxyModeAppliedAsync(mode, CancellationToken.None),
             getRuntimeTrafficAsync: runtimeTrafficRate.GetSnapshotAsync,

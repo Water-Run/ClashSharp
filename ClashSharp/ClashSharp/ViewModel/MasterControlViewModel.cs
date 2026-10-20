@@ -11,6 +11,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Input;
 using ClashSharp.ApplicationModel.Diagnostics;
+using ClashSharp.ApplicationModel.Network;
 using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.Infrastructure.Networking;
 using ClashSharp.Model;
@@ -75,7 +76,8 @@ internal sealed partial class MasterControlViewModel : ObservableObject
     private readonly Func<ClashSharpMode, Task> _modeApplied;
 
     /// <summary>Backing field for <see cref="SelectedMode"/>.</summary>
-    private ClashSharpMode _selectedMode;
+    private ClashSharpMode _selectedMode = ClashSharpMode.Faulted;
+    private bool _isNetworkStateKnown;
 
     /// <summary>Backing field for <see cref="CoreStatusText"/>.</summary>
     private string _coreStatusText = string.Empty;
@@ -361,7 +363,12 @@ internal sealed partial class MasterControlViewModel : ObservableObject
     {
         get
         {
-            if (!_isCoreAvailable || SelectedMode == ClashSharpMode.Faulted
+            if (!_isNetworkStateKnown || SelectedMode == ClashSharpMode.Faulted)
+            {
+                return _localization.GetString("Master.BasicStatus.Unknown");
+            }
+
+            if ((!_isCoreAvailable && !_isCoreRunning)
                 || (SelectedMode is ClashSharpMode.Standby or ClashSharpMode.RuleTakeover or ClashSharpMode.FullTakeover
                     && !_isCoreRunning))
             {
@@ -407,8 +414,8 @@ internal sealed partial class MasterControlViewModel : ObservableObject
 
     public string RestoreDefaultHeroStatusLayoutText => _localization.GetString("Master.Hero.RestoreDefault");
 
-    /// <summary>Gets the selected takeover mode.</summary>
-    /// <value>Current selected mode, including faulted state when application fails.</value>
+    /// <summary>Gets the independently observed takeover mode highlighted by the page.</summary>
+    /// <value>Verified effective mode, or faulted while runtime state cannot be confirmed.</value>
     public ClashSharpMode SelectedMode
     {
         get => _selectedMode;
@@ -601,6 +608,8 @@ internal sealed partial class MasterControlViewModel : ObservableObject
         _lastHistoryAt = null;
         _isCoreAvailable = false;
         _isCoreRunning = false;
+        _isNetworkStateKnown = false;
+        SelectedMode = ClashSharpMode.Faulted;
         _mihomoVersionText = string.Empty;
         CoreStatusText = _localization.GetString("Master.Status.Unavailable");
         SystemProxyStatusText = _localization.GetString("Master.Status.Unavailable");
@@ -620,7 +629,6 @@ internal sealed partial class MasterControlViewModel : ObservableObject
             return;
         }
 
-        _selectedMode = _settings.CurrentMode;
         _heroStatusOptions = BuildHeroStatusOptions();
         OnPropertyChanged(nameof(SelectedMode));
         OnPropertyChanged(nameof(IsDisabledModeSelected));
@@ -676,7 +684,7 @@ internal sealed partial class MasterControlViewModel : ObservableObject
     /// <summary>Applies a selected takeover mode and refreshes visible status.</summary>
     /// <param name="mode">Mode to apply.</param>
     /// <param name="cancellationToken">Cancels admission or pre-side-effect work.</param>
-    /// <returns>A task that completes after verified success or baseline restoration.</returns>
+    /// <returns>A task that completes after verified success or invalidation pending a fresh observation.</returns>
     /// <remarks>
     /// Cancellation semantics: Cancellation is propagated to the durable network coordinator.
     /// Thread / reentrancy: UI-thread calls are serialized while a mode change is pending.
@@ -689,11 +697,6 @@ internal sealed partial class MasterControlViewModel : ObservableObject
             return;
         }
 
-        ClashSharpMode baselineMode = SelectedMode;
-        string baselineCoreStatus = CoreStatusText;
-        string baselineSystemProxyStatus = SystemProxyStatusText;
-        string baselineTransparentProxyStatus = TransparentProxyStatusText;
-        bool baselineCoreAvailable = _isCoreAvailable;
         OperationErrorText = string.Empty;
         IsApplyingMode = true;
         InvalidateAfterAction();
@@ -701,6 +704,9 @@ internal sealed partial class MasterControlViewModel : ObservableObject
         {
             NetworkTakeoverResult result = await _takeover
                 .ApplyModeAsync(mode, cancellationToken);
+            _isNetworkStateKnown = true;
+            _isCoreRunning = result.CoreRunning;
+            _runtimeSnapshot = _runtimeSnapshot with { NetworkState = null };
             SelectedMode = result.Mode;
             CoreStatusText = result.CoreRunning
                 ? _localization.GetString("Master.Status.Running")
@@ -721,12 +727,7 @@ internal sealed partial class MasterControlViewModel : ObservableObject
             && !ExceptionGraphClassifier.IsProcessFatal(exception)
             && !ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
         {
-            RestoreModePresentation(
-                baselineMode,
-                baselineCoreStatus,
-                baselineSystemProxyStatus,
-                baselineTransparentProxyStatus,
-                baselineCoreAvailable);
+            InvalidateModePresentation();
             string fallbackMessage = _localization.GetString("Master.Log.ApplyModeFailed");
             OperationErrorText = RuntimeFailureDiagnostics.TryExtractCode(
                 exception,
@@ -740,22 +741,12 @@ internal sealed partial class MasterControlViewModel : ObservableObject
         }
         catch (OperationCanceledException)
         {
-            RestoreModePresentation(
-                baselineMode,
-                baselineCoreStatus,
-                baselineSystemProxyStatus,
-                baselineTransparentProxyStatus,
-                baselineCoreAvailable);
+            InvalidateModePresentation();
             throw;
         }
         catch
         {
-            RestoreModePresentation(
-                baselineMode,
-                baselineCoreStatus,
-                baselineSystemProxyStatus,
-                baselineTransparentProxyStatus,
-                baselineCoreAvailable);
+            InvalidateModePresentation();
             OperationErrorText = _localization.GetString("Application.UnexpectedError");
             throw;
         }
@@ -768,18 +759,16 @@ internal sealed partial class MasterControlViewModel : ObservableObject
         }
     }
 
-    private void RestoreModePresentation(
-        ClashSharpMode mode,
-        string coreStatus,
-        string systemProxyStatus,
-        string transparentProxyStatus,
-        bool isCoreAvailable)
+    private void InvalidateModePresentation()
     {
-        SelectedMode = mode;
-        CoreStatusText = coreStatus;
-        SystemProxyStatusText = systemProxyStatus;
-        TransparentProxyStatusText = transparentProxyStatus;
-        _isCoreAvailable = isCoreAvailable;
+        // A failure may occur after a committed transition or during compensation. The next
+        // observation must establish its outcome before any previous mode is highlighted.
+        _isNetworkStateKnown = false;
+        _isCoreRunning = false;
+        SelectedMode = ClashSharpMode.Faulted;
+        CoreStatusText = _localization.GetString("Master.Status.Unavailable");
+        SystemProxyStatusText = _localization.GetString("Master.Status.Unavailable");
+        TransparentProxyStatusText = _localization.GetString("Master.Status.Unavailable");
     }
 
     public bool IsSavingTileLayout
@@ -921,10 +910,12 @@ internal sealed partial class MasterControlViewModel : ObservableObject
             }
 
             _runtimeSnapshot = snapshot.IsAvailable ? snapshot : MasterControlRuntimeSnapshot.Unavailable;
-            _isCoreRunning = snapshot.IsAvailable && snapshot.RuntimeOwnershipKnown
-                && snapshot.EffectiveOwner is MihomoCoreOwner.App or MihomoCoreOwner.Service;
-            TransparentProxyStatusText = snapshot.IsAvailable && snapshot.RuntimeOwnershipKnown
-                ? ResolveTransparentProxyStatus(snapshot.TunEffective, snapshot.TunRequested)
+            NetworkStateSnapshot? network = snapshot.NetworkState;
+            _isNetworkStateKnown = network is { IsKnown: true };
+            _isCoreRunning = _isNetworkStateKnown && network!.CoreRunning;
+            SelectedMode = _isNetworkStateKnown ? network!.Mode : ClashSharpMode.Faulted;
+            TransparentProxyStatusText = _isNetworkStateKnown
+                ? ResolveTransparentProxyStatus(network!.TransparentProxyEnabled, snapshot.TunRequested)
                 : _localization.GetString("Master.Status.Unavailable");
         }
         catch (Exception exception) when (
@@ -945,6 +936,8 @@ internal sealed partial class MasterControlViewModel : ObservableObject
 
             _runtimeSnapshot = MasterControlRuntimeSnapshot.Unavailable;
             _isCoreRunning = false;
+            _isNetworkStateKnown = false;
+            SelectedMode = ClashSharpMode.Faulted;
             TransparentProxyStatusText = _localization.GetString("Master.Status.Unavailable");
         }
     }
@@ -1095,7 +1088,7 @@ internal sealed partial class MasterControlViewModel : ObservableObject
         SetTile("core-uptime", RuntimeTraffic.CoreStartedAt is DateTimeOffset startedAt && _getNow() >= startedAt
                 ? (_getNow() - startedAt).ToString(@"d\.hh\:mm\:ss", CultureInfo.InvariantCulture) : unavailable,
             _localization.Formatter.Timestamp(RuntimeTraffic.CoreStartedAt) ?? string.Empty);
-        SetTile("core-owner", _localization.GetString(!_runtimeSnapshot.RuntimeOwnershipKnown
+        SetTile("core-owner", _localization.GetString(!RuntimeOwnershipMatchesNetwork
                 ? "Master.Status.Unavailable" : $"Master.Runtime.Owner.{_runtimeSnapshot.EffectiveOwner}"),
             GetMihomoServiceStatusText());
         SetTile("system-info", System.Runtime.InteropServices.RuntimeInformation.OSDescription,
@@ -1356,9 +1349,7 @@ internal sealed partial class MasterControlViewModel : ObservableObject
             MasterHeroStatusItemKind.StartupLaunch => _settings.LaunchAtStartupEnabled
                 ? _localization.GetString("Master.Status.StartupLaunchOn")
                 : _localization.GetString("Master.Status.StartupLaunchOff"),
-            MasterHeroStatusItemKind.Availability => _isCoreAvailable
-                ? _localization.GetString("Master.Status.Available")
-                : _localization.GetString("Master.Status.Unavailable"),
+            MasterHeroStatusItemKind.Availability => BasicStatusText,
             _ => string.Empty,
         };
     }
@@ -1548,11 +1539,17 @@ internal sealed partial class MasterControlViewModel : ObservableObject
 
     private string GetCoreTileStatusText()
     {
+        if (_isNetworkStateKnown) { return _localization.GetString(_isCoreRunning ? "Master.Status.Running" : "Master.Status.NotRunning"); }
         if (!_isCoreAvailable) { return _localization.GetString("Master.Status.CoreUnavailable"); }
-        if (!_runtimeSnapshot.RuntimeOwnershipKnown) { return _localization.GetString("Master.Status.Unavailable"); }
-        return _localization.GetString(_runtimeSnapshot.EffectiveOwner == MihomoCoreOwner.None
-            ? "Master.Status.NotRunning" : "Master.Status.Running");
+        return _localization.GetString("Master.Status.Unavailable");
     }
+
+    private bool RuntimeOwnershipMatchesNetwork => _isNetworkStateKnown && _runtimeSnapshot.RuntimeOwnershipKnown
+        && _runtimeSnapshot.NetworkState is { IsKnown: true } network && network.Mode == SelectedMode
+        && network.CoreRunning == _isCoreRunning
+        && _runtimeSnapshot.EffectiveOwner == (network.CoreRunning
+            ? network.TransparentProxyEnabled ? MihomoCoreOwner.Service : MihomoCoreOwner.App
+            : MihomoCoreOwner.None);
 
     private string GetStartupRestoreFallbackStatusText()
     {
@@ -1656,7 +1653,7 @@ internal sealed partial class MasterControlViewModel : ObservableObject
             ClashSharpMode.Standby => StandbyModeTitleText,
             ClashSharpMode.RuleTakeover => RuleTakeoverModeTitleText,
             ClashSharpMode.FullTakeover => FullTakeoverModeTitleText,
-            _ => _localization.GetString("Master.Status.Unavailable"),
+            _ => _localization.GetString("Master.BasicStatus.Unknown"),
         };
     }
 
@@ -1668,7 +1665,7 @@ internal sealed partial class MasterControlViewModel : ObservableObject
             ClashSharpMode.Standby => StandbyModeDescriptionText,
             ClashSharpMode.RuleTakeover => RuleTakeoverModeDescriptionText,
             ClashSharpMode.FullTakeover => FullTakeoverModeDescriptionText,
-            _ => _localization.GetString("Master.Status.Unavailable"),
+            _ => _localization.GetString("Master.BasicStatus.Unknown"),
         };
     }
 

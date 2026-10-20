@@ -26,7 +26,7 @@ public sealed partial class MasterControlViewModelTests
 
         await viewModel.LoadAsync(CancellationToken.None);
 
-        Assert.Equal("Unavailable", viewModel.BasicStatusText);
+        Assert.Equal("Unconfirmed", viewModel.BasicStatusText);
     }
 
     [Fact]
@@ -39,6 +39,7 @@ public sealed partial class MasterControlViewModelTests
                 IsAvailable = true,
                 RuntimeOwnershipKnown = true,
                 EffectiveOwner = MihomoCoreOwner.App,
+                NetworkState = ObservedNetwork(ClashSharpMode.RuleTakeover).NetworkState,
             },
         };
         MasterControlViewModel viewModel = CreateViewModel(
@@ -52,7 +53,7 @@ public sealed partial class MasterControlViewModelTests
 
         await viewModel.LoadAsync(CancellationToken.None);
 
-        Assert.Equal("Unavailable", viewModel.BasicStatusText);
+        Assert.Equal("Unconfirmed", viewModel.BasicStatusText);
         Assert.Contains(nameof(MasterControlViewModel.BasicStatusText), notifications);
     }
 
@@ -89,6 +90,7 @@ public sealed partial class MasterControlViewModelTests
                 IsAvailable = true,
                 RuntimeOwnershipKnown = true,
                 EffectiveOwner = MihomoCoreOwner.Service,
+                NetworkState = ObservedNetwork(ClashSharpMode.FullTakeover).NetworkState,
             },
         };
         MasterControlViewModel viewModel = CreateViewModel(
@@ -100,7 +102,7 @@ public sealed partial class MasterControlViewModelTests
 
         viewModel.InvalidateForDataChange();
 
-        Assert.Equal("Unavailable", viewModel.BasicStatusText);
+        Assert.Equal("Unconfirmed", viewModel.BasicStatusText);
         Assert.Contains(nameof(MasterControlViewModel.BasicStatusText), notifications);
     }
 }
