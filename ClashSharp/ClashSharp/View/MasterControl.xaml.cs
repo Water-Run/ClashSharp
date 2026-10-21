@@ -34,9 +34,9 @@ public sealed partial class MasterControl : Page
     private const double HeroStatusHorizontalMargin = 10;
     private const double MinHeroStatusItemWidth = 120;
     private const double PreferredHeroStatusItemWidth = 220;
-    private const double HeroStatusFlyoutMinListHeight = 80;
-    private const double HeroStatusFlyoutMaxListHeight = 420;
-    private const double HeroStatusFlyoutVerticalChrome = 220;
+    private const double HeroStatusEditorMinListHeight = 80;
+    private const double HeroStatusEditorMaxListHeight = 420;
+    private const double HeroStatusEditorVerticalChrome = 220;
     private const double MinInfoTileWidth = 220;
     private const double PreferredInfoTileWidth = 280;
     private const double InfoTileHorizontalMargin = 10;
@@ -62,7 +62,6 @@ public sealed partial class MasterControl : Page
     private readonly Action _openSettings;
     private readonly Func<string, string> _filterDisplayText;
     private readonly MasterHeroStatusSelectionGate _heroStatusSelection = new();
-    private FlyoutRootPresentationBinding? _heroStatusFlyoutBinding;
 
     /// <summary>Owns cancellable work for the current visit to this page.</summary>
     private CancellationTokenSource? _pageLifetime;
@@ -209,56 +208,38 @@ public sealed partial class MasterControl : Page
         await _tileActions.ExecuteAsync(MasterControlTileAction.RunLatencyTest, CancellationToken.None);
     }
 
-    private void SetHeroStatusDisplayButton_Click(object sender, RoutedEventArgs e)
+    private async void SetHeroStatusDisplayButton_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is not FrameworkElement anchor || _pageLifetime is null || !_dataReady)
+        CancellationTokenSource? lifetime = _pageLifetime;
+        if (sender is not FrameworkElement || lifetime is null || !_dataReady) { return; }
+        XamlRoot visualRoot = GetDialogXamlRoot();
+        StackPanel content = BuildHeroStatusEditorContent(out ScrollViewer slotScroller);
+        ThemedContentDialog dialog = new() { XamlRoot = visualRoot, Content = content };
+        dialog.Resources["ContentDialogMinWidth"] = 0d;
+        dialog.Resources["ContentDialogMaxWidth"] = 688d;
+        void MeasureBounds()
         {
-            return;
-        }
-
-        Flyout flyout = new()
-        {
-            Placement = FlyoutPlacementMode.BottomEdgeAlignedRight,
-            ShouldConstrainToRootBounds = true,
-        };
-        _heroStatusFlyoutBinding?.Dispose();
-        StackPanel content = BuildHeroStatusFlyoutContent(out ScrollViewer slotScroller);
-        flyout.Content = content;
-        FlyoutRootPresentationBinding binding = new(flyout, anchor, content, () =>
-        {
-            XamlRoot visualRoot = anchor.XamlRoot;
-            Rect anchorBounds = anchor.TransformToVisual((UIElement)visualRoot.Content)
-                .TransformBounds(new Rect(0, 0, anchor.ActualWidth, anchor.ActualHeight));
-            MasterControlFlyoutLayout layout = MasterControlLayoutPolicy.ResolveFlyout(
-                visualRoot.Size.Width, visualRoot.Size.Height, anchorBounds.Top, anchorBounds.Bottom, 0,
-                anchorBounds.Left, anchorBounds.Right, anchor.FlowDirection == FlowDirection.RightToLeft);
-            content.Width = layout.ContentWidth;
+            content.Width = Math.Min(560, Math.Max(1, visualRoot.Size.Width - 96));
             content.Measure(new Size(content.Width, double.PositiveInfinity));
             double chrome = Math.Max(0, content.DesiredSize.Height - slotScroller.DesiredSize.Height);
-            layout = MasterControlLayoutPolicy.ResolveFlyout(
-                visualRoot.Size.Width, visualRoot.Size.Height, anchorBounds.Top, anchorBounds.Bottom, chrome,
-                anchorBounds.Left, anchorBounds.Right, anchor.FlowDirection == FlowDirection.RightToLeft);
-            slotScroller.MaxHeight = layout.ListMaxHeight;
-            flyout.Placement = (layout.OpensAbove, layout.AlignRight) switch
-            {
-                (true, true) => FlyoutPlacementMode.TopEdgeAlignedRight,
-                (true, false) => FlyoutPlacementMode.TopEdgeAlignedLeft,
-                (false, true) => FlyoutPlacementMode.BottomEdgeAlignedRight,
-                _ => FlyoutPlacementMode.BottomEdgeAlignedLeft,
-            };
-        });
-        _heroStatusFlyoutBinding = binding;
-        try
-        {
-            if (!WindowDialogCoordinator.TryRefreshWindowPresentation(anchor.XamlRoot, () => flyout.ShowAt(anchor)))
-            {
-                binding.Dispose();
-                _heroStatusFlyoutBinding = null;
-            }
+            slotScroller.MaxHeight = Math.Max(1, Math.Min(HeroStatusEditorMaxListHeight, visualRoot.Size.Height - 240 - chrome));
         }
-        catch { binding.Dispose(); _heroStatusFlyoutBinding = null; throw; }
+        void UpdateBounds(XamlRoot root, XamlRootChangedEventArgs args) => MeasureBounds();
+        dialog.Localize(() =>
+        {
+            dialog.Title = _getString("Master.Hero.SetDisplay");
+            dialog.CloseButtonText = _getString("Command.Close");
+            MeasureBounds();
+        });
+        visualRoot.Changed += UpdateBounds;
+        try { await dialog.ShowManagedAsync(lifetime.Token); }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+        catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
+        {
+            await _errorSink.ReportAsync(new ApplicationError("master-hero-layout", exception), CancellationToken.None);
+        }
+        finally { visualRoot.Changed -= UpdateBounds; }
     }
-
     private async void HeroStatusSlotComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (sender is not ComboBox { Tag: int slotIndex, SelectedItem: MasterHeroStatusOptionViewModel option } comboBox)
@@ -307,13 +288,13 @@ public sealed partial class MasterControl : Page
         });
     }
 
-    private StackPanel BuildHeroStatusFlyoutContent(out ScrollViewer slotScroller)
+    private StackPanel BuildHeroStatusEditorContent(out ScrollViewer slotScroller)
     {
         StackPanel root = new()
         {
             Spacing = 10,
         };
-        AutomationProperties.SetAutomationId(root, "HeroStatusLayoutFlyout");
+        AutomationProperties.SetAutomationId(root, "HeroStatusLayoutEditor");
 
         StackPanel slotHost = new()
         {
@@ -357,7 +338,7 @@ public sealed partial class MasterControl : Page
         slotScroller = new()
         {
             Content = slotHost,
-            MaxHeight = CalculateHeroStatusFlyoutListHeight(GetDialogXamlRoot()),
+            MaxHeight = CalculateHeroStatusEditorListHeight(GetDialogXamlRoot()),
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
         };
@@ -382,7 +363,7 @@ public sealed partial class MasterControl : Page
                 await _tileActions.RunAsync(_viewModel.ResetHeroStatusLayoutAsync);
                 if (lifetime is not null && ReferenceEquals(lifetime, _pageLifetime) && root.IsLoaded && root.XamlRoot is XamlRoot visualRoot)
                 {
-                    WindowDialogCoordinator.TryRefreshWindowPresentation(visualRoot, () =>
+                    WindowDialogCoordinator.TryRefreshDialogPresentation(visualRoot, () =>
                     {
                         for (int index = 0; index < editors.Count && index < _viewModel.HeroStatusSlots.Count; index++)
                         {
@@ -501,8 +482,6 @@ public sealed partial class MasterControl : Page
     /// <summary>Cancels and observes current-page loading when the page leaves the visual tree.</summary>
     private async void OnUnloaded(object sender, RoutedEventArgs e)
     {
-        _heroStatusFlyoutBinding?.Dispose();
-        _heroStatusFlyoutBinding = null;
         CancellationTokenSource? lifetime = _pageLifetime;
         if (lifetime is null)
         {
@@ -1068,15 +1047,15 @@ public sealed partial class MasterControl : Page
         return Math.Clamp(availableHeight, InfoTileEditorMinListHeight, InfoTileEditorMaxListHeight);
     }
 
-    private static double CalculateHeroStatusFlyoutListHeight(XamlRoot dialogRoot)
+    private static double CalculateHeroStatusEditorListHeight(XamlRoot dialogRoot)
     {
         double availableHeight = dialogRoot.Size.Height > 0
-            ? dialogRoot.Size.Height - HeroStatusFlyoutVerticalChrome
-            : HeroStatusFlyoutMaxListHeight;
+            ? dialogRoot.Size.Height - HeroStatusEditorVerticalChrome
+            : HeroStatusEditorMaxListHeight;
         return Math.Clamp(
             availableHeight,
-            HeroStatusFlyoutMinListHeight,
-            HeroStatusFlyoutMaxListHeight);
+            HeroStatusEditorMinListHeight,
+            HeroStatusEditorMaxListHeight);
     }
 
     private void RootScrollViewer_SizeChanged(object sender, SizeChangedEventArgs e)

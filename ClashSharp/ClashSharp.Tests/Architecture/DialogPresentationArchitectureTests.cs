@@ -199,6 +199,18 @@ public sealed class DialogPresentationArchitectureTests
         Assert.Contains("_pageOperations.DrainAsync()", settings, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void HeroStatusEditor_UsesTheManagedModalLifetimeAndKeepsItsSelectors()
+    {
+        string page = ReadApplicationSource("View", "MasterControl.xaml.cs");
+        Assert.Contains("BuildHeroStatusEditorContent", page, StringComparison.Ordinal);
+        Assert.Contains("await dialog.ShowManagedAsync(lifetime.Token)", page, StringComparison.Ordinal);
+        Assert.Contains("visualRoot.Changed += UpdateBounds", page, StringComparison.Ordinal);
+        Assert.Contains("finally { visualRoot.Changed -= UpdateBounds; }", page, StringComparison.Ordinal);
+        Assert.Contains("BindHeroStatusRow(editors[index].Title, editors[index].Selector", page, StringComparison.Ordinal);
+        Assert.DoesNotContain("flyout.ShowAt(anchor)", page, StringComparison.Ordinal);
+    }
+
     private static bool IsBuildOutput(string path)
     {
         string relativePath = Path.GetRelativePath(ApplicationRoot, path);
