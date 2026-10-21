@@ -219,15 +219,33 @@ public sealed partial class MasterControl : Page
         Flyout flyout = new()
         {
             Placement = FlyoutPlacementMode.BottomEdgeAlignedRight,
+            ShouldConstrainToRootBounds = true,
         };
         _heroStatusFlyoutBinding?.Dispose();
         StackPanel content = BuildHeroStatusFlyoutContent(out ScrollViewer slotScroller);
         flyout.Content = content;
         FlyoutRootPresentationBinding binding = new(flyout, anchor, content, () =>
         {
-            double available = anchor.XamlRoot.Size.Width;
-            content.Width = double.IsFinite(available) && available > 0 ? Math.Min(480, Math.Max(1, available - 64)) : 480;
-            slotScroller.MaxHeight = CalculateHeroStatusFlyoutListHeight(anchor.XamlRoot);
+            XamlRoot visualRoot = anchor.XamlRoot;
+            Rect anchorBounds = anchor.TransformToVisual((UIElement)visualRoot.Content)
+                .TransformBounds(new Rect(0, 0, anchor.ActualWidth, anchor.ActualHeight));
+            MasterControlFlyoutLayout layout = MasterControlLayoutPolicy.ResolveFlyout(
+                visualRoot.Size.Width, visualRoot.Size.Height, anchorBounds.Top, anchorBounds.Bottom, 0,
+                anchorBounds.Left, anchorBounds.Right, anchor.FlowDirection == FlowDirection.RightToLeft);
+            content.Width = layout.ContentWidth;
+            content.Measure(new Size(content.Width, double.PositiveInfinity));
+            double chrome = Math.Max(0, content.DesiredSize.Height - slotScroller.DesiredSize.Height);
+            layout = MasterControlLayoutPolicy.ResolveFlyout(
+                visualRoot.Size.Width, visualRoot.Size.Height, anchorBounds.Top, anchorBounds.Bottom, chrome,
+                anchorBounds.Left, anchorBounds.Right, anchor.FlowDirection == FlowDirection.RightToLeft);
+            slotScroller.MaxHeight = layout.ListMaxHeight;
+            flyout.Placement = (layout.OpensAbove, layout.AlignRight) switch
+            {
+                (true, true) => FlyoutPlacementMode.TopEdgeAlignedRight,
+                (true, false) => FlyoutPlacementMode.TopEdgeAlignedLeft,
+                (false, true) => FlyoutPlacementMode.BottomEdgeAlignedRight,
+                _ => FlyoutPlacementMode.BottomEdgeAlignedLeft,
+            };
         });
         _heroStatusFlyoutBinding = binding;
         try
@@ -270,6 +288,15 @@ public sealed partial class MasterControl : Page
         });
     }
 
+    private static void BindHeroStatusRow(TextBlock title, ComboBox comboBox, MasterHeroStatusSlotViewModel slot)
+    {
+        title.SetBinding(TextBlock.TextProperty, new Binding { Source = slot, Path = new PropertyPath(nameof(MasterHeroStatusSlotViewModel.Title)) });
+        comboBox.SetBinding(AutomationProperties.NameProperty, new Binding { Source = slot, Path = new PropertyPath(nameof(MasterHeroStatusSlotViewModel.Title)) });
+        if (!ReferenceEquals(comboBox.ItemsSource, slot.Options)) { comboBox.ItemsSource = slot.Options; }
+        comboBox.Tag = slot.Index;
+        BindHeroStatusSelection(comboBox, slot);
+    }
+
     private void BindLayoutEditing(Control control)
     {
         control.SetBinding(Control.IsEnabledProperty, new Binding
@@ -292,38 +319,37 @@ public sealed partial class MasterControl : Page
         {
             Spacing = 8,
         };
+        List<(TextBlock Title, ComboBox Selector)> editors = [];
         foreach (MasterHeroStatusSlotViewModel slot in _viewModel.HeroStatusSlots)
         {
             Grid row = new()
             {
-                RowSpacing = 6,
+                ColumnSpacing = 12,
             };
-            row.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            row.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(2, GridUnitType.Star) });
 
             TextBlock title = new()
             {
                 Style = (Style)Application.Current.Resources["BodyTextBlockStyle"],
                 TextWrapping = TextWrapping.Wrap,
+                VerticalAlignment = VerticalAlignment.Center,
             };
-            title.SetBinding(TextBlock.TextProperty, new Binding { Source = slot, Path = new PropertyPath(nameof(MasterHeroStatusSlotViewModel.Title)) });
             row.Children.Add(title);
 
             ComboBox comboBox = new()
             {
                 MinWidth = 0,
                 HorizontalAlignment = HorizontalAlignment.Stretch,
-                ItemsSource = slot.Options,
                 ItemTemplate = (DataTemplate)Resources["MasterHeroStatusOptionTemplate"],
-                Tag = slot.Index,
             };
             AutomationProperties.SetAutomationId(comboBox, "HeroStatusSlot" + slot.Index.ToString(CultureInfo.InvariantCulture));
-            comboBox.SetBinding(AutomationProperties.NameProperty, new Binding { Source = slot, Path = new PropertyPath(nameof(MasterHeroStatusSlotViewModel.Title)) });
             BindLayoutEditing(comboBox);
-            BindHeroStatusSelection(comboBox, slot);
+            BindHeroStatusRow(title, comboBox, slot);
             comboBox.SelectionChanged += HeroStatusSlotComboBox_SelectionChanged;
-            Grid.SetRow(comboBox, 1);
+            Grid.SetColumn(comboBox, 1);
             row.Children.Add(comboBox);
+            editors.Add((title, comboBox));
 
             slotHost.Children.Add(row);
         }
@@ -350,8 +376,22 @@ public sealed partial class MasterControl : Page
         BindLayoutEditing(restoreDefaultLink);
         restoreDefaultLink.Click += async (_, _) =>
         {
-            await _heroStatusSelection.RunProgrammaticUpdateAsync(
-                () => _tileActions.RunAsync(_viewModel.ResetHeroStatusLayoutAsync));
+            CancellationTokenSource? lifetime = _pageLifetime;
+            await _heroStatusSelection.RunProgrammaticUpdateAsync(async () =>
+            {
+                await _tileActions.RunAsync(_viewModel.ResetHeroStatusLayoutAsync);
+                if (lifetime is not null && ReferenceEquals(lifetime, _pageLifetime) && root.IsLoaded && root.XamlRoot is XamlRoot visualRoot)
+                {
+                    WindowDialogCoordinator.TryRefreshWindowPresentation(visualRoot, () =>
+                    {
+                        for (int index = 0; index < editors.Count && index < _viewModel.HeroStatusSlots.Count; index++)
+                        {
+                            // Native selection can replace its one-way binding; restore it without recreating controls.
+                            BindHeroStatusRow(editors[index].Title, editors[index].Selector, _viewModel.HeroStatusSlots[index]);
+                        }
+                    });
+                }
+            });
         };
         root.Children.Add(restoreDefaultLink);
 

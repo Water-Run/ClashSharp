@@ -1,6 +1,7 @@
 using System;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Media;
 
 namespace ClashSharp.Presentation.Dialogs;
@@ -16,6 +17,7 @@ internal sealed class FlyoutRootPresentationBinding : IDisposable
     private FrameworkElement? _root;
     private Flyout? _flyout;
     private FlyoutPresenter? _presenter;
+    private Popup? _popup;
     private long? _languageToken;
     private long? _directionToken;
     private bool _shown;
@@ -41,6 +43,7 @@ internal sealed class FlyoutRootPresentationBinding : IDisposable
             flyout.Opened += OnOpened;
             flyout.Closed += OnClosed;
             _owner.Unloaded += OnOwnerUnloaded;
+            _owner.SizeChanged += OnOwnerSizeChanged;
             _content.Loaded += OnContentLoaded;
             _xamlRoot.Changed += OnRootChanged;
             _languageToken = _root.RegisterPropertyChangedCallback(FrameworkElement.LanguageProperty, OnPresentationChanged);
@@ -63,6 +66,7 @@ internal sealed class FlyoutRootPresentationBinding : IDisposable
     private void OnContentLoaded(object sender, RoutedEventArgs args) => Refresh();
     private void OnClosed(object? sender, object args) { _shown = false; Dispose(); }
     private void OnOwnerUnloaded(object sender, RoutedEventArgs args) => Dispose();
+    private void OnOwnerSizeChanged(object sender, SizeChangedEventArgs args) => Refresh();
     private void OnRootChanged(XamlRoot sender, XamlRootChangedEventArgs args) => Refresh();
     private void OnPresentationChanged(DependencyObject sender, DependencyProperty property) => Refresh();
     private void OnThemeChanged(FrameworkElement sender, object args) => Refresh();
@@ -83,6 +87,19 @@ internal sealed class FlyoutRootPresentationBinding : IDisposable
         WindowDialogCoordinator.TryRefreshWindowPresentation(_xamlRoot, () =>
         {
             if (_presenter is null) { FindPresenter(); }
+            if (_popup is null && _presenter is not null)
+            {
+                foreach (Popup popup in VisualTreeHelper.GetOpenPopupsForXamlRoot(_xamlRoot))
+                {
+                    if (ReferenceEquals(popup.Child, _presenter)) { _popup = popup; break; }
+                }
+            }
+            if (_popup is Popup ownedPopup)
+            {
+                ownedPopup.RequestedTheme = root.ActualTheme;
+                ownedPopup.Language = root.Language;
+                ownedPopup.FlowDirection = root.FlowDirection;
+            }
             _content.RequestedTheme = root.ActualTheme;
             _content.Language = root.Language;
             _content.FlowDirection = root.FlowDirection;
@@ -105,7 +122,9 @@ internal sealed class FlyoutRootPresentationBinding : IDisposable
         Flyout? flyout = _flyout;
         _flyout = null;
         _presenter = null;
+        _popup = null;
         _owner.Unloaded -= OnOwnerUnloaded;
+        _owner.SizeChanged -= OnOwnerSizeChanged;
         _content.Loaded -= OnContentLoaded;
         _xamlRoot.Changed -= OnRootChanged;
         root.ActualThemeChanged -= OnThemeChanged;
