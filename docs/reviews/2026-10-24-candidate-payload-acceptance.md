@@ -20,10 +20,10 @@
 
 宿主观察为10.0.26100／ProductType3／X64，归入windows-server。installationVerified、win11AcceptanceSatisfied、promotionAuthorized均false。未将本轮执行冒称安装、UI、恢复或Win11通过，也未重新验证当前证书信任；信任来源仍是先前受控生产操作及其独立候选摘要。
 
-实际重入已完成输出目录在启动前拒绝，四份完成文件摘要保持。三次自有进程4164／13492／3304均已终止退出0，无进程或任务遗留。本轮没有安装新候选，当前安装仍ebbbb65；原47文件逐项一致、服务Auto／Running／PID4232、证书多重集8／4／2／42保持。
+实际重入已完成输出目录在启动前拒绝，四份完成文件摘要保持。三次自有进程4164／13492／3304均已终止退出0，无进程或任务遗留。该只读阶段未安装新候选，当时安装为ebbbb65；原47文件逐项一致、服务Auto／Running／PID4232、证书多重集8／4／2／42保持。随后该固定候选的实际安装和原数据恢复见[服务器平台案例](2026-10-24-candidate-platform-baseline.md)。
 
 对准确95bfd05源树叠加本次PowerShell／工作流文件后，使用既有实际测试程序集在独立服务器源树运行RepositoryTopology，16／0／0通过，没有重编译产品或改动旧验收源树。源树下559份既有运行文件仅硬链接复用，未扩大产品测试结论。
 
 服务器接续点为`C:\ClashSharpValidation\candidate-audit-20261024\checkpoint.json`，准确收据位于`actual-payload-audit-r4/payload-execution.json`。允许列表证据包33项、32文件逐项核对，ZIP SHA256 `DE3FB516B0FF226ED8894ED943CAF8414765312AD8D994E5E0C8ECC9E73589CA`；本地归档为`artifacts/verification/server-candidate-audit-20261024/audit-evidence.zip`，不含原用户数据和私钥。首次本地校验因绝对路径分隔符混用拒绝，归档字节保持，规范化同一路径后32文件全部匹配；没有重新下载或重打包。
 
-设计与后续门禁边界见[候选载荷执行设计](../design/2026-10-24-candidate-payload-acceptance.md)。新代码准确CI需在提交后取得；当前平台仍无法替代实际Win11，整体发行目标尚未完成。
+设计与后续门禁边界见[候选载荷执行设计](../design/2026-10-24-candidate-payload-acceptance.md)。本工具的准确94638fb／CI40028743000现已完成，两项job及四原始TRX7,263／0／0通过，详见上述平台案例。当前平台仍无法替代实际Win11，整体发行目标尚未完成。
