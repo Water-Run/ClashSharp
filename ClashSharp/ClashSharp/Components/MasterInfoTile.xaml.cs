@@ -238,10 +238,11 @@ public sealed partial class MasterInfoTile : UserControl
 
         if (TileCommand is not ICommand command)
         {
+            if (XamlRoot.Content is not FrameworkElement root) { return; }
             Style presentation = new() { TargetType = typeof(FlyoutPresenter) };
-            presentation.Setters.Add(new Setter(RequestedThemeProperty, ActualTheme));
-            presentation.Setters.Add(new Setter(LanguageProperty, Language));
-            presentation.Setters.Add(new Setter(FlowDirectionProperty, FlowDirection));
+            presentation.Setters.Add(new Setter(RequestedThemeProperty, root.RequestedTheme));
+            presentation.Setters.Add(new Setter(LanguageProperty, root.Language));
+            presentation.Setters.Add(new Setter(FlowDirectionProperty, root.FlowDirection));
             TileDetailsFlyout.FlyoutPresenterStyle = presentation;
             TileDetailsScroller.MaxHeight = Math.Max(1, Math.Min(360, XamlRoot.Size.Height - 120));
             TileDetailsFlyout.ShowAt(TileButton);
@@ -258,15 +259,15 @@ public sealed partial class MasterInfoTile : UserControl
 
     private void TileDetailsFlyout_Opened(object? sender, object e)
     {
-        if (!_isLoaded) { return; }
-        // Bind the native surface as well as its content so live theme changes keep text readable.
+        if (!_isLoaded || XamlRoot.Content is not FrameworkElement root) { return; }
+        // Follow the root's requested-theme dependency property; ActualTheme is an observed result.
         for (DependencyObject? parent = VisualTreeHelper.GetParent(TileDetailsScroller);
             parent is not null; parent = VisualTreeHelper.GetParent(parent))
         {
             if (parent is not FlyoutPresenter presenter) { continue; }
-            presenter.SetBinding(RequestedThemeProperty, new Binding { Source = this, Path = new PropertyPath(nameof(ActualTheme)), Mode = BindingMode.OneWay });
-            presenter.SetBinding(LanguageProperty, new Binding { Source = this, Path = new PropertyPath(nameof(Language)), Mode = BindingMode.OneWay });
-            presenter.SetBinding(FlowDirectionProperty, new Binding { Source = this, Path = new PropertyPath(nameof(FlowDirection)), Mode = BindingMode.OneWay });
+            presenter.SetBinding(RequestedThemeProperty, new Binding { Source = root, Path = new PropertyPath(nameof(RequestedTheme)), Mode = BindingMode.OneWay });
+            presenter.SetBinding(LanguageProperty, new Binding { Source = root, Path = new PropertyPath(nameof(Language)), Mode = BindingMode.OneWay });
+            presenter.SetBinding(FlowDirectionProperty, new Binding { Source = root, Path = new PropertyPath(nameof(FlowDirection)), Mode = BindingMode.OneWay });
             break;
         }
     }

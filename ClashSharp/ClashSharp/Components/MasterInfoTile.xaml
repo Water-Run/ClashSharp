@@ -172,13 +172,11 @@
             <FlyoutBase.AttachedFlyout>
                 <Flyout x:Name="TileDetailsFlyout" Opened="TileDetailsFlyout_Opened">
                     <ScrollViewer x:Name="TileDetailsScroller" MaxHeight="360" HorizontalScrollBarVisibility="Disabled">
-                        <StackPanel Spacing="8" MaxWidth="420"
-                            Language="{x:Bind Language, Mode=OneWay}"
-                            FlowDirection="{x:Bind FlowDirection, Mode=OneWay}"
-                            RequestedTheme="{x:Bind ActualTheme, Mode=OneWay}">
+                        <StackPanel Spacing="8" MaxWidth="420">
                             <TextBlock
                                 AutomationProperties.AutomationId="TileDetailsText"
                                 Text="{x:Bind GetDetailText(Title, Value, Detail, Description), Mode=OneWay}"
+                                Foreground="{ThemeResource TextFillColorPrimaryBrush}"
                                 TextWrapping="Wrap"
                                 IsTextSelectionEnabled="True" />
                             <HyperlinkButton
