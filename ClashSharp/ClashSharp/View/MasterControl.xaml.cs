@@ -733,7 +733,14 @@ public sealed partial class MasterControl : Page
         AutomationProperties.SetAutomationId(templatePicker, "InfoTilePresetPicker");
         foreach (MasterInfoTilePreset preset in presets)
         {
-            ComboBoxItem item = new() { Content = preset.Title, Tag = preset };
+            TextBlock label = new() { Text = preset.Title, TextTrimming = TextTrimming.CharacterEllipsis };
+            ComboBoxItem item = new() { Content = label, Tag = preset };
+            item.SetBinding(AutomationProperties.NameProperty, new Binding
+            {
+                Source = label,
+                Path = new PropertyPath(nameof(TextBlock.Text)),
+                Mode = BindingMode.OneWay,
+            });
             ToolTipService.SetToolTip(item, preset.Description);
             templatePicker.Items.Add(item);
             if (_viewModel.VisibleInfoTiles.Select(static tile => tile.Id).SequenceEqual(preset.TileIds, StringComparer.Ordinal))
@@ -920,7 +927,7 @@ public sealed partial class MasterControl : Page
                 {
                     if (item.Tag is not MasterInfoTilePreset preset) { continue; }
                     MasterInfoTilePreset text = translated.Single(value => value.Id == preset.Id);
-                    item.Content = text.Title;
+                    if (item.Content is TextBlock label) { label.Text = text.Title; }
                     item.Tag = preset with { Title = text.Title, Description = text.Description };
                     ToolTipService.SetToolTip(item, text.Description);
                 }
