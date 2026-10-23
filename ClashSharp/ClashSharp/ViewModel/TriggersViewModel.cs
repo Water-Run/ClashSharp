@@ -341,6 +341,26 @@ internal sealed class TriggersViewModel : ObservableObject, ILocalizedPresentati
         ClearError();
     }
 
+    /// <summary>Applies a condition choice only to the draft that opened the picker.</summary>
+    public bool TryAddCondition(TriggerEditorViewModel editor, TriggerConditionTemplate template, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(editor);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!ReferenceEquals(CurrentEditor, editor) || !editor.CanEdit) { return false; }
+        editor.AddCondition(template);
+        return true;
+    }
+
+    /// <summary>Applies an action choice only to the draft that opened the picker.</summary>
+    public bool TryAddAction(TriggerEditorViewModel editor, TriggerActionKind kind, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(editor);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!ReferenceEquals(CurrentEditor, editor) || !editor.CanEdit) { return false; }
+        editor.AddAction(kind);
+        return true;
+    }
+
     public Task<bool> DeleteTaskAsync(string id, CancellationToken cancellationToken)
         => DeleteTaskAsync(id, _version, cancellationToken);
 

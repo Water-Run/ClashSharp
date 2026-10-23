@@ -1,4 +1,5 @@
 using System;
+using System.ComponentModel;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -249,59 +250,69 @@ public sealed partial class Triggers : Page
     private async void ChooseTriggerConditionButton_Click(object sender, RoutedEventArgs args)
     {
         TriggerEditorViewModel? editor = _viewModel.CurrentEditor;
-        if (editor is null)
+        if (editor is null || !editor.CanEdit)
         {
             return;
         }
 
-        SearchableOptionList options = new()
+        await AwaitPageOperationAsync(async cancellationToken =>
         {
-            SearchPlaceholder = _viewModel.SearchConditionsText,
-            EmptyText = _viewModel.NoMatchingOptionsText,
-            AllowMultiple = false,
-            MaxListHeight = 360,
-        };
-        options.SetOptions(editor.ConditionOptions.Select(option => new SearchableOptionItem(
-            option.Value.ToString(),
-            option.Title,
-            string.Empty,
-            option.Description,
-            GetConditionGlyph(option.Value),
-            option.Value)));
-        if (await ShowOptionDialogAsync(_viewModel.ConditionsText, options)
-            && options.SelectedOptions.SingleOrDefault()?.Payload is TriggerConditionTemplate template)
-        {
-            editor.AddCondition(template);
-        }
+            SearchableOptionList options = new() { AllowMultiple = false, MaxListHeight = 360 };
+            options.SetOptions(editor.ConditionOptions.Select(option => new SearchableOptionItem(
+                option.Value.ToString(), option.Title, string.Empty, option.Description,
+                GetConditionGlyph(option.Value), option.Value)));
+            void RefreshChoices()
+            {
+                editor.RefreshLocalization();
+                options.SearchPlaceholder = _viewModel.SearchConditionsText;
+                options.EmptyText = _viewModel.NoMatchingOptionsText;
+                foreach (SearchableOptionItem option in options.Options)
+                {
+                    TriggerEditorOption<TriggerConditionTemplate> text = editor.ConditionOptions.Single(item => Equals(item.Value, option.Payload));
+                    option.UpdateDisplay(text.Title, string.Empty, text.Description);
+                }
+                options.RefreshFilter();
+            }
+            if (await ShowOptionDialogAsync(editor, () => _viewModel.ConditionsText, options, RefreshChoices, cancellationToken)
+                && options.SelectedOptions.SingleOrDefault()?.Payload is TriggerConditionTemplate template)
+            {
+                _viewModel.TryAddCondition(editor, template, cancellationToken);
+            }
+        });
     }
 
     private async void ChooseTriggerActionButton_Click(object sender, RoutedEventArgs args)
     {
         TriggerEditorViewModel? editor = _viewModel.CurrentEditor;
-        if (editor is null)
+        if (editor is null || !editor.CanEdit)
         {
             return;
         }
 
-        SearchableOptionList options = new()
+        await AwaitPageOperationAsync(async cancellationToken =>
         {
-            SearchPlaceholder = _viewModel.SearchActionsText,
-            EmptyText = _viewModel.NoMatchingOptionsText,
-            AllowMultiple = false,
-            MaxListHeight = 360,
-        };
-        options.SetOptions(editor.ActionOptions.Select(option => new SearchableOptionItem(
-            option.Value.ToString(),
-            option.Title,
-            string.Empty,
-            option.Description,
-            GetActionGlyph(option.Value),
-            option.Value)));
-        if (await ShowOptionDialogAsync(_viewModel.ActionsText, options)
-            && options.SelectedOptions.SingleOrDefault()?.Payload is TriggerActionKind kind)
-        {
-            editor.AddAction(kind);
-        }
+            SearchableOptionList options = new() { AllowMultiple = false, MaxListHeight = 360 };
+            options.SetOptions(editor.ActionOptions.Select(option => new SearchableOptionItem(
+                option.Value.ToString(), option.Title, string.Empty, option.Description,
+                GetActionGlyph(option.Value), option.Value)));
+            void RefreshChoices()
+            {
+                editor.RefreshLocalization();
+                options.SearchPlaceholder = _viewModel.SearchActionsText;
+                options.EmptyText = _viewModel.NoMatchingOptionsText;
+                foreach (SearchableOptionItem option in options.Options)
+                {
+                    TriggerEditorOption<TriggerActionKind> text = editor.ActionOptions.Single(item => Equals(item.Value, option.Payload));
+                    option.UpdateDisplay(text.Title, string.Empty, text.Description);
+                }
+                options.RefreshFilter();
+            }
+            if (await ShowOptionDialogAsync(editor, () => _viewModel.ActionsText, options, RefreshChoices, cancellationToken)
+                && options.SelectedOptions.SingleOrDefault()?.Payload is TriggerActionKind kind)
+            {
+                _viewModel.TryAddAction(editor, kind, cancellationToken);
+            }
+        });
     }
 
     private void MoveConditionUpButton_Click(object sender, RoutedEventArgs args) =>
@@ -348,11 +359,12 @@ public sealed partial class Triggers : Page
         }
     }
 
-    private async Task<bool> ShowOptionDialogAsync(string title, SearchableOptionList content)
+    private async Task<bool> ShowOptionDialogAsync(
+        TriggerEditorViewModel editor, Func<string> getTitle, SearchableOptionList content,
+        Action refreshChoices, CancellationToken cancellationToken)
     {
         ThemedContentDialog dialog = new()
         {
-            Title = title,
             Content = content,
             PrimaryButtonText = _viewModel.AddText,
             CloseButtonText = _viewModel.CancelText,
@@ -361,16 +373,39 @@ public sealed partial class Triggers : Page
             XamlRoot = XamlRoot,
         };
         using SearchableOptionDialogLayout layout = new(dialog, content);
+        using CancellationTokenSource lifetime = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        PropertyChangedEventHandler ownerChanged = (_, _) =>
+        {
+            if (!ReferenceEquals(_viewModel.CurrentEditor, editor) || editor.IsStale) { lifetime.Cancel(); }
+        };
         EventHandler selectionChanged = (_, _) =>
             dialog.IsPrimaryButtonEnabled = content.SelectedOptions.Count == 1;
         content.SelectionChanged += selectionChanged;
+        _viewModel.PropertyChanged += ownerChanged;
+        editor.PropertyChanged += ownerChanged;
         try
         {
-            return await dialog.ShowManagedAsync() is ContentDialogResult.Primary;
+            if (!ReferenceEquals(_viewModel.CurrentEditor, editor) || !editor.CanEdit) { return false; }
+            dialog.Localize(() =>
+            {
+                dialog.Title = getTitle();
+                dialog.PrimaryButtonText = _viewModel.AddText;
+                dialog.CloseButtonText = _viewModel.CancelText;
+                refreshChoices();
+                layout.RefreshLayout();
+            });
+            return await dialog.ShowManagedAsync(lifetime.Token) is ContentDialogResult.Primary;
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return false;
         }
         finally
         {
             content.SelectionChanged -= selectionChanged;
+            _viewModel.PropertyChanged -= ownerChanged;
+            editor.PropertyChanged -= ownerChanged;
         }
     }
 

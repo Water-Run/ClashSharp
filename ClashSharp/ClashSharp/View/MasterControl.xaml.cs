@@ -749,12 +749,13 @@ public sealed partial class MasterControl : Page
             Width = editorWidth,
             HorizontalAlignment = HorizontalAlignment.Stretch,
         };
-        panel.Children.Add(new TextBlock
+        TextBlock editorDescription = new()
         {
             Text = _viewModel.InfoTileSelectionDescriptionText,
             Opacity = 0.72,
             TextWrapping = TextWrapping.WrapWholeWords,
-        });
+        };
+        panel.Children.Add(editorDescription);
         panel.Children.Add(optionList);
 
         TextBlock selectionCount = new()
@@ -833,21 +834,26 @@ public sealed partial class MasterControl : Page
         AutomationProperties.SetAutomationId(hideAll, "HideAllTilesButton");
         showAll.Click += (_, _) => SetAllChecked(true);
         hideAll.Click += (_, _) => SetAllChecked(false);
+        TextBlock restoreLabel = new() { Text = _getString("Master.Tile.RestoreRecommended"), TextWrapping = TextWrapping.WrapWholeWords };
         HyperlinkButton restoreLayout = new()
         {
-            Content = _getString("Master.Tile.RestoreRecommended"),
+            Content = restoreLabel,
             Padding = new Thickness(0),
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            HorizontalContentAlignment = HorizontalAlignment.Left,
         };
         AutomationProperties.SetAutomationId(restoreLayout, "RestoreRecommendedTilesButton");
         restoreLayout.Click += (_, _) => ApplyTemplate(_viewModel.RecommendedInfoTileIds);
-        Grid selectionActions = new() { ColumnSpacing = 10 };
-        selectionActions.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        Grid selectionActions = new() { ColumnSpacing = 10, RowSpacing = 8 };
         selectionActions.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         selectionActions.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         selectionActions.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        selectionActions.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        selectionActions.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         Grid.SetColumn(hideAll, 1);
-        Grid.SetColumn(restoreLayout, 2);
-        Grid.SetColumn(selectionCountHost, 3);
+        Grid.SetRow(restoreLayout, 1);
+        Grid.SetColumnSpan(restoreLayout, 3);
+        Grid.SetColumn(selectionCountHost, 2);
         selectionActions.Children.Add(showAll);
         selectionActions.Children.Add(hideAll);
         selectionActions.Children.Add(restoreLayout);
@@ -880,6 +886,54 @@ public sealed partial class MasterControl : Page
         void ResizeEditor(XamlRoot sender, XamlRootChangedEventArgs args) => UpdateEditorBounds();
         void EditorLoaded(object sender, RoutedEventArgs args) => UpdateEditorBounds();
         void ActionsSizeChanged(object sender, SizeChangedEventArgs args) => UpdateEditorBounds();
+
+        dialog.Localize(() =>
+        {
+            // Refresh display metadata only; the selected template and its ordered draft remain captured.
+            _viewModel.RefreshLocalization();
+            dialog.Title = _viewModel.EditInfoTilesText;
+            dialog.PrimaryButtonText = _getString("Command.Save");
+            dialog.CloseButtonText = _getString("Command.Cancel");
+            editorDescription.Text = _viewModel.InfoTileSelectionDescriptionText;
+            optionList.SearchPlaceholder = _viewModel.SearchInfoTilesPlaceholderText;
+            optionList.EmptyText = _getString("Common.NoMatchingOptions");
+            templatePicker.Header = _getString("Master.Preset.Label");
+            templatePicker.PlaceholderText = _getString("Master.Preset.Custom");
+            showAll.Content = _getString("Master.Tile.ShowAll");
+            hideAll.Content = _getString("Master.Tile.HideAll");
+            restoreLabel.Text = _getString("Master.Tile.RestoreRecommended");
+            AutomationProperties.SetName(restoreLayout, restoreLabel.Text);
+            bool previousApplying = applyingTemplate;
+            applyingTemplate = true;
+            try
+            {
+                foreach (SearchableOptionItem option in optionList.Options)
+                {
+                    if (option.Payload is MasterControlInfoTileViewModel tile)
+                    {
+                        option.UpdateDisplay(tile.Title, tile.TypeText, tile.Description);
+                    }
+                }
+                IReadOnlyList<MasterInfoTilePreset> translated = MasterInfoTilePresetCatalog.Create(
+                    _getString, presets.Single(preset => preset.Id == "daily").TileIds);
+                foreach (ComboBoxItem item in templatePicker.Items.OfType<ComboBoxItem>())
+                {
+                    if (item.Tag is not MasterInfoTilePreset preset) { continue; }
+                    MasterInfoTilePreset text = translated.Single(value => value.Id == preset.Id);
+                    item.Content = text.Title;
+                    item.Tag = preset with { Title = text.Title, Description = text.Description };
+                    ToolTipService.SetToolTip(item, text.Description);
+                }
+                if (templatePicker.SelectedItem is ComboBoxItem { Tag: MasterInfoTilePreset selected })
+                {
+                    ToolTipService.SetToolTip(templatePicker, selected.Description);
+                }
+                optionList.RefreshFilter();
+            }
+            finally { applyingTemplate = previousApplying; }
+            RefreshSelectionCount();
+            UpdateEditorBounds();
+        });
 
         ContentDialogResult result;
         UpdateEditorBounds();

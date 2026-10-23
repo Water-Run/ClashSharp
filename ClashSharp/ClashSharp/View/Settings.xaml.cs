@@ -892,6 +892,7 @@ public sealed partial class Settings : Page, ILocalizedPresentation
                     SettingsTrayFeatureDefinition feature = SettingsViewModel.TrayFeatureDefinitions.First(item => item.Id == option.Id);
                     option.UpdateDisplay(_getString(feature.TitleKey), string.Empty, _getString(feature.DescriptionKey));
                 }
+                optionList.RefreshFilter();
                 layout.RefreshLayout();
             });
             if (await dialog.ShowManagedAsync(cancellationToken) is ContentDialogResult.Primary)

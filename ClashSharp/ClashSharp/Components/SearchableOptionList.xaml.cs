@@ -378,21 +378,17 @@ public sealed partial class SearchableOptionList : UserControl
         SelectionChanged?.Invoke(this, EventArgs.Empty);
     }
 
+    /// <summary>Reapplies the current query after a batch of translated labels without rebuilding unchanged rows.</summary>
+    public void RefreshFilter() => RefreshFilteredOptions();
+
     private void RefreshFilteredOptions()
     {
         string query = SearchBox?.Text?.Trim() ?? string.Empty;
-        // Filtering recreates native containers, but must never edit the selected option set.
+        // Native selection changes caused by filtering must not edit the unfiltered draft.
         _synchronizingSelection = true;
         try
         {
-            FilteredOptions.Clear();
-            foreach (SearchableOptionItem option in _allOptions)
-            {
-                if (Matches(option, query))
-                {
-                    FilteredOptions.Add(option);
-                }
-            }
+            SearchableOptionFilter.Refresh(FilteredOptions, _allOptions, query);
         }
         finally
         {
@@ -443,11 +439,4 @@ public sealed partial class SearchableOptionList : UserControl
         }
     }
 
-    private static bool Matches(SearchableOptionItem option, string query)
-    {
-        return query.Length == 0
-            || option.Title.Contains(query, StringComparison.CurrentCultureIgnoreCase)
-            || option.Metadata.Contains(query, StringComparison.CurrentCultureIgnoreCase)
-            || option.Description.Contains(query, StringComparison.CurrentCultureIgnoreCase);
-    }
 }
