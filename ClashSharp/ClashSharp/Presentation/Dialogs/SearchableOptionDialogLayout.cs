@@ -25,6 +25,9 @@ internal sealed class SearchableOptionDialogLayout : IDisposable
 
     public void Dispose() => _root.Changed -= Root_Changed;
 
+    /// <summary>Remeasures translated header and ordering instructions without replacing list items.</summary>
+    internal void RefreshLayout() => UpdateBounds();
+
     private void Root_Changed(XamlRoot sender, XamlRootChangedEventArgs args) => UpdateBounds();
 
     private void UpdateBounds()

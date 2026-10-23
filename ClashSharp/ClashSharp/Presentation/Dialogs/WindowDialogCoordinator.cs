@@ -62,6 +62,13 @@ internal static class WindowDialogCoordinator
         return Gates.TryGetValue(xamlRoot, out DialogPresentationGate? gate) && gate.TryRefreshPresentation(refresh);
     }
 
+    /// <summary>Closes a page-owned flyout while the native window is still usable.</summary>
+    public static bool TryDismissTransient(XamlRoot? xamlRoot, Action dismiss)
+    {
+        return xamlRoot is not null
+            && Gates.GetValue(xamlRoot, static _ => new DialogPresentationGate()).TryDismissTransient(dismiss);
+    }
+
     /// <summary>Shows a custom modal overlay when no other modal surface owns the visual root.</summary>
     /// <param name="xamlRoot">Visual root receiving the overlay.</param>
     /// <param name="showAsync">UI operation that owns the overlay until it closes.</param>

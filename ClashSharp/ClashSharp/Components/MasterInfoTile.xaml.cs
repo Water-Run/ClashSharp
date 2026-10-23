@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Windows.Input;
 using ClashSharp.ApplicationModel.Presentation;
+using ClashSharp.Presentation.Dialogs;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -215,6 +216,17 @@ public sealed partial class MasterInfoTile : UserControl
         string.Join(Environment.NewLine, new[] { value, detail, description }
             .Where(text => !string.IsNullOrWhiteSpace(text)).Distinct(StringComparer.Ordinal));
 
+    /// <summary>Builds the live detail paragraphs without empty or repeated values.</summary>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1822:Mark members as static", Justification = "WinUI x:Bind calls this function through the control instance.")]
+    public string GetDetailText(string title, string value, string detail, string description) =>
+        string.Join(Environment.NewLine + Environment.NewLine, new[] { title, value, detail, description }
+            .Where(text => !string.IsNullOrWhiteSpace(text)).Distinct(StringComparer.Ordinal));
+
+    /// <summary>Shows the navigation link only while this tile has a labelled destination.</summary>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1822:Mark members as static", Justification = "WinUI x:Bind calls this function through the control instance.")]
+    public Visibility GetNavigationVisibility(ICommand? navigation, string text) =>
+        navigation is not null && !string.IsNullOrWhiteSpace(text) ? Visibility.Visible : Visibility.Collapsed;
+
     private void TileButton_Click(object sender, RoutedEventArgs e)
     {
         if (_suppressNextTap)
@@ -225,32 +237,13 @@ public sealed partial class MasterInfoTile : UserControl
 
         if (TileCommand is not ICommand command)
         {
-            StackPanel content = new() { Spacing = 8, MaxWidth = 420 };
-            foreach (string text in new[] { Title, Value, Detail, Description }
-                .Where(text => !string.IsNullOrWhiteSpace(text)).Distinct(StringComparer.Ordinal))
-            {
-                content.Children.Add(new TextBlock { Text = text, TextWrapping = TextWrapping.Wrap, IsTextSelectionEnabled = true });
-            }
-            Flyout flyout = new() { Content = new ScrollViewer { Content = content, MaxHeight = 360 } };
-            if (NavigationCommand is ICommand navigation && !string.IsNullOrWhiteSpace(NavigationText))
-            {
-                HyperlinkButton link = new()
-                {
-                    Content = NavigationText,
-                    HorizontalAlignment = HorizontalAlignment.Left,
-                    Padding = new Thickness(0),
-                };
-                link.Click += (_, _) =>
-                {
-                    flyout.Hide();
-                    if (_isLoaded && navigation.CanExecute(null))
-                    {
-                        navigation.Execute(null);
-                    }
-                };
-                content.Children.Add(link);
-            }
-            flyout.ShowAt(TileButton);
+            Style presentation = new() { TargetType = typeof(FlyoutPresenter) };
+            presentation.Setters.Add(new Setter(RequestedThemeProperty, ActualTheme));
+            presentation.Setters.Add(new Setter(LanguageProperty, Language));
+            presentation.Setters.Add(new Setter(FlowDirectionProperty, FlowDirection));
+            TileDetailsFlyout.FlyoutPresenterStyle = presentation;
+            TileDetailsScroller.MaxHeight = Math.Max(1, Math.Min(360, XamlRoot.Size.Height - 120));
+            TileDetailsFlyout.ShowAt(TileButton);
             return;
         }
 
@@ -260,6 +253,16 @@ public sealed partial class MasterInfoTile : UserControl
         }
 
         command.Execute(null);
+    }
+
+    private void TileDetailsNavigation_Click(object sender, RoutedEventArgs e)
+    {
+        TileDetailsFlyout.Hide();
+        // Read the current destination after dismissal; the tile may have been rebound while open.
+        if (_isLoaded && NavigationCommand is ICommand navigation && navigation.CanExecute(null))
+        {
+            navigation.Execute(null);
+        }
     }
 
     private void TileRoot_PointerEntered(object sender, PointerRoutedEventArgs e)
@@ -325,6 +328,7 @@ public sealed partial class MasterInfoTile : UserControl
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
         _isLoaded = false;
+        WindowDialogCoordinator.TryDismissTransient(XamlRoot, TileDetailsFlyout.Hide);
         ObserveCommand();
         _pressedPoint = null;
         _suppressNextTap = false;

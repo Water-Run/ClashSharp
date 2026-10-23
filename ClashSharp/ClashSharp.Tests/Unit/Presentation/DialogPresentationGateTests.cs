@@ -5,6 +5,39 @@ namespace ClashSharp.Tests.Unit.Presentation;
 /// <summary>Verifies modal presentation admission and release behavior.</summary>
 public sealed class DialogPresentationGateTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void TransientDismissal_DoesNotChangeModalOwnership(bool modalActive)
+    {
+        DialogPresentationGate gate = new();
+        IDisposable? lease = null;
+        if (modalActive) { Assert.True(gate.TryEnter(out lease)); }
+        int dismissed = 0;
+        Assert.True(gate.TryDismissTransient(() => dismissed++));
+        Assert.Equal(1, dismissed);
+        Assert.Equal(!modalActive, gate.TryEnter(out IDisposable? probe));
+        probe?.Dispose();
+        lease?.Dispose();
+        Assert.True(gate.TryEnter(out IDisposable? next));
+        next!.Dispose();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void OwnerUnloaded_AfterWindowTeardown_DoesNotDismissTheNativeFlyout(bool modalActive)
+    {
+        DialogPresentationGate gate = new();
+        IDisposable? lease = null;
+        if (modalActive) { Assert.True(gate.TryEnter(out lease)); }
+        gate.MarkWindowClosing();
+        Assert.False(gate.TryDismissTransient(() => throw new InvalidOperationException("Native window is gone.")));
+        lease?.Dispose();
+        Assert.False(gate.TryDismissTransient(() => throw new InvalidOperationException("Native window is still gone.")));
+        Assert.False(gate.TryEnter(out _));
+    }
+
     [Fact]
     public void PresentationRefresh_OnlyTouchesAnAdmittedLiveWindow()
     {

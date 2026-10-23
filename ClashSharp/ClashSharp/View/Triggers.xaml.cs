@@ -11,6 +11,7 @@ using ClashSharp.Presentation.Dialogs;
 using ClashSharp.ViewModel;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Data;
 using TriggerActionKind = global::ClashSharp.Model.Triggers.TriggerActionKind;
 
 namespace ClashSharp.View;
@@ -26,6 +27,7 @@ public sealed partial class Triggers : Page
     private Task _dataRefresh = Task.CompletedTask;
     private bool _dataRefreshPending;
     private CancellationTokenSource? _pageLifetime;
+    private MenuFlyout? _actionsMenu;
 
     internal Triggers(TriggersPageDependencies dependencies)
     {
@@ -55,6 +57,7 @@ public sealed partial class Triggers : Page
 
     private async void OnUnloaded(object sender, RoutedEventArgs args)
     {
+        WindowDialogCoordinator.TryDismissTransient(XamlRoot, () => _actionsMenu?.Hide());
         _dataSubscription?.Dispose();
         _dataSubscription = null;
         CancellationTokenSource? lifetime = _pageLifetime;
@@ -167,9 +170,9 @@ public sealed partial class Triggers : Page
         }
 
         MenuFlyout menu = new();
-        MenuFlyoutItem up = CreateTriggerMenuItem(item, item.MoveUpText, "\uE70E", MoveTriggerUpButton_Click);
-        MenuFlyoutItem down = CreateTriggerMenuItem(item, item.MoveDownText, "\uE70D", MoveTriggerDownButton_Click);
-        MenuFlyoutItem delete = CreateTriggerMenuItem(item, item.DeleteText, "\uE74D", DeleteTriggerButton_Click);
+        MenuFlyoutItem up = CreateTriggerMenuItem(item, nameof(item.MoveUpText), "\uE70E", MoveTriggerUpButton_Click);
+        MenuFlyoutItem down = CreateTriggerMenuItem(item, nameof(item.MoveDownText), "\uE70D", MoveTriggerDownButton_Click);
+        MenuFlyoutItem delete = CreateTriggerMenuItem(item, nameof(item.DeleteText), "\uE74D", DeleteTriggerButton_Click);
         menu.Items.Add(up);
         menu.Items.Add(down);
         menu.Items.Add(new MenuFlyoutSeparator());
@@ -181,20 +184,30 @@ public sealed partial class Triggers : Page
             down.IsEnabled = current && item.CanMoveDown;
             delete.IsEnabled = current;
         };
+        menu.Closed += (_, _) =>
+        {
+            if (ReferenceEquals(_actionsMenu, menu)) { _actionsMenu = null; }
+        };
+        _actionsMenu = menu;
         menu.ShowAt(button);
     }
 
     /// <summary>Keeps popup commands bound to the same durable row identity checked by their existing handlers.</summary>
     private static MenuFlyoutItem CreateTriggerMenuItem(
-        TriggerTaskItemViewModel item, string text, string glyph, RoutedEventHandler handler)
+        TriggerTaskItemViewModel item, string textProperty, string glyph, RoutedEventHandler handler)
     {
         MenuFlyoutItem command = new()
         {
-            Text = text,
             Icon = new FontIcon { Glyph = glyph },
             Tag = item.Id,
             DataContext = item,
         };
+        command.SetBinding(MenuFlyoutItem.TextProperty, new Binding
+        {
+            Source = item,
+            Path = new PropertyPath(textProperty),
+            Mode = BindingMode.OneWay,
+        });
         command.Click += handler;
         return command;
     }

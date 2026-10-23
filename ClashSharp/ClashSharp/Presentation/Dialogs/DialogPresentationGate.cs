@@ -42,6 +42,16 @@ internal sealed class DialogPresentationGate
         return TryRefreshPresentation(dismiss);
     }
 
+    /// <summary>Dismisses an owner-bound flyout without acquiring or releasing a modal lease.</summary>
+    /// <remarks>Runs on the owning UI thread and rejects callbacks after native window teardown begins.</remarks>
+    public bool TryDismissTransient(Action dismiss)
+    {
+        ArgumentNullException.ThrowIfNull(dismiss);
+        if ((Volatile.Read(ref _state) & Closing) != 0) { return false; }
+        dismiss();
+        return true;
+    }
+
     /// <summary>Updates an admitted dialog only while its owning native window remains usable.</summary>
     /// <remarks>The callback and window teardown must execute on the owning UI thread.</remarks>
     public bool TryRefreshPresentation(Action refresh)

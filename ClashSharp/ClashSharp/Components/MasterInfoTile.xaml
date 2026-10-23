@@ -169,6 +169,31 @@
             Click="TileButton_Click"
             PointerEntered="TileRoot_PointerEntered"
             PointerExited="TileRoot_PointerExited">
+            <FlyoutBase.AttachedFlyout>
+                <Flyout x:Name="TileDetailsFlyout">
+                    <ScrollViewer x:Name="TileDetailsScroller" MaxHeight="360" HorizontalScrollBarVisibility="Disabled">
+                        <StackPanel Spacing="8" MaxWidth="420"
+                            Language="{x:Bind Language, Mode=OneWay}"
+                            FlowDirection="{x:Bind FlowDirection, Mode=OneWay}"
+                            RequestedTheme="{x:Bind ActualTheme, Mode=OneWay}">
+                            <TextBlock
+                                AutomationProperties.AutomationId="TileDetailsText"
+                                Text="{x:Bind GetDetailText(Title, Value, Detail, Description), Mode=OneWay}"
+                                TextWrapping="Wrap"
+                                IsTextSelectionEnabled="True" />
+                            <HyperlinkButton
+                                AutomationProperties.AutomationId="TileDetailsNavigation"
+                                Visibility="{x:Bind GetNavigationVisibility(NavigationCommand, NavigationText), Mode=OneWay}"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Left"
+                                Padding="0"
+                                Click="TileDetailsNavigation_Click">
+                                <TextBlock Text="{x:Bind NavigationText, Mode=OneWay}" TextWrapping="Wrap" />
+                            </HyperlinkButton>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Flyout>
+            </FlyoutBase.AttachedFlyout>
             <ToolTipService.ToolTip>
                 <ToolTip>
                     <TextBlock MaxWidth="360" Text="{x:Bind GetTooltipText(Value, Detail, Description), Mode=OneWay}" TextWrapping="Wrap" />

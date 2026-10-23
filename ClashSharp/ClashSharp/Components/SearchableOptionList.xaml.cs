@@ -3,9 +3,11 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
+using ClashSharp.Presentation.Dialogs;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Data;
 using Windows.Foundation;
 
 namespace ClashSharp.Components;
@@ -46,9 +48,18 @@ public sealed partial class SearchableOptionList : UserControl
         typeof(SearchableOptionList),
         new PropertyMetadata(360d));
 
+    /// <summary>Identifies the live move-up label used by existing native row menus.</summary>
+    public static readonly DependencyProperty MoveUpTextProperty = DependencyProperty.Register(
+        nameof(MoveUpText), typeof(string), typeof(SearchableOptionList), new PropertyMetadata(string.Empty));
+
+    /// <summary>Identifies the live move-down label used by existing native row menus.</summary>
+    public static readonly DependencyProperty MoveDownTextProperty = DependencyProperty.Register(
+        nameof(MoveDownText), typeof(string), typeof(SearchableOptionList), new PropertyMetadata(string.Empty));
+
     private readonly List<SearchableOptionItem> _allOptions = [];
     private bool _allowMultiple;
     private bool _synchronizingSelection;
+    private MenuFlyout? _openReorderMenu;
 
     /// <summary>Initializes an empty searchable option list.</summary>
     public SearchableOptionList()
@@ -57,6 +68,7 @@ public sealed partial class SearchableOptionList : UserControl
         // Callers set initial selections before the dialog loads; assign the source before synchronizing them.
         MultipleOptionsControl.ItemsSource = FilteredOptions;
         SingleOptionsControl.ItemsSource = FilteredOptions;
+        Unloaded += (_, _) => WindowDialogCoordinator.TryDismissTransient(XamlRoot, () => _openReorderMenu?.Hide());
     }
 
     /// <summary>Occurs after the selected option set changes.</summary>
@@ -97,10 +109,18 @@ public sealed partial class SearchableOptionList : UserControl
     public bool AllowReorder { get; set; }
 
     /// <summary>Gets or sets the localized move-up command label.</summary>
-    public string MoveUpText { get; set; } = string.Empty;
+    public string MoveUpText
+    {
+        get => (string)GetValue(MoveUpTextProperty);
+        set => SetValue(MoveUpTextProperty, value);
+    }
 
     /// <summary>Gets or sets the localized move-down command label.</summary>
-    public string MoveDownText { get; set; } = string.Empty;
+    public string MoveDownText
+    {
+        get => (string)GetValue(MoveDownTextProperty);
+        set => SetValue(MoveDownTextProperty, value);
+    }
 
     /// <summary>Gets or sets the optional instruction for accessing ordering commands.</summary>
     public string ReorderHint
@@ -194,9 +214,22 @@ public sealed partial class SearchableOptionList : UserControl
     private void MultipleOptionsControl_ContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs e)
     {
         SearchableOptionItem? option = e.InRecycleQueue ? null : e.Item as SearchableOptionItem;
-        AutomationProperties.SetName(e.ItemContainer, option?.Title ?? string.Empty);
-        AutomationProperties.SetHelpText(e.ItemContainer, option?.Description ?? string.Empty);
-        ToolTipService.SetToolTip(e.ItemContainer, option?.Description);
+        if (option is not null)
+        {
+            e.ItemContainer.SetBinding(AutomationProperties.NameProperty, new Binding { Source = option, Path = new PropertyPath(nameof(option.Title)), Mode = BindingMode.OneWay });
+            e.ItemContainer.SetBinding(AutomationProperties.HelpTextProperty, new Binding { Source = option, Path = new PropertyPath(nameof(option.Description)), Mode = BindingMode.OneWay });
+            e.ItemContainer.SetBinding(ToolTipService.ToolTipProperty, new Binding { Source = option, Path = new PropertyPath(nameof(option.Description)), Mode = BindingMode.OneWay });
+        }
+        else
+        {
+            e.ItemContainer.ClearValue(AutomationProperties.NameProperty);
+            e.ItemContainer.ClearValue(AutomationProperties.HelpTextProperty);
+            e.ItemContainer.ClearValue(ToolTipService.ToolTipProperty);
+        }
+        if (e.ItemContainer.ContextFlyout is MenuFlyout previous && ReferenceEquals(previous, _openReorderMenu))
+        {
+            WindowDialogCoordinator.TryDismissTransient(XamlRoot, previous.Hide);
+        }
         e.ItemContainer.ContextFlyout = option is not null && AllowReorder
             ? CreateReorderMenu(option)
             : null;
@@ -205,12 +238,15 @@ public sealed partial class SearchableOptionList : UserControl
     private MenuFlyout CreateReorderMenu(SearchableOptionItem option)
     {
         MenuFlyout menu = new();
-        MenuFlyoutItem up = new() { Text = MoveUpText, Icon = new FontIcon { Glyph = "\uE70E" } };
-        MenuFlyoutItem down = new() { Text = MoveDownText, Icon = new FontIcon { Glyph = "\uE70D" } };
+        MenuFlyoutItem up = new() { Icon = new FontIcon { Glyph = "\uE70E" } };
+        MenuFlyoutItem down = new() { Icon = new FontIcon { Glyph = "\uE70D" } };
+        up.SetBinding(MenuFlyoutItem.TextProperty, new Binding { Source = this, Path = new PropertyPath(nameof(MoveUpText)), Mode = BindingMode.OneWay });
+        down.SetBinding(MenuFlyoutItem.TextProperty, new Binding { Source = this, Path = new PropertyPath(nameof(MoveDownText)), Mode = BindingMode.OneWay });
         menu.Items.Add(up);
         menu.Items.Add(down);
         menu.Opening += (_, _) =>
         {
+            _openReorderMenu = menu;
             int index = FilteredOptions.IndexOf(option);
             up.IsEnabled = AllowMultiple && AllowReorder && index > 0;
             down.IsEnabled = AllowMultiple && AllowReorder && index >= 0 && index < FilteredOptions.Count - 1;
@@ -220,6 +256,7 @@ public sealed partial class SearchableOptionList : UserControl
         down.Click += (_, _) => moved = MoveOption(option, 1);
         menu.Closed += (_, _) =>
         {
+            if (ReferenceEquals(_openReorderMenu, menu)) { _openReorderMenu = null; }
             if (moved)
             {
                 moved = false;

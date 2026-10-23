@@ -876,6 +876,24 @@ public sealed partial class Settings : Page, ILocalizedPresentation
 
             optionList.SelectionChanged += (_, _) => dialog.IsPrimaryButtonEnabled = optionList.SelectedOptions.Count > 0;
             using SearchableOptionDialogLayout layout = new(dialog, optionList);
+            dialog.Localize(() =>
+            {
+                dialog.Title = _viewModel.TrayVisibleFeaturesTitleText;
+                dialog.PrimaryButtonText = _getString("Command.Save");
+                dialog.CloseButtonText = _getString("Command.Cancel");
+                optionList.SearchHeader = _getString("Settings.Tray.VisibleFeatures.SelectionRequired");
+                optionList.SearchPlaceholder = _viewModel.TrayVisibleFeatureSearchPlaceholderText;
+                optionList.EmptyText = _getString("Common.NoMatchingOptions");
+                optionList.MoveUpText = _getString("Command.MoveUp");
+                optionList.MoveDownText = _getString("Command.MoveDown");
+                optionList.ReorderHint = _getString("Settings.Tray.VisibleFeatures.ReorderHint");
+                foreach (SearchableOptionItem option in optionList.Options)
+                {
+                    SettingsTrayFeatureDefinition feature = SettingsViewModel.TrayFeatureDefinitions.First(item => item.Id == option.Id);
+                    option.UpdateDisplay(_getString(feature.TitleKey), string.Empty, _getString(feature.DescriptionKey));
+                }
+                layout.RefreshLayout();
+            });
             if (await dialog.ShowManagedAsync(cancellationToken) is ContentDialogResult.Primary)
             {
                 cancellationToken.ThrowIfCancellationRequested();
