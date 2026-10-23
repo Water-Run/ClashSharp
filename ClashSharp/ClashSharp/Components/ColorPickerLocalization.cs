@@ -65,9 +65,8 @@ internal sealed class ColorPickerLocalization : IDisposable, ILocalizedPresentat
         }
         SetName(parts, "ColorRepresentationComboBox", _getString("ColorPicker.Model"));
         SetName(parts, "HexTextBox", _getString(model?.SelectedIndex == 1 ? "ColorPicker.HexHsv" : "ColorPicker.HexRgb"));
+        // The native spectrum peer supplies localized help directly from the framework resources.
         SetName(parts, "ColorSpectrum", _getString("ColorPicker.Spectrum"));
-        if (parts.TryGetValue("ColorSpectrum", out FrameworkElement? spectrum))
-        { AutomationProperties.SetHelpText(spectrum, _getString("ColorPicker.Spectrum.Help")); }
         string channelKey = picker.ColorSpectrumComponents switch
         {
             SpectrumComponents.ValueSaturation or SpectrumComponents.SaturationValue => "Hue",
