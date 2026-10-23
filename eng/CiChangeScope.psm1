@@ -47,7 +47,7 @@ function Invoke-ClashSharpCiGit {
     $previous = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
     try {
-        $executable = (Get-Command git -CommandType Application -ErrorAction Stop).Source
+        $executable = (Get-Command git -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
         $output = @(& $executable -C $Repository @Argument 2>&1)
         $code = $LASTEXITCODE
     } catch {

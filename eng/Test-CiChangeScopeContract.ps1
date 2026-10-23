@@ -59,7 +59,7 @@ foreach ($step in $steps) {
 
 $fixture = Join-Path ([IO.Path]::GetTempPath()) ('clashsharp-ci-scope-' + [Guid]::NewGuid().ToString('N'))
 $root = [IO.Path]::GetFullPath($fixture)
-$git = (Get-Command git -CommandType Application -ErrorAction Stop).Source
+$git = (Get-Command git -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
 function Invoke-FixtureGit([string] $At, [string[]] $Arguments) {
     $previous = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
@@ -99,6 +99,26 @@ try {
     $null = & $reporter -Repository $author -BaseCommit $base -HeadCommit $review -RecordPath $lightRecord -GitHubOutputPath $lightOutputs
     $light = Get-Content -LiteralPath $lightRecord -Raw | ConvertFrom-Json
     Assert-Condition (-not $light.product -and -not $light.productTestsExecuted -and (Get-Content $lightOutputs -Raw).Contains('product=false')) 'Review-only output must identify that no product tests were executed.'
+    $previousPath = $env:PATH
+    try {
+        $front = Join-Path $root 'git-front'
+        $second = Join-Path $root 'git-second'
+        $null = [IO.Directory]::CreateDirectory($front)
+        $null = [IO.Directory]::CreateDirectory($second)
+        # Keep the real executable first. Later candidates deliberately fail if selected;
+        # batch wrappers are not equivalent to git.exe when cmd consumes revision carets.
+        $shim = "@echo off`r`nexit /b 123`r`n"
+        foreach ($directory in @($front, $second)) {
+            [IO.File]::WriteAllText((Join-Path $directory 'git.cmd'), $shim, [Text.Encoding]::ASCII)
+        }
+        $env:PATH = (Split-Path -Parent $git) + [IO.Path]::PathSeparator + $front +
+            [IO.Path]::PathSeparator + $second + [IO.Path]::PathSeparator + $previousPath
+        Assert-Condition (@(Get-Command git -CommandType Application).Count -ge 2) 'Multi-Git fixture must expose multiple applications.'
+        $scope = Get-ClashSharpCiRepositoryScope -Repository $author -BaseCommit $base -HeadCommit $review
+        Assert-Condition (-not $scope.product -and $scope.complete) 'Discovery must use the first Git application instead of joining all paths.'
+    } finally {
+        $env:PATH = $previousPath
+    }
     $scope = Get-ClashSharpCiRepositoryScope -Repository $author -BaseCommit $base -HeadCommit $base
     Assert-Condition ($scope.product -and $scope.reason -eq 'checkout-identity-unverified') 'Wrong checkout must require product CI.'
     $scope = Get-ClashSharpCiRepositoryScope -Repository $author -BaseCommit ('0' * 40) -HeadCommit $review -FetchBase

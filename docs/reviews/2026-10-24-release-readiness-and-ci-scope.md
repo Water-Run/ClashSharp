@@ -30,6 +30,12 @@
 
 ## 验证
 
-四份输入（模块、执行脚本、契约和工作流）经SHA256核对后在服务器执行，PowerShell5.1和7各 **63项检查通过**。覆盖完整与不完整差异、路径边界、混合变更、产品改名／删除语义、真实浅克隆缺少基线后的SHA取回、带空格仓库路径、checkout身份、Git失败、输出记录与禁止覆盖，以及每个工作流步骤的保守条件。临时Git仓库只位于独立GUID目录，清理前核对绝对路径和重解析点；没有执行产品或Sandbox。
+四份输入（模块、执行脚本、契约和工作流）经SHA256核对后在服务器执行，初轮PowerShell5.1和7各63项检查通过。CI run40013189908随后在范围契约中拒绝：runner暴露多个Git程序，脚本把Source数组用作单一路径。改为选择PATH中的第一个应用，并增加真实多Git PATH用例；最终服务器两版本各 **65项检查通过**。补充夹具首次将批处理包装器放到最前，cmd会消费Git修订表达式中的caret，导致基线不可读并正确回退全量；保留失败，夹具改为真实git.exe在前、后续候选若被调用即失败，准确覆盖runner的问题。
 
-服务器证据为 `C:\ClashSharpValidation\ci-scope-20261024/result.json` 及两份原始日志。本轮工作流变更本身必须走完整CI；之后的纯审查记录提交还需实际观察轻量路径，不能只凭分类函数宣称工作流已验证。
+检查覆盖完整与不完整差异、路径边界、混合变更、产品改名／删除语义、真实浅克隆缺少基线后的SHA取回、带空格仓库路径、checkout身份、Git失败、输出记录与禁止覆盖，以及每个工作流步骤的保守条件。临时Git仓库只位于独立GUID目录，清理前核对绝对路径和重解析点；没有执行产品或Sandbox。没有删掉失败检查或将未知状态改为轻量路径。
+
+服务器证据为 `C:\ClashSharpValidation\ci-scope-20261024/result-r3.json` 及两份原始日志，首轮和失败记录仍保留。本轮工作流变更本身必须走完整CI；之后的纯审查记录提交还需实际观察轻量路径，不能只凭分类函数宣称工作流已验证。
+
+## Win11环境的只读核对
+
+原微软开发VM下载地址当前重定向到[Windows开发环境](https://learn.microsoft.com/en-us/windows/dev-environment/)；本轮没有从第三方取得旧镜像。服务器SDK头文件与[WHvGetCapability官方说明](https://learn.microsoft.com/en-us/virtualization/api/hypervisor-platform/funcs/whvgetcapability)核对后，只查询HypervisorPresent：返回S_OK、4字节，但值为false；HypervisorPlatform为Disabled，VirtualMachinePlatform为Enabled。不能把WMI的HypervisorPresent或DLL存在当作WHP可用的证据。WSL仅列出两个已停止的现有发行版，没有启动它们，没有创建分区／VM、开启系统功能或重启。记录为服务器同节点 `whp-readonly.json`；实际Win11门禁保持未完成。
