@@ -731,6 +731,7 @@ public sealed partial class MasterControl : Page
             HorizontalAlignment = HorizontalAlignment.Stretch,
         };
         AutomationProperties.SetAutomationId(templatePicker, "InfoTilePresetPicker");
+        Dictionary<ComboBoxItem, TextBlock> templateLabels = new();
         foreach (MasterInfoTilePreset preset in presets)
         {
             TextBlock label = new() { Text = preset.Title, TextTrimming = TextTrimming.CharacterEllipsis };
@@ -741,6 +742,7 @@ public sealed partial class MasterControl : Page
                 Path = new PropertyPath(nameof(TextBlock.Text)),
                 Mode = BindingMode.OneWay,
             });
+            templateLabels.Add(item, label);
             ToolTipService.SetToolTip(item, preset.Description);
             templatePicker.Items.Add(item);
             if (_viewModel.VisibleInfoTiles.Select(static tile => tile.Id).SequenceEqual(preset.TileIds, StringComparer.Ordinal))
@@ -923,11 +925,13 @@ public sealed partial class MasterControl : Page
                 }
                 IReadOnlyList<MasterInfoTilePreset> translated = MasterInfoTilePresetCatalog.Create(
                     _getString, presets.Single(preset => preset.Id == "daily").TileIds);
-                foreach (ComboBoxItem item in templatePicker.Items.OfType<ComboBoxItem>())
+                // ComboBox moves the selected UIElement into its faceplate and clears the item's Content.
+                // Keep the label reference independently so it refreshes in either presentation state.
+                foreach ((ComboBoxItem item, TextBlock label) in templateLabels)
                 {
                     if (item.Tag is not MasterInfoTilePreset preset) { continue; }
                     MasterInfoTilePreset text = translated.Single(value => value.Id == preset.Id);
-                    if (item.Content is TextBlock label) { label.Text = text.Title; }
+                    label.Text = text.Title;
                     item.Tag = preset with { Title = text.Title, Description = text.Description };
                     ToolTipService.SetToolTip(item, text.Description);
                 }
