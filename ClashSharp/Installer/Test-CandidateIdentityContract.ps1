@@ -63,6 +63,20 @@ try{
  [IO.File]::WriteAllText($manifest,$first.canonicalJson,[Text.UTF8Encoding]::new($false))
  $file=Join-Path $fixture.directory 'ClashSharp-Installer.exe';[IO.File]::AppendAllText($file,'tampered')
  Assert-Rejected {& $consumer -IdentityPath $manifest -ExpectedIdentitySha256 $first.identitySha256 -ReleaseDirectory $fixture.directory} 'file-changed'
+ $script:callbackReached=$false
+ Assert-Rejected {Invoke-ClashSharpCandidateIdentity -IdentityPath $manifest -ExpectedIdentitySha256 $first.identitySha256 -ReleaseDirectory $fixture.directory -Consume {$script:callbackReached=$true}} 'file-changed'
+ Assert-Condition (-not $script:callbackReached) 'Changed candidate must be refused before a collector starts.'
+ $held=New-Fixture;$heldDocument=New-Document $held;$heldManifest=Join-Path $root 'held.json'
+ [IO.File]::WriteAllText($heldManifest,$heldDocument.canonicalJson,[Text.UTF8Encoding]::new($false))
+ Invoke-ClashSharpCandidateIdentity -IdentityPath $heldManifest -ExpectedIdentitySha256 $heldDocument.identitySha256 -ReleaseDirectory $held.directory -Consume {
+  param($candidate)
+  Assert-Condition ($candidate.source.commit -ceq $held.commit) 'Collector must receive the verified source identity.'
+  Assert-Rejected {[IO.File]::WriteAllText($heldManifest,'changed')} ''
+  Assert-Rejected {[IO.File]::AppendAllText((Join-Path $held.directory 'payload/ClashSharp_1.0.0.0_x64.msix'),'changed')} ''
+ }|Out-Null
+ Assert-Rejected {Invoke-ClashSharpCandidateIdentity -IdentityPath $heldManifest -ExpectedIdentitySha256 $heldDocument.identitySha256 -ReleaseDirectory $held.directory -Consume {throw 'fixture.collector-failure'}} 'fixture.collector-failure'
+ $writeLease=[IO.File]::Open($heldManifest,[IO.FileMode]::Open,[IO.FileAccess]::Write,[IO.FileShare]::Read);$writeLease.Dispose()
+ Assert-Condition $true 'Collector exceptions must release the manifest lease.'
  $fresh=New-Fixture
  Get-ClashSharpCandidateFileSnapshot -ReleaseDirectory $fresh.directory -Consume {
   param($files)

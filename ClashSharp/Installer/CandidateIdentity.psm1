@@ -127,4 +127,61 @@ function Get-ClashSharpCandidateFileSnapshot {
     } finally { foreach ($lease in $leases) { $lease.Dispose() } }
 }
 
-Export-ModuleMember -Function Get-ClashSharpCandidatePaths, Get-ClashSharpCandidateDocument, Get-ClashSharpCandidateFileSnapshot
+function Invoke-ClashSharpCandidateIdentity {
+    <#
+    .SYNOPSIS
+        Consumes one independently pinned candidate while its manifest and output leases are held.
+    .DESCRIPTION
+        Verifies canonical identity bytes and all eight files before calling trusted collector code.
+        The callback is supplied by the caller, never by a manifest. No result escapes if the final
+        directory recheck fails. This does not authenticate an arbitrary self-selected manifest.
+    .PARAMETER IdentityPath
+        Ordinary canonical identity document from the controlled producer.
+    .PARAMETER ExpectedIdentitySha256
+        Independent reference digest obtained from that producer.
+    .PARAMETER ReleaseDirectory
+        Exact eight-file output belonging to the identity.
+    .PARAMETER Consume
+        Trusted operation receiving the verified document while all read leases remain held.
+    #>
+    [CmdletBinding()]
+    param(
+        [string] $IdentityPath,
+        [ValidatePattern('^[0-9a-f]{64}\z')][string] $ExpectedIdentitySha256,
+        [string] $ReleaseDirectory,
+        [Parameter(Mandatory)][scriptblock] $Consume
+    )
+    $path = Assert-ClashSharpOrdinaryPath -LiteralPath $IdentityPath -RequireFile
+    $lease = [IO.File]::Open($path,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read)
+    try {
+        if ($lease.Length -le 0 -or $lease.Length -gt 65536) { throw 'candidate.manifest-budget' }
+        $digest = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($lease)).ToLowerInvariant()
+        if ($digest -cne $ExpectedIdentitySha256) { throw 'candidate.manifest-digest' }
+        $lease.Position = 0
+        $reader = [IO.StreamReader]::new($lease,[Text.UTF8Encoding]::new($false,$true),$false,1024,$true)
+        try { $text = $reader.ReadToEnd() } finally { $reader.Dispose() }
+        try { $value = $text | ConvertFrom-Json -Depth 20 } catch { throw 'candidate.manifest-json' }
+        if ($value.schemaVersion -ne 1 -or $value.kind -cne 'clashsharp-signed-candidate-identity' -or
+            $value.repository -cne 'Water-Run/ClashSharp' -or $value.acceptanceBound -isnot [bool] -or $value.acceptanceBound -or
+            $value.promotionAuthorized -isnot [bool] -or $value.promotionAuthorized) { throw 'candidate.manifest-state' }
+        $canonical = Get-ClashSharpCandidateDocument -SourceCommit $value.source.commit -SourceTree $value.source.tree `
+            -CiRunId $value.ci.runId -CiEvidenceSha256 $value.ci.artifactEvidenceSha256 -Files $value.files -Signatures $value.signatures
+        if ($canonical.identitySha256 -cne $ExpectedIdentitySha256 -or $canonical.canonicalJson -cne $text) {
+            throw 'candidate.manifest-noncanonical'
+        }
+        # Keep a distinct name: the nested snapshot has its own Consume parameter.
+        $identityConsumer = $Consume
+        Get-ClashSharpCandidateFileSnapshot -ReleaseDirectory $ReleaseDirectory -Consume {
+            param($files)
+            foreach ($expected in $canonical.document.files) {
+                $actual = @($files | Where-Object path -CEQ $expected.path)
+                if ($actual.Count -ne 1 -or $actual[0].length -ne $expected.length -or $actual[0].sha256 -cne $expected.sha256) {
+                    throw 'candidate.file-changed'
+                }
+            }
+            & $identityConsumer $canonical.document
+        }
+    } finally { $lease.Dispose() }
+}
+
+Export-ModuleMember -Function Get-ClashSharpCandidatePaths, Get-ClashSharpCandidateDocument, Get-ClashSharpCandidateFileSnapshot, Invoke-ClashSharpCandidateIdentity
