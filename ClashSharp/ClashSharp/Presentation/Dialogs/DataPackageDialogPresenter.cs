@@ -40,47 +40,51 @@ internal sealed class DataPackageDialogPresenter
         }
 
         cancellationToken.ThrowIfCancellationRequested();
-        FileSavePicker picker = new()
+        StorageFile? file = null;
+        try
         {
-            SuggestedStartLocation = PickerLocationId.DocumentsLibrary,
-            SuggestedFileName = $"ClashSharp-{DateTime.Now:yyyyMMdd-HHmmss}",
-        };
-        InitializePickerWithWindow(picker);
-        if (selectedScope == DataPackageExportScope.SystemLogSqlite)
-        {
-            picker.FileTypeChoices.Add("SQLite", [".sqlite3"]);
-        }
-        else
-        {
-            picker.FileTypeChoices.Add("Clash# XML", [".xml"]);
-        }
-
-        StorageFile? file = await picker.PickSaveFileAsync();
-        cancellationToken.ThrowIfCancellationRequested();
-        if (file is not null)
-        {
-            try
+            FileSavePicker picker = new()
             {
-                await _operations.ExportDataAsync(file.Path, selectedScope, cancellationToken);
+                SuggestedStartLocation = PickerLocationId.DocumentsLibrary,
+                SuggestedFileName = $"ClashSharp-{DateTime.Now:yyyyMMdd-HHmmss}",
+            };
+            InitializePickerWithWindow(picker);
+            if (selectedScope == DataPackageExportScope.SystemLogSqlite)
+            {
+                picker.FileTypeChoices.Add("SQLite", [".sqlite3"]);
             }
-            catch (Exception exception) when (
-                !ExceptionGraphClassifier.IsProcessFatal(exception)
-                && !ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
+            else
             {
-                try
-                {
-                    await ShowExportResultAsync(xamlRoot, file.Path, succeeded: false, cancellationToken);
-                }
-                finally
-                {
-                    await _operations.ReportUnexpectedErrorAsync(
-                        "settings-data-export", exception, CancellationToken.None);
-                }
+                picker.FileTypeChoices.Add("Clash# XML", [".xml"]);
+            }
+
+            // The OS picker can fail before returning a file, for example when a selected backup is in use.
+            file = await picker.PickSaveFileAsync();
+            cancellationToken.ThrowIfCancellationRequested();
+            if (file is null)
+            {
                 return;
             }
 
-            await ShowExportResultAsync(xamlRoot, file.Path, succeeded: true, cancellationToken);
+            await _operations.ExportDataAsync(file.Path, selectedScope, cancellationToken);
         }
+        catch (Exception exception) when (
+            !ExceptionGraphClassifier.IsProcessFatal(exception)
+            && !ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
+        {
+            try
+            {
+                await ShowExportResultAsync(xamlRoot, file?.Path ?? string.Empty, succeeded: false, cancellationToken);
+            }
+            finally
+            {
+                await _operations.ReportUnexpectedErrorAsync(
+                    "settings-data-export", exception, CancellationToken.None);
+            }
+            return;
+        }
+
+        await ShowExportResultAsync(xamlRoot, file.Path, succeeded: true, cancellationToken);
     }
 
     private async Task ShowExportResultAsync(
@@ -111,17 +115,39 @@ internal sealed class DataPackageDialogPresenter
     {
         ArgumentNullException.ThrowIfNull(refreshCommittedData);
         cancellationToken.ThrowIfCancellationRequested();
-        FileOpenPicker picker = new() { SuggestedStartLocation = PickerLocationId.DocumentsLibrary };
-        InitializePickerWithWindow(picker);
-        picker.FileTypeFilter.Add(".xml");
-        StorageFile? file = await picker.PickSingleFileAsync();
-        cancellationToken.ThrowIfCancellationRequested();
-        if (file is null)
+        IPreparedSettingsImport? prepared;
+        try
         {
+            FileOpenPicker picker = new() { SuggestedStartLocation = PickerLocationId.DocumentsLibrary };
+            InitializePickerWithWindow(picker);
+            picker.FileTypeFilter.Add(".xml");
+            StorageFile? file = await picker.PickSingleFileAsync();
+            cancellationToken.ThrowIfCancellationRequested();
+            if (file is null)
+            {
+                return false;
+            }
+
+            prepared = await _operations.PrepareDataImportAsync(file.Path, cancellationToken);
+        }
+        catch (Exception exception) when (
+            !ExceptionGraphClassifier.IsProcessFatal(exception)
+            && !ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
+        {
+            try
+            {
+                await ShowImportResultAsync(xamlRoot,
+                    "Settings.DataImport.Failed", "Settings.DataImport.Failed.Description", cancellationToken);
+            }
+            finally
+            {
+                await _operations.ReportUnexpectedErrorAsync(
+                    "settings-data-import", exception, CancellationToken.None);
+            }
             return false;
         }
 
-        using IPreparedSettingsImport? import = await _operations.PrepareDataImportAsync(file.Path, cancellationToken);
+        using IPreparedSettingsImport? import = prepared;
         if (import is null || !IsImportableDataPackageScope(import.Scope))
         {
             await ShowImportResultAsync(xamlRoot,
