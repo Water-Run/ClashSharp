@@ -6,6 +6,7 @@ using ClashSharp.Presentation.Dialogs;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Data;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Windows.Foundation;
@@ -253,6 +254,21 @@ public sealed partial class MasterInfoTile : UserControl
         }
 
         command.Execute(null);
+    }
+
+    private void TileDetailsFlyout_Opened(object? sender, object e)
+    {
+        if (!_isLoaded) { return; }
+        // Bind the native surface as well as its content so live theme changes keep text readable.
+        for (DependencyObject? parent = VisualTreeHelper.GetParent(TileDetailsScroller);
+            parent is not null; parent = VisualTreeHelper.GetParent(parent))
+        {
+            if (parent is not FlyoutPresenter presenter) { continue; }
+            presenter.SetBinding(RequestedThemeProperty, new Binding { Source = this, Path = new PropertyPath(nameof(ActualTheme)), Mode = BindingMode.OneWay });
+            presenter.SetBinding(LanguageProperty, new Binding { Source = this, Path = new PropertyPath(nameof(Language)), Mode = BindingMode.OneWay });
+            presenter.SetBinding(FlowDirectionProperty, new Binding { Source = this, Path = new PropertyPath(nameof(FlowDirection)), Mode = BindingMode.OneWay });
+            break;
+        }
     }
 
     private void TileDetailsNavigation_Click(object sender, RoutedEventArgs e)

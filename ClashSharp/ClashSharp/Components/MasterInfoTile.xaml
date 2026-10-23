@@ -170,7 +170,7 @@
             PointerEntered="TileRoot_PointerEntered"
             PointerExited="TileRoot_PointerExited">
             <FlyoutBase.AttachedFlyout>
-                <Flyout x:Name="TileDetailsFlyout">
+                <Flyout x:Name="TileDetailsFlyout" Opened="TileDetailsFlyout_Opened">
                     <ScrollViewer x:Name="TileDetailsScroller" MaxHeight="360" HorizontalScrollBarVisibility="Disabled">
                         <StackPanel Spacing="8" MaxWidth="420"
                             Language="{x:Bind Language, Mode=OneWay}"
