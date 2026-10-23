@@ -40,6 +40,16 @@
 
 最终服务器证据为 `C:\ClashSharpValidation\ci-scope-20261024/result-r5.json`、两份原始PowerShell日志及 `topology-r5/topology.trx`；首轮、runner与帮助门禁失败仍保留。本轮工作流变更本身必须重新取得完整CI；之后的纯审查记录提交还需实际观察轻量路径，不能只凭分类函数宣称工作流已验证。
 
+## 完整路径的实际CI结果
+
+修正提交 `73c707bcf606de83bee733a169690f51f1f0fbe0` 的 [run40016254087](https://github.com/Water-Run/ClashSharp/actions/runs/40016254087) 两项必需job均成功，原产品步骤实际执行，没有以文档路径跳过。两项范围artifact均记录product=true、complete=true，head为该准确提交，变更含两个eng文件和两份审查Markdown。
+
+三份下载artifact分别与GitHub大小及digest核对：ci-scope-dotnet/id12528304992、ci-scope-installer/id12528598549、dotnet-test-results/id12528674233。四份原始TRX再次经现有TestResultEvidence验证，共 **7,263 / 0 / 0**；原始报告重打包SHA256 `69C1A635D0CD75F0259D1816C4C830C1C005CA4CC559503D395866FDFC5B1E10`，原始GitHub测试artifact SHA256 `d41c0654d44cb772d9a71b97455b11da051363e8720e2aee4e1f3d4bfc9b6bbd`。开发安装包步骤及上传也成功，仍是非发行的开发产物。
+
+范围JSON是执行产品检查之前的分类观察，不是TRX或测试完成声明；实际执行必须核对步骤状态和原始报告。完整路径证据位于 `artifacts/verification/server-ci-scope-20261024/ci-40016254087`，服务器同节点保留raw-verification.json及verified.json。
+
+本次后续提交仅更新本审查记录与账本，用于实际验证轻量路径；在观察其步骤和产物前，不将轻量路径记为通过。
+
 ## Win11环境的只读核对
 
 原微软开发VM下载地址当前重定向到[Windows开发环境](https://learn.microsoft.com/en-us/windows/dev-environment/)；本轮没有从第三方取得旧镜像。服务器SDK头文件与[WHvGetCapability官方说明](https://learn.microsoft.com/en-us/virtualization/api/hypervisor-platform/funcs/whvgetcapability)核对后，只查询HypervisorPresent：返回S_OK、4字节，但值为false；HypervisorPlatform为Disabled，VirtualMachinePlatform为Enabled。不能把WMI的HypervisorPresent或DLL存在当作WHP可用的证据。WSL仅列出两个已停止的现有发行版，没有启动它们，没有创建分区／VM、开启系统功能或重启。记录为服务器同节点 `whp-readonly.json`；实际Win11门禁保持未完成。
