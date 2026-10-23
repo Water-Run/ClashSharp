@@ -1,6 +1,7 @@
 using System;
 using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.Presentation.Adapters;
+using ClashSharp.Service;
 using ClashSharp.ViewModel;
 
 namespace ClashSharp.Presentation.Composition;
@@ -18,7 +19,8 @@ internal static class ProfilesPageComposition
             new PageLogAdapter(context.LogStorage),
             () => context.Settings.ActiveProfileId,
             context.ErrorSink,
-            new ModelDisplayMapper(context.MainlandChinaTextDisplay.Apply, context.CreateDisplayFormatter()));
+            new ModelDisplayMapper(context.MainlandChinaTextDisplay.Apply, context.CreateDisplayFormatter(),
+                profileStatusLocalizer: ProfileStatusText.Localize));
 
         return new Dependencies(
             viewModel,

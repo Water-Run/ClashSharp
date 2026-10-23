@@ -16,10 +16,12 @@ internal sealed class ProfileSubscriptionLinkDisplay(
     private string _updatedSummary = string.Empty;
     private string _usageDisplay = string.Empty;
     private string _expiryDisplay = string.Empty;
+    private string _statusDisplay = statusDisplay;
     public ProfileSubscriptionLink Model { get; } = model;
     public string NameDisplay { get; } = nameDisplay;
     public string UriDisplay { get; } = uriDisplay;
-    public string StatusDisplay { get; } = statusDisplay;
+    public string StatusDisplay { get => _statusDisplay; private set => SetProperty(ref _statusDisplay, value); }
+    internal Func<Func<string, string>, string>? StatusTextFactory { get; init; }
     internal DisplayFormatter Formatter { get; init; } = new();
     public bool IsEnabled => Model.IsEnabled;
 
@@ -42,7 +44,8 @@ internal sealed class ProfileSubscriptionLinkDisplay(
     /// <summary>Adds localized labels without changing provider data or filtered display text.</summary>
     public ProfileSubscriptionLinkDisplay WithDetails(Func<string, string> getString)
     {
-        ProfileSubscriptionLinkDisplay row = new(Model, NameDisplay, UriDisplay, StatusDisplay) { Formatter = Formatter };
+        ProfileSubscriptionLinkDisplay row = new(Model, NameDisplay, UriDisplay, StatusDisplay)
+        { Formatter = Formatter, StatusTextFactory = StatusTextFactory };
         row.RefreshLocalization(getString);
         return row;
     }
@@ -51,6 +54,7 @@ internal sealed class ProfileSubscriptionLinkDisplay(
     public void RefreshLocalization(Func<string, string> getString)
     {
         ArgumentNullException.ThrowIfNull(getString);
+        if (StatusTextFactory is not null) { StatusDisplay = StatusTextFactory(getString); }
         SubscriptionUsage? usage = Model.Usage;
         string missing = getString("Links.Metadata.NotProvided");
         string used = usage is { UploadBytes: >= 0, DownloadBytes: >= 0 }

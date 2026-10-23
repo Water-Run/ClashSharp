@@ -137,12 +137,22 @@ public sealed partial class Triggers : Page
         }
 
         TriggerCatalogVersion expectedVersion = _viewModel.CatalogVersion;
+        string targetName = item.Name;
         await AwaitPageOperationAsync(async token =>
         {
+            TextBlock explanation = new() { Text = _viewModel.DeleteMessageText, TextWrapping = TextWrapping.Wrap };
+            StackPanel content = new() { Spacing = 8 };
+            content.Children.Add(new TextBlock
+            {
+                Text = targetName,
+                TextWrapping = TextWrapping.Wrap,
+                Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"],
+            });
+            content.Children.Add(explanation);
             ThemedContentDialog dialog = new()
             {
                 Title = _viewModel.DeleteTitleText,
-                Content = _viewModel.DeleteMessageText,
+                Content = content,
                 PrimaryButtonText = _viewModel.DeleteText,
                 CloseButtonText = _viewModel.CancelText,
                 DefaultButton = ContentDialogButton.Close,
@@ -151,7 +161,7 @@ public sealed partial class Triggers : Page
             dialog.Localize(() =>
             {
                 dialog.Title = _viewModel.DeleteTitleText;
-                dialog.Content = _viewModel.DeleteMessageText;
+                explanation.Text = _viewModel.DeleteMessageText;
                 dialog.PrimaryButtonText = _viewModel.DeleteText;
                 dialog.CloseButtonText = _viewModel.CancelText;
             });

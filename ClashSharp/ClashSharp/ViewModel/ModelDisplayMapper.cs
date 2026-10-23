@@ -9,13 +9,19 @@ internal sealed class ModelDisplayMapper : IModelDisplayMapper
 {
     private readonly Func<string, string> _displayTextFilter;
     private readonly DisplayFormatter _formatter;
+    private readonly Func<string, Func<string, string>, string>? _profileStatusLocalizer;
+    private readonly Func<string, Func<string, string>, string>? _subscriptionStatusLocalizer;
     public DisplayFormatter Formatter => _formatter;
 
-    public ModelDisplayMapper(Func<string, string> displayTextFilter, DisplayFormatter? formatter = null)
+    public ModelDisplayMapper(Func<string, string> displayTextFilter, DisplayFormatter? formatter = null,
+        Func<string, Func<string, string>, string>? profileStatusLocalizer = null,
+        Func<string, Func<string, string>, string>? subscriptionStatusLocalizer = null)
     {
         _displayTextFilter = displayTextFilter
             ?? throw new ArgumentNullException(nameof(displayTextFilter));
         _formatter = formatter ?? new();
+        _profileStatusLocalizer = profileStatusLocalizer;
+        _subscriptionStatusLocalizer = subscriptionStatusLocalizer;
     }
 
     public string MapText(string text)
@@ -31,7 +37,11 @@ internal sealed class ModelDisplayMapper : IModelDisplayMapper
             MapText(profile.Name),
             MapText(profile.SourceName),
             MapText(profile.Status))
-        { Formatter = _formatter };
+        {
+            Formatter = _formatter,
+            StatusTextFactory = _profileStatusLocalizer is null ? null
+                : getString => MapText(_profileStatusLocalizer(profile.Status, getString)),
+        };
     }
 
     public ProfileSubscriptionLinkDisplay Map(ProfileSubscriptionLink link)
@@ -41,7 +51,11 @@ internal sealed class ModelDisplayMapper : IModelDisplayMapper
             MapText(link.Name),
             MapText(link.Uri),
             MapText(link.Status))
-        { Formatter = _formatter };
+        {
+            Formatter = _formatter,
+            StatusTextFactory = _subscriptionStatusLocalizer is null ? null
+                : getString => MapText(_subscriptionStatusLocalizer(link.Status, getString)),
+        };
     }
 
     public ProxyNodeDisplay Map(ProxyNode node)

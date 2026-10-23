@@ -1,6 +1,7 @@
 using System;
 using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.Presentation.Adapters;
+using ClashSharp.Service;
 using ClashSharp.ViewModel;
 
 namespace ClashSharp.Presentation.Composition;
@@ -17,7 +18,8 @@ internal static class LinksPageComposition
             new SubscriptionLinkCatalogAdapter(context.Profiles),
             new PageLogAdapter(context.LogStorage),
             context.ErrorSink,
-            new ModelDisplayMapper(context.MainlandChinaTextDisplay.Apply, context.CreateDisplayFormatter()));
+            new ModelDisplayMapper(context.MainlandChinaTextDisplay.Apply, context.CreateDisplayFormatter(),
+                subscriptionStatusLocalizer: SubscriptionStatusText.Localize));
 
         return new Dependencies(viewModel, context.Localization.GetString, context.ErrorSink,
             changed => new DataGenerationSubscription(context.Settings, changed));
