@@ -4,6 +4,9 @@ function Get-ClashSharpCiChangeScope {
     <#
     .SYNOPSIS
         Classifies a complete diff, allowing only ordinary review Markdown to omit product builds.
+    .DESCRIPTION
+        Unknown, empty, incomplete and non-review inputs require the full product jobs. This
+        decision describes scope discovery only and does not certify product test execution.
     .PARAMETER ChangedPath
         Every added, modified and deleted path, with renames expanded into both paths.
     .PARAMETER Complete
@@ -19,7 +22,7 @@ function Get-ClashSharpCiChangeScope {
         $reviewOnly = $true
         foreach ($path in $paths) {
             if ([string]::IsNullOrEmpty($path) -or
-                $path -cnotmatch '^docs/reviews/[A-Za-z0-9][A-Za-z0-9._/-]*\.md$' -or
+                $path -cnotmatch '^docs/reviews/[A-Za-z0-9][A-Za-z0-9._/-]*\.md\z' -or
                 @($path.Split('/') | Where-Object { $_ -eq '' -or $_ -eq '.' -or $_ -eq '..' }).Count -gt 0) {
                 $reviewOnly = $false
                 break
@@ -41,6 +44,18 @@ function Get-ClashSharpCiChangeScope {
 }
 
 function Invoke-ClashSharpCiGit {
+    <#
+    .SYNOPSIS
+        Invokes the first Git application with separate arguments and captures its exit status.
+    .DESCRIPTION
+        Resolves one application even on runners with several Git installations. Native stderr
+        and a missing executable cannot be mistaken for a successful empty diff. Fetch output
+        is retained only in memory and is not copied into CI scope records.
+    .PARAMETER Repository
+        Checkout or isolated fixture directory supplied as Git's separate -C argument.
+    .PARAMETER Argument
+        Fixed Git operation and its already validated revision or path arguments.
+    #>
     [CmdletBinding()]
     param([string] $Repository, [string[]] $Argument)
 
@@ -87,8 +102,8 @@ function Get-ClashSharpCiRepositoryScope {
     $fallback = Get-ClashSharpCiChangeScope
     $fallback | Add-Member -NotePropertyName baseCommit -NotePropertyValue $BaseCommit
     $fallback | Add-Member -NotePropertyName headCommit -NotePropertyValue $HeadCommit
-    if ($BaseCommit -cnotmatch '^[0-9a-f]{40}$' -or $BaseCommit -ceq ('0' * 40) -or
-        $HeadCommit -cnotmatch '^[0-9a-f]{40}$' -or $HeadCommit -ceq ('0' * 40)) {
+    if ($BaseCommit -cnotmatch '^[0-9a-f]{40}\z' -or $BaseCommit -ceq ('0' * 40) -or
+        $HeadCommit -cnotmatch '^[0-9a-f]{40}\z' -or $HeadCommit -ceq ('0' * 40)) {
         $fallback.reason = 'unknown-commit'
         return $fallback
     }

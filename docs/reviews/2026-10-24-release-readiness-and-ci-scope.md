@@ -34,7 +34,11 @@
 
 检查覆盖完整与不完整差异、路径边界、混合变更、产品改名／删除语义、真实浅克隆缺少基线后的SHA取回、带空格仓库路径、checkout身份、Git失败、输出记录与禁止覆盖，以及每个工作流步骤的保守条件。临时Git仓库只位于独立GUID目录，清理前核对绝对路径和重解析点；没有执行产品或Sandbox。没有删掉失败检查或将未知状态改为轻量路径。
 
-服务器证据为 `C:\ClashSharpValidation\ci-scope-20261024/result-r3.json` 及两份原始日志，首轮和失败记录仍保留。本轮工作流变更本身必须走完整CI；之后的纯审查记录提交还需实际观察轻量路径，不能只凭分类函数宣称工作流已验证。
+后续补查将路径／提交id的结束匹配收紧为`\z`，拒绝尾部LF／CRLF，不依赖Git对特殊文件名的引号转义。最终服务器PowerShell5.1和7各 **68项检查通过**。
+
+完整CI run40013884406的范围契约和开发包通过，主程序测试为4,629通过／1失败／0跳过；失败是既有`MaintainedPowerShellFunctions_HaveCompleteCommentBasedHelp`门禁指出两个新增函数的帮助不完整。已补齐Synopsis、Description和参数说明，没有修改或跳过该门禁。服务器随后用实际既有测试程序集对当前源树执行完整RepositoryTopologyTests，**16 / 0 / 0**通过；双版本68项也同时通过。该报告不替代准确提交的完整CI。
+
+最终服务器证据为 `C:\ClashSharpValidation\ci-scope-20261024/result-r5.json`、两份原始PowerShell日志及 `topology-r5/topology.trx`；首轮、runner与帮助门禁失败仍保留。本轮工作流变更本身必须重新取得完整CI；之后的纯审查记录提交还需实际观察轻量路径，不能只凭分类函数宣称工作流已验证。
 
 ## Win11环境的只读核对
 

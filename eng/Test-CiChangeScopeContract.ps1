@@ -32,6 +32,8 @@ $cases = @(
     @{ paths = @('Docs/reviews/a.md'); product = $true },
     @{ paths = @('docs\reviews\a.md'); product = $true },
     @{ paths = @('docs/reviews/a.md' + "`n" + 'source.cs'); product = $true },
+    @{ paths = @('docs/reviews/a.md' + "`n"); product = $true },
+    @{ paths = @('docs/reviews/a.md' + "`r`n"); product = $true },
     @{ paths = @('"docs/reviews/quoted.md"'); product = $true },
     @{ paths = @(); product = $true }
 )
@@ -123,6 +125,8 @@ try {
     Assert-Condition ($scope.product -and $scope.reason -eq 'checkout-identity-unverified') 'Wrong checkout must require product CI.'
     $scope = Get-ClashSharpCiRepositoryScope -Repository $author -BaseCommit ('0' * 40) -HeadCommit $review -FetchBase
     Assert-Condition ($scope.product -and $scope.reason -eq 'unknown-commit') 'New-branch zero base must require product CI.'
+    $scope = Get-ClashSharpCiRepositoryScope -Repository $author -BaseCommit ($base + "`n") -HeadCommit $review -FetchBase
+    Assert-Condition ($scope.product -and $scope.reason -eq 'unknown-commit') 'A newline-suffixed commit is not a canonical id.'
     $scope = Get-ClashSharpCiRepositoryScope -Repository $author -BaseCommit ('f' * 40) -HeadCommit $review
     Assert-Condition ($scope.product -and $scope.reason -eq 'base-unavailable') 'Missing base must require product CI.'
     $scope = Get-ClashSharpCiRepositoryScope -Repository $author -BaseCommit ('f' * 40) -HeadCommit $review -FetchBase
@@ -169,7 +173,7 @@ try {
         $tempRoot = (Get-Item -LiteralPath ([IO.Path]::GetTempPath()) -Force).FullName.TrimEnd([char[]]@('\', '/'))
         $entries = @((Get-Item -LiteralPath $root -Force)) + @(Get-ChildItem -LiteralPath $root -Force -Recurse)
         if (-not $resolved.StartsWith($tempRoot + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase) -or
-            [IO.Path]::GetFileName($resolved) -cnotmatch '^clashsharp-ci-scope-[0-9a-f]{32}$' -or
+            [IO.Path]::GetFileName($resolved) -cnotmatch '^clashsharp-ci-scope-[0-9a-f]{32}\z' -or
             @($entries | Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint }).Count -gt 0) {
             throw 'Fixture cleanup refused an unexpected or reparse path.'
         }
