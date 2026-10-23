@@ -1,0 +1,46 @@
+name: Product CI input audit
+run-name: Audit product CI ${{ inputs.run_id }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Completed full ci.yml run on main
+        required: true
+        type: string
+      source_commit:
+        description: Exact lowercase source commit of that run
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  audit:
+    name: Verify product CI input
+    if: github.ref == 'refs/heads/main'
+    runs-on: windows-2025
+    steps:
+      - name: Check out trusted mainline workflow
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+
+      - name: Verify the exact product run
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRODUCT_RUN_ID: ${{ inputs.run_id }}
+          PRODUCT_SOURCE_COMMIT: ${{ inputs.source_commit }}
+        run: >-
+          ./Tools/Get-ProductCiRun.ps1 -RunId $env:PRODUCT_RUN_ID
+          -SourceCommit $env:PRODUCT_SOURCE_COMMIT
+          -OutputPath ./artifacts/validation/product-ci-execution-metadata.json
+
+      - name: Upload execution metadata
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: product-ci-execution-metadata
+          path: artifacts/validation/product-ci-execution-metadata.json
+          if-no-files-found: error
+          retention-days: 5

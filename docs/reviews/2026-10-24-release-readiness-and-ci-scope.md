@@ -50,6 +50,14 @@
 
 本次后续提交仅更新本审查记录与账本，用于实际验证轻量路径；在观察其步骤和产物前，不将轻量路径记为通过。
 
+## 轻量路径的实际CI结果
+
+纯审查提交 `e4484088dd8de3379ca688c8dcfd494ff947cb0f` 的 [run40019155897](https://github.com/Water-Run/ClashSharp/actions/runs/40019155897) 两项必需job均成功，执行时间分别为30秒和33秒。两份范围记录均为product=false、complete=true、review-markdown-only，准确绑定该提交和两份审查Markdown。
+
+产品构建／测试／安装包步骤实际skipped，摘要说明没有执行产品检查；API索引仅有两项scope产物，没有dotnet-test-results或开发安装包，也没有重新上传旧报告。两份artifact分别为id12529004042／12529946550，SHA256为 `a6cd77e8a1663b1ff5a2c1187fd54fb90b0309cd3defad3a699e363862f729f7`／`efb9d52052f132515f0608e467899ca2debc3108c56d3c2da6c8316b0b7182ca`，下载大小及digest均核验。
+
+完整与轻量两条实际路径至此取得证据，当前固定分支保护的两项context名称未改、strict仍为true。没有把仅有scope的绿色运行计入7,263项产品结果。证据位于本地`server-ci-scope-20261024/ci-40019155897`；后续新增的[候选CI输入审计](../design/2026-10-24-product-ci-input.md)还会主动拒绝此类绿色轻量运行，真实API快照负例已在服务器验证。
+
 ## Win11环境的只读核对
 
 原微软开发VM下载地址当前重定向到[Windows开发环境](https://learn.microsoft.com/en-us/windows/dev-environment/)；本轮没有从第三方取得旧镜像。服务器SDK头文件与[WHvGetCapability官方说明](https://learn.microsoft.com/en-us/virtualization/api/hypervisor-platform/funcs/whvgetcapability)核对后，只查询HypervisorPresent：返回S_OK、4字节，但值为false；HypervisorPlatform为Disabled，VirtualMachinePlatform为Enabled。不能把WMI的HypervisorPresent或DLL存在当作WHP可用的证据。WSL仅列出两个已停止的现有发行版，没有启动它们，没有创建分区／VM、开启系统功能或重启。记录为服务器同节点 `whp-readonly.json`；实际Win11门禁保持未完成。
