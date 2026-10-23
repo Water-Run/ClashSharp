@@ -26,7 +26,7 @@ gh workflow run product-ci-input.yml --ref main `
   -f source_commit=73c707bcf606de83bee733a169690f51f1f0fbe0
 ```
 
-该示例仅审计指定历史产品运行的元数据。主线CI会在产品路径中对门禁模块运行双版本离线契约；独立审计工作流还需用真实完整与真实轻量运行做正反验收。
+该示例仅审计指定历史产品运行的元数据。主线CI在产品路径中运行双版本离线契约；真实完整与轻量运行的CLI正反结果见[执行审计接受记录](../reviews/2026-10-24-product-ci-input-acceptance.md)。可选verify_artifacts分支另提供[产物字节与报告验证](2026-10-24-product-ci-artifacts.md)，不得将元数据模式当作该分支通过。
 
 ## 当前验证
 

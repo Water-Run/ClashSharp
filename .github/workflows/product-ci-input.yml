@@ -12,6 +12,11 @@ on:
         description: Exact lowercase source commit of that run
         required: true
         type: string
+      verify_artifacts:
+        description: Download exact archives and verify scopes, original TRX and development inventory
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -37,10 +42,31 @@ jobs:
           -SourceCommit $env:PRODUCT_SOURCE_COMMIT
           -OutputPath ./artifacts/validation/product-ci-execution-metadata.json
 
+      - name: Verify downloaded artifact snapshots
+        if: inputs.verify_artifacts
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRODUCT_RUN_ID: ${{ inputs.run_id }}
+          PRODUCT_SOURCE_COMMIT: ${{ inputs.source_commit }}
+        run: >-
+          ./Tools/Get-ProductCiArtifacts.ps1 -RunId $env:PRODUCT_RUN_ID
+          -SourceCommit $env:PRODUCT_SOURCE_COMMIT -Destination ./artifacts/ci-inputs
+          -OutputPath ./artifacts/validation/product-ci-artifact-evidence.json
+
       - name: Upload execution metadata
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: product-ci-execution-metadata
           path: artifacts/validation/product-ci-execution-metadata.json
+          if-no-files-found: error
+          retention-days: 5
+
+      - name: Upload artifact verification
+        if: success() && inputs.verify_artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: product-ci-artifact-evidence
+          path: artifacts/validation/product-ci-artifact-evidence.json
           if-no-files-found: error
           retention-days: 5

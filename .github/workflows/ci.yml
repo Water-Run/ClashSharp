@@ -68,6 +68,11 @@ jobs:
         shell: pwsh
         run: ./eng/Test-ProductCiRunContract.ps1
 
+      - name: Verify product CI artifact contract (PowerShell 7)
+        if: steps.scope.outputs.product != 'false'
+        shell: pwsh
+        run: ./eng/Test-ProductCiArtifactsContract.ps1
+
       - name: Verify installer vector icon bytes
         if: steps.scope.outputs.product != 'false'
         shell: powershell
