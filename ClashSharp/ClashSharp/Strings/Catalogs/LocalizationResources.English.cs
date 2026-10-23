@@ -533,7 +533,7 @@ internal static partial class LocalizationResources
             ["Logs.Cleanup.Preview.Loading"] = "Calculating cleanup…",
             ["Logs.Cleanup.Parameter.Required"] = "Enter a whole number from {0:N0} to {1:N0}.",
             ["Logs.Cleanup.Preview.Failed"] = "Couldn't calculate cleanup. Close this dialog and try again.",
-            ["Logs.Cleanup.Preview.Count"] = "{0:N0} entries will be deleted.",
+            ["Logs.Cleanup.Preview.Count"] = "Estimated cleanup: {0:N0} entries.",
             ["Logs.Cleanup.Preview.SizeTarget"] = "Current size: {0}. Target: {1}. The number of entries deleted depends on compaction results.",
             ["Logs.Cleanup.Preview.SizeSatisfied"] = "Current size: {0}. Already within the {1} target.",
             ["Statistics.Total.Title"] = "Totals",

@@ -85,7 +85,7 @@ internal sealed class LogsViewModel : ObservableObject, ILocalizedPresentation
                 categories.Add(selectedCategory, source);
             }
         }
-        return new(levels, categories, SelectedLevelFilter, selectedCategory);
+        return new(levels, categories, SelectedLevelFilter, selectedCategory, _formatter.CaptureOptions());
     }
 
     /// <summary>Immutable filter labels and their original semantic identities for one cleanup dialog.</summary>
@@ -95,9 +95,10 @@ internal sealed class LogsViewModel : ObservableObject, ILocalizedPresentation
         private readonly IReadOnlyDictionary<string, string?> _categories;
 
         internal CleanupFilterSnapshot(IReadOnlyDictionary<string, string?> levels, IReadOnlyDictionary<string, string?> categories,
-            string selectedLevel, string selectedCategory)
+            string selectedLevel, string selectedCategory, DisplayFormatter formatter)
         {
             _levels = levels; _categories = categories;
+            Formatter = formatter;
             LevelOptions = levels.Keys.ToArray(); CategoryOptions = categories.Keys.ToArray();
             SelectedLevel = levels.ContainsKey(selectedLevel) ? selectedLevel : LevelOptions[0];
             SelectedCategory = categories.ContainsKey(selectedCategory) ? selectedCategory : CategoryOptions[0];
@@ -107,6 +108,7 @@ internal sealed class LogsViewModel : ObservableObject, ILocalizedPresentation
         public IReadOnlyList<string> CategoryOptions { get; }
         public string SelectedLevel { get; }
         public string SelectedCategory { get; }
+        internal DisplayFormatter Formatter { get; }
         internal string? ResolveLevel(string? label) => Resolve(_levels, label);
         internal string? ResolveCategory(string? label) => Resolve(_categories, label);
 
@@ -115,6 +117,68 @@ internal sealed class LogsViewModel : ObservableObject, ILocalizedPresentation
             ArgumentNullException.ThrowIfNull(label);
             return values.TryGetValue(label, out string? value) ? value
                 : throw new ArgumentException("The filter is outside the captured cleanup choices.", nameof(label));
+        }
+    }
+
+    /// <summary>Formats captured choices without changing their original lookup keys or reading storage.</summary>
+    public IReadOnlyDictionary<string, string> GetCleanupFilterLabels(CleanupFilterSnapshot filters, bool levels)
+    {
+        ArgumentNullException.ThrowIfNull(filters);
+        IReadOnlyList<string> keys = levels ? filters.LevelOptions : filters.CategoryOptions;
+        string Label(string key)
+        {
+            string? value = levels ? filters.ResolveLevel(key) : filters.ResolveCategory(key);
+            return value is null ? levels ? AllLevelsText : AllCategoriesText
+                : levels ? FormatLogLevel(value) : FormatLogCategory(value);
+        }
+        Dictionary<string, int> counts = keys.GroupBy(Label, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.Count(), StringComparer.Ordinal);
+        Dictionary<string, string> labels = new(StringComparer.Ordinal);
+        HashSet<string> used = new(StringComparer.Ordinal);
+        foreach (string key in keys)
+        {
+            string label = Label(key);
+            string? identity = levels ? filters.ResolveLevel(key) : filters.ResolveCategory(key);
+            if (counts[label] > 1 && identity is not null) { label += $" ({identity})"; }
+            string unique = label;
+            int suffix = 2;
+            while (!used.Add(unique)) { unique = $"{label} {suffix++}"; }
+            labels.Add(key, unique);
+        }
+        return labels;
+    }
+
+    /// <summary>Keeps the unit of an already-open destructive quantity editor stable.</summary>
+    public string GetCleanupSizeParameterText(CleanupFilterSnapshot filters) => string.Format(
+        CultureInfo.CurrentCulture, _getString("Logs.Cleanup.Parameter.TargetSize"), filters.Formatter.MegaUnitLabel);
+
+    internal readonly record struct CleanupRequest(int Mode, DateTimeOffset Cutoff, long Target,
+        string? Level, string? Category);
+
+    /// <summary>One observed estimate and its exact criteria, owned by one page and consumed at most once.</summary>
+    public sealed class CleanupPreview
+    {
+        private readonly LogsViewModel _owner;
+        private int _consumed;
+
+        internal CleanupPreview(LogsViewModel owner, CleanupRequest request, DisplayFormatter formatter,
+            long entryCount, long currentSizeBytes)
+        {
+            _owner = owner; Request = request; Formatter = formatter;
+            EntryCount = entryCount; CurrentSizeBytes = currentSizeBytes;
+        }
+
+        public long EntryCount { get; }
+        public long CurrentSizeBytes { get; }
+        internal CleanupRequest Request { get; }
+        internal DisplayFormatter Formatter { get; }
+
+        internal CleanupRequest Consume(LogsViewModel owner, CancellationToken cancellationToken)
+        {
+            if (!ReferenceEquals(owner, _owner)) { throw new ArgumentException("Cleanup preview belongs to another page."); }
+            cancellationToken.ThrowIfCancellationRequested();
+            if (Interlocked.Exchange(ref _consumed, 1) != 0) { throw new InvalidOperationException("Cleanup preview was already consumed."); }
+            return Request;
         }
     }
 
@@ -606,36 +670,24 @@ internal sealed class LogsViewModel : ObservableObject, ILocalizedPresentation
     }
 
     /// <summary>Applies a cleanup mode away from the UI thread and refreshes visible storage state.</summary>
-    /// <param name="selectedIndex">Selected cleanup mode index.</param>
-    /// <param name="parameterValue">Numeric cleanup parameter value.</param>
-    /// <param name="levelFilter">Selected localized level filter, or null.</param>
-    /// <param name="categoryFilter">Selected localized category filter, or null.</param>
+    /// <param name="preview">The page-owned estimate explicitly accepted by the user.</param>
     /// <param name="cancellationToken">Cancels queued work and prevents stale snapshot application.</param>
-    /// <param name="filters">Optional dialog-owned filter snapshot that survives display-language changes.</param>
     /// <returns>A task that completes after cleanup and snapshot application or error reporting.</returns>
     /// <remarks>
     /// Cancellation cannot roll back a SQLite mutation that has already started. A canceled caller
     /// never receives a stale post-cleanup snapshot; its next page load observes the durable result.
     /// </remarks>
     public Task ApplyCleanupModeAsync(
-        int selectedIndex,
-        double parameterValue,
-        string? levelFilter,
-        string? categoryFilter,
-        CancellationToken cancellationToken,
-        CleanupFilterSnapshot? filters = null)
+        CleanupPreview preview,
+        CancellationToken cancellationToken)
     {
-        string? resolvedLevelFilter = filters is null ? ResolveLevelFilter(levelFilter) : filters.ResolveLevel(levelFilter);
-        string? resolvedCategoryFilter = filters is null ? ResolveCategoryFilter(categoryFilter) : filters.ResolveCategory(categoryFilter);
+        ArgumentNullException.ThrowIfNull(preview);
+        CleanupRequest request = preview.Consume(this, cancellationToken);
         LogLoadRequest loadRequest = CaptureLoadRequest();
         return ViewModelLoadExecutor.ExecuteAsync(
             () =>
             {
-                ApplyCleanupModeCore(
-                    selectedIndex,
-                    parameterValue,
-                    resolvedLevelFilter,
-                    resolvedCategoryFilter);
+                ApplyCleanupModeCore(request);
                 cancellationToken.ThrowIfCancellationRequested();
                 return ReadLoadSnapshot(loadRequest);
             },
@@ -663,16 +715,31 @@ internal sealed class LogsViewModel : ObservableObject, ILocalizedPresentation
         CancellationToken cancellationToken,
         CleanupFilterSnapshot? filters = null)
     {
+        CleanupPreview? preview = await GetCleanupPreviewAsync(selectedIndex, parameterValue,
+            levelFilter, categoryFilter, cancellationToken, filters);
+        return preview is null ? null : FormatCleanupPreview(preview);
+    }
+
+    /// <summary>Captures cleanup criteria before reading an estimate; subsequent formatting never queries storage.</summary>
+    public async Task<CleanupPreview?> GetCleanupPreviewAsync(int selectedIndex, double parameterValue,
+        string? levelFilter, string? categoryFilter, CancellationToken cancellationToken, CleanupFilterSnapshot? filters = null)
+    {
         cancellationToken.ThrowIfCancellationRequested();
         string? resolvedLevelFilter = filters is null ? ResolveLevelFilter(levelFilter) : filters.ResolveLevel(levelFilter);
         string? resolvedCategoryFilter = filters is null ? ResolveCategoryFilter(categoryFilter) : filters.ResolveCategory(categoryFilter);
-        string? preview = null;
+        DisplayFormatter formatter = filters?.Formatter ?? _formatter.CaptureOptions();
+        CleanupRequest request = selectedIndex switch
+        {
+            0 => new(0, DateTimeOffset.UtcNow.AddDays(-CoercePositiveInteger(parameterValue, 30, 3650)), 0, null, null),
+            1 => new(1, default, formatter.FromMegaUnits(CoercePositiveInteger(parameterValue, 10, 102400)), null, null),
+            2 => new(2, default, CoercePositiveInteger(parameterValue, 1000, 10000000), null, null),
+            3 => new(3, default, 0, null, null),
+            4 => new(4, default, 0, resolvedLevelFilter, resolvedCategoryFilter),
+            _ => throw new ArgumentOutOfRangeException(nameof(selectedIndex)),
+        };
+        CleanupPreview? preview = null;
         await ViewModelLoadExecutor.ExecuteAsync(
-            () => ReadCleanupPreview(
-                selectedIndex,
-                parameterValue,
-                resolvedLevelFilter,
-                resolvedCategoryFilter),
+            () => ReadCleanupPreview(request, formatter),
             result => preview = result,
             _errorSink,
             "logs-cleanup-preview",
@@ -681,66 +748,62 @@ internal sealed class LogsViewModel : ObservableObject, ILocalizedPresentation
         return preview;
     }
 
-    private void ApplyCleanupModeCore(
-        int selectedIndex,
-        double parameterValue,
-        string? levelFilter,
-        string? categoryFilter)
+    private void ApplyCleanupModeCore(CleanupRequest request)
     {
-        switch (selectedIndex)
+        switch (request.Mode)
         {
             case 0:
-                int keepDays = CoercePositiveInteger(parameterValue, 30, 3650);
-                _logStorage.CleanupBefore(DateTimeOffset.UtcNow.AddDays(-keepDays));
+                _logStorage.CleanupBefore(request.Cutoff);
                 break;
             case 1:
-                long targetSizeBytes = _formatter.FromMegaUnits(CoercePositiveInteger(parameterValue, 10, 102400));
-                _logStorage.CleanupToSize(targetSizeBytes);
+                _logStorage.CleanupToSize(request.Target);
                 break;
             case 2:
-                _logStorage.CleanupToLogCount(CoercePositiveInteger(parameterValue, 1000, 10000000));
+                _logStorage.CleanupToLogCount(checked((int)request.Target));
                 break;
             case 3:
                 _logStorage.ClearAll();
                 break;
             case 4:
-                _logStorage.CleanupLogs(levelFilter, categoryFilter);
+                _logStorage.CleanupLogs(request.Level, request.Category);
                 break;
         }
     }
 
-    private string ReadCleanupPreview(
-        int selectedIndex,
-        double parameterValue,
-        string? levelFilter,
-        string? categoryFilter)
+    private CleanupPreview ReadCleanupPreview(CleanupRequest request, DisplayFormatter formatter)
     {
-        if (selectedIndex == 1)
+        if (request.Mode == 1)
         {
-            long targetSize = _formatter.FromMegaUnits(CoercePositiveInteger(parameterValue, 10, 102400));
-            long currentSize = _logStorage.GetStorageSummary().DatabaseSizeBytes;
-            return string.Format(
-                CultureInfo.CurrentCulture,
-                _getString(currentSize > targetSize
-                    ? "Logs.Cleanup.Preview.SizeTarget"
-                    : "Logs.Cleanup.Preview.SizeSatisfied"),
-                FormatByteCount(currentSize),
-                FormatByteCount(targetSize));
+            return new(this, request, formatter, 0, _logStorage.GetStorageSummary().DatabaseSizeBytes);
         }
 
-        long count = selectedIndex switch
+        long count = request.Mode switch
         {
-            0 => _logStorage.PreviewCleanupBefore(
-                DateTimeOffset.UtcNow.AddDays(-CoercePositiveInteger(parameterValue, 30, 3650))),
-            2 => _logStorage.PreviewCleanupToLogCount(CoercePositiveInteger(parameterValue, 1000, 10000000)),
+            0 => _logStorage.PreviewCleanupBefore(request.Cutoff),
+            2 => _logStorage.PreviewCleanupToLogCount(checked((int)request.Target)),
             3 => _logStorage.PreviewClearAll(),
-            4 => _logStorage.PreviewLogCleanup(levelFilter, categoryFilter).EntryCount,
-            _ => throw new ArgumentOutOfRangeException(nameof(selectedIndex)),
+            4 => _logStorage.PreviewLogCleanup(request.Level, request.Category).EntryCount,
+            _ => throw new ArgumentOutOfRangeException(nameof(request)),
         };
+        return new(this, request, formatter, count, 0);
+    }
+
+    /// <summary>Relocalizes an existing estimate without rereading data or changing its deletion criteria.</summary>
+    public string FormatCleanupPreview(CleanupPreview preview)
+    {
+        ArgumentNullException.ThrowIfNull(preview);
+        if (preview.Request.Mode == 1)
+        {
+            return string.Format(CultureInfo.CurrentCulture,
+                _getString(preview.CurrentSizeBytes > preview.Request.Target
+                    ? "Logs.Cleanup.Preview.SizeTarget" : "Logs.Cleanup.Preview.SizeSatisfied"),
+                preview.Formatter.Bytes(preview.CurrentSizeBytes, "N2"),
+                preview.Formatter.Bytes(preview.Request.Target, "N2"));
+        }
         return string.Format(
             CultureInfo.CurrentCulture,
             _getString("Logs.Cleanup.Preview.Count"),
-            count);
+            preview.EntryCount);
     }
 
     /// <summary>Converts a number-box value to a positive integer with fallback.</summary>

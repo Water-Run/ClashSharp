@@ -6,6 +6,24 @@ namespace ClashSharp.Tests.Unit.Presentation;
 
 public sealed class DisplayFormatterTests
 {
+    [Fact]
+    public void CapturedOptionsKeepQuantityMeaningAndStillUseRegionalFormatting()
+    {
+        DisplayFormattingOptions options = new(DataUnitStyle.Binary);
+        CultureInfo culture = CultureInfo.GetCultureInfo("en-US");
+        DisplayFormatter live = new(() => options, () => culture);
+        DisplayFormatter captured = live.CaptureOptions();
+
+        options = options with { DataUnitStyle = DataUnitStyle.Si };
+        culture = CultureInfo.GetCultureInfo("de-DE");
+
+        Assert.Equal(1048576, captured.FromMegaUnits(1));
+        Assert.Equal("MiB", captured.MegaUnitLabel);
+        Assert.Equal("1,00 KiB", captured.Bytes(1024, "0.00"));
+        Assert.Equal(1000000, live.FromMegaUnits(1));
+        Assert.Equal("1,02 KB", live.Bytes(1024, "0.00"));
+    }
+
     [Theory]
     [InlineData(DataUnitStyle.Si, "MB", 1000000)]
     [InlineData(DataUnitStyle.Binary, "MiB", 1048576)]

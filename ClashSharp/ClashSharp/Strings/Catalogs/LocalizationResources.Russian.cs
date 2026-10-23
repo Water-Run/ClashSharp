@@ -533,7 +533,7 @@ internal static partial class LocalizationResources
             ["Logs.Cleanup.Preview.Loading"] = "Расчёт очистки…",
             ["Logs.Cleanup.Parameter.Required"] = "Введите целое число от {0:N0} до {1:N0}.",
             ["Logs.Cleanup.Preview.Failed"] = "Не удалось рассчитать очистку. Закройте это диалоговое окно и повторите попытку.",
-            ["Logs.Cleanup.Preview.Count"] = "Будет удалено записей: {0:N0}.",
+            ["Logs.Cleanup.Preview.Count"] = "Ожидаемое количество удаляемых записей: {0:N0}.",
             ["Logs.Cleanup.Preview.SizeTarget"] = "Текущий размер: {0}. Цель: {1}. Количество удаляемых записей зависит от результата сжатия.",
             ["Logs.Cleanup.Preview.SizeSatisfied"] = "Текущий размер: {0}. Целевой размер {1} уже не превышен.",
             ["Statistics.Total.Title"] = "Итоги",

@@ -533,7 +533,7 @@ internal static partial class LocalizationResources
             ["Logs.Cleanup.Preview.Loading"] = "正在计算清理范围…",
             ["Logs.Cleanup.Parameter.Required"] = "请输入 {0:N0} 到 {1:N0} 之间的整数。",
             ["Logs.Cleanup.Preview.Failed"] = "无法计算清理范围。请重新打开此对话框后重试。",
-            ["Logs.Cleanup.Preview.Count"] = "将清理 {0:N0} 个条目。",
+            ["Logs.Cleanup.Preview.Count"] = "预计清理 {0:N0} 个条目。",
             ["Logs.Cleanup.Preview.SizeTarget"] = "当前占用 {0}，目标 {1}。实际清理数量取决于压缩结果。",
             ["Logs.Cleanup.Preview.SizeSatisfied"] = "当前占用 {0}，已不超过目标 {1}。",
             ["Statistics.Total.Title"] = "总统计",

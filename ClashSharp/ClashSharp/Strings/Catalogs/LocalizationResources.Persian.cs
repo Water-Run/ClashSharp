@@ -533,7 +533,7 @@ internal static partial class LocalizationResources
             ["Logs.Cleanup.Preview.Loading"] = "در حال محاسبه پاک‌سازی…",
             ["Logs.Cleanup.Parameter.Required"] = "یک عدد صحیح بین {0:N0} و {1:N0} وارد کنید.",
             ["Logs.Cleanup.Preview.Failed"] = "محاسبه پاک‌سازی ممکن نشد. این پنجره را ببندید و دوباره تلاش کنید.",
-            ["Logs.Cleanup.Preview.Count"] = "{0:N0} مورد حذف خواهد شد.",
+            ["Logs.Cleanup.Preview.Count"] = "تعداد تخمینی موارد پاک‌سازی: {0:N0}.",
             ["Logs.Cleanup.Preview.SizeTarget"] = "اندازه فعلی: {0}. هدف: {1}. تعداد موارد حذف‌شده به نتیجه فشرده‌سازی بستگی دارد.",
             ["Logs.Cleanup.Preview.SizeSatisfied"] = "اندازه فعلی: {0}. از مقدار هدف {1} بیشتر نیست.",
             ["Statistics.Total.Title"] = "مجموع‌ها",

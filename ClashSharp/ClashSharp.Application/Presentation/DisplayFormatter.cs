@@ -19,6 +19,13 @@ public sealed class DisplayFormatter
         _readCulture = readCulture ?? (() => CultureInfo.CurrentCulture);
     }
 
+    /// <summary>Freezes the preference choices for an open quantity editor while retaining its regional-format reader.</summary>
+    public DisplayFormatter CaptureOptions()
+    {
+        DisplayFormattingOptions options = _readOptions();
+        return new(() => options, _readCulture);
+    }
+
     /// <summary>Formats a nonnegative byte quantity using the selected scale and regional number format.</summary>
     /// <param name="bytes">Raw byte count; negative observations are clamped to zero.</param>
     /// <param name="numberFormat">Standard .NET numeric display format.</param>

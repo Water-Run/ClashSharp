@@ -36,7 +36,7 @@ public sealed class LogsInteractionArchitectureTests
         Assert.Contains("_loadSession.DrainAsync()", pageSource, StringComparison.Ordinal);
         Assert.Contains("dialog.ShowManagedAsync(pageToken)", pageSource, StringComparison.Ordinal);
         Assert.Contains(
-            "_viewModel.GetCleanupPreviewTextAsync(",
+            "_viewModel.GetCleanupPreviewAsync(",
             pageSource,
             StringComparison.Ordinal);
         Assert.Contains(

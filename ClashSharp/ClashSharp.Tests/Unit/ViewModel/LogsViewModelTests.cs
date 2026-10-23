@@ -226,12 +226,9 @@ public sealed partial class LogsViewModelTests
         LogsViewModel viewModel = CreateViewModel(store, errorSink);
         int callingThreadId = Environment.CurrentManagedThreadId;
 
-        Task cleanupTask = viewModel.ApplyCleanupModeAsync(
-            3,
-            0,
-            null,
-            null,
-            CancellationToken.None);
+        LogsViewModel.CleanupPreview preview = Assert.IsType<LogsViewModel.CleanupPreview>(
+            await viewModel.GetCleanupPreviewAsync(3, 0, null, null, CancellationToken.None));
+        Task cleanupTask = viewModel.ApplyCleanupModeAsync(preview, CancellationToken.None);
 
         try
         {
@@ -263,12 +260,9 @@ public sealed partial class LogsViewModelTests
         TestApplicationErrorSink errorSink = new();
         LogsViewModel viewModel = CreateViewModel(store, errorSink);
 
-        await viewModel.ApplyCleanupModeAsync(
-            3,
-            0,
-            null,
-            null,
-            CancellationToken.None);
+        LogsViewModel.CleanupPreview preview = Assert.IsType<LogsViewModel.CleanupPreview>(
+            await viewModel.GetCleanupPreviewAsync(3, 0, null, null, CancellationToken.None));
+        await viewModel.ApplyCleanupModeAsync(preview, CancellationToken.None);
 
         Assert.Equal(string.Empty, viewModel.StorageUsageText);
         Assert.Empty(viewModel.RecentLogs);
@@ -322,12 +316,14 @@ public sealed partial class LogsViewModelTests
         LogsViewModel viewModel = CreateViewModel(store, errorSink);
         DateTimeOffset earliest = DateTimeOffset.UtcNow.AddDays(-days);
 
-        await viewModel.GetCleanupPreviewTextAsync(0, input, null, null, CancellationToken.None);
-        await viewModel.ApplyCleanupModeAsync(0, input, null, null, CancellationToken.None);
+        LogsViewModel.CleanupPreview preview = Assert.IsType<LogsViewModel.CleanupPreview>(
+            await viewModel.GetCleanupPreviewAsync(0, input, null, null, CancellationToken.None));
+        await viewModel.ApplyCleanupModeAsync(preview, CancellationToken.None);
 
         DateTimeOffset latest = DateTimeOffset.UtcNow.AddDays(-days);
         Assert.InRange(previewCutoff, earliest, latest);
         Assert.InRange(store.LastCleanupCutoff, earliest, latest);
+        Assert.Equal(previewCutoff, store.LastCleanupCutoff);
         Assert.Empty(errorSink.Errors);
     }
 
@@ -349,8 +345,9 @@ public sealed partial class LogsViewModelTests
         TestApplicationErrorSink errorSink = new();
         LogsViewModel viewModel = CreateViewModel(store, errorSink);
 
-        await viewModel.GetCleanupPreviewTextAsync(2, input, null, null, CancellationToken.None);
-        await viewModel.ApplyCleanupModeAsync(2, input, null, null, CancellationToken.None);
+        LogsViewModel.CleanupPreview preview = Assert.IsType<LogsViewModel.CleanupPreview>(
+            await viewModel.GetCleanupPreviewAsync(2, input, null, null, CancellationToken.None));
+        await viewModel.ApplyCleanupModeAsync(preview, CancellationToken.None);
 
         Assert.Equal(count, previewCount);
         Assert.Equal(count, store.LastCleanupCount);
@@ -390,7 +387,9 @@ public sealed partial class LogsViewModelTests
         TestApplicationErrorSink errorSink = new();
         LogsViewModel viewModel = CreateViewModel(store, errorSink);
 
-        await viewModel.ApplyCleanupModeAsync(1, input, null, null, CancellationToken.None);
+        LogsViewModel.CleanupPreview preview = Assert.IsType<LogsViewModel.CleanupPreview>(
+            await viewModel.GetCleanupPreviewAsync(1, input, null, null, CancellationToken.None));
+        await viewModel.ApplyCleanupModeAsync(preview, CancellationToken.None);
 
         Assert.Equal(targetMb * 1024L * 1024L, store.LastCleanupSize);
         Assert.Empty(errorSink.Errors);
@@ -645,6 +644,8 @@ public sealed partial class LogsViewModelTests
 
         public long? LastCleanupSize { get; private set; }
 
+        public (string? Level, string? Source)? LastCleanupFilter { get; private set; }
+
         public IReadOnlyList<LogRecord> Logs { get; init; } = [];
 
         public IReadOnlyList<string> Sources { get; set; } = [];
@@ -698,6 +699,7 @@ public sealed partial class LogsViewModelTests
 
         public long CleanupLogs(string? level, string? source)
         {
+            LastCleanupFilter = (level, source);
             return 0;
         }
 

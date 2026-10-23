@@ -1,15 +1,18 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
 using ClashSharp.ApplicationModel.Diagnostics;
 using ClashSharp.ApplicationModel.Presentation;
+using ClashSharp.Components;
 using ClashSharp.Presentation.Composition;
 using ClashSharp.Presentation.Dialogs;
 using ClashSharp.Presentation.Lifecycle;
 using ClashSharp.ViewModel;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Media;
@@ -274,15 +277,16 @@ public sealed partial class Logs : Page
         LogsViewModel.CleanupFilterSnapshot filters = _viewModel.CaptureCleanupFilters();
         PageLoadSession previewSession = new(_errorSink, "logs-cleanup-preview");
         bool dialogOpen = true;
-        ComboBox cleanupModeBox = new()
+        ComboBox cleanupModeBox = new() { HorizontalAlignment = HorizontalAlignment.Stretch };
+        List<RetainedComboBoxOption> modes = [];
+        for (int index = 0; index < 5; index++)
         {
-            SelectedIndex = 0,
-        };
-        cleanupModeBox.Items.Add(_getString("Logs.Cleanup.Mode.ByDate"));
-        cleanupModeBox.Items.Add(_getString("Logs.Cleanup.Mode.BySize"));
-        cleanupModeBox.Items.Add(_getString("Logs.Cleanup.Mode.ByCount"));
-        cleanupModeBox.Items.Add(_getString("Logs.Cleanup.Mode.All"));
-        cleanupModeBox.Items.Add($"{_viewModel.LevelFilterLabelText} / {_viewModel.CategoryFilterLabelText}");
+            RetainedComboBoxOption option = new(string.Empty, index);
+            modes.Add(option);
+            cleanupModeBox.Items.Add(option.Item);
+        }
+        cleanupModeBox.SelectedIndex = 0;
+        AutomationProperties.SetAutomationId(cleanupModeBox, "LogCleanupModeBox");
 
         NumberBox parameterBox = new()
         {
@@ -302,6 +306,7 @@ public sealed partial class Logs : Page
                 },
             },
         };
+        AutomationProperties.SetAutomationId(parameterBox, "LogCleanupParameterBox");
         TextBlock descriptionText = new()
         {
             Text = _getString("Logs.Cleanup.Description.ByDate"),
@@ -310,23 +315,24 @@ public sealed partial class Logs : Page
         ComboBox levelBox = new()
         {
             Header = _viewModel.LevelFilterLabelText,
-            ItemsSource = filters.LevelOptions,
-            SelectedItem = filters.SelectedLevel,
             Visibility = Visibility.Collapsed,
         };
         ComboBox categoryBox = new()
         {
             Header = _viewModel.CategoryFilterLabelText,
-            ItemsSource = filters.CategoryOptions,
-            SelectedItem = filters.SelectedCategory,
             Visibility = Visibility.Collapsed,
         };
+        List<RetainedComboBoxOption> levelOptions = CreateFilterOptions(levelBox, filters.LevelOptions, filters.SelectedLevel);
+        List<RetainedComboBoxOption> categoryOptions = CreateFilterOptions(categoryBox, filters.CategoryOptions, filters.SelectedCategory);
+        AutomationProperties.SetAutomationId(levelBox, "LogCleanupLevelBox");
+        AutomationProperties.SetAutomationId(categoryBox, "LogCleanupCategoryBox");
         TextBlock previewText = new()
         {
             Text = _viewModel.CleanupPreviewPlaceholderText,
             TextWrapping = TextWrapping.Wrap,
             Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"],
         };
+        AutomationProperties.SetAutomationId(previewText, "LogCleanupPreviewText");
         StackPanel content = new()
         {
             Spacing = 12,
@@ -354,7 +360,50 @@ public sealed partial class Logs : Page
         dialog.Resources["ContentDialogMaxWidth"] = 720d;
         TextBox? parameterInput = null;
         double previewParameter = double.NaN;
-        double acceptedParameter = double.NaN;
+        LogsViewModel.CleanupPreview? currentPreview = null;
+        LogsViewModel.CleanupPreview? acceptedPreview = null;
+        string previewMessageKey = "Logs.Cleanup.Preview.Loading";
+
+        static List<RetainedComboBoxOption> CreateFilterOptions(ComboBox box, IReadOnlyList<string> labels, string selected)
+        {
+            List<RetainedComboBoxOption> options = [];
+            foreach (string label in labels)
+            {
+                RetainedComboBoxOption option = new(label, label);
+                options.Add(option);
+                box.Items.Add(option.Item);
+                if (StringComparer.Ordinal.Equals(label, selected)) { box.SelectedItem = option.Item; }
+            }
+            return options;
+        }
+
+        static string? SelectedFilter(ComboBox box) => (box.SelectedItem as ComboBoxItem)?.Tag as string;
+
+        void RefreshPreviewText()
+        {
+            previewText.Text = currentPreview is not null ? _viewModel.FormatCleanupPreview(currentPreview)
+                : previewMessageKey == "Logs.Cleanup.Parameter.Required"
+                    ? string.Format(CultureInfo.CurrentCulture, _getString(previewMessageKey), parameterBox.Minimum, parameterBox.Maximum)
+                    : _getString(previewMessageKey);
+        }
+
+        dialog.Localize(() =>
+        {
+            dialog.Title = _getString("Logs.Cleanup.Title");
+            dialog.PrimaryButtonText = _getString("Command.Cleanup");
+            dialog.CloseButtonText = _getString("Command.Cancel");
+            string[] modeKeys = ["Logs.Cleanup.Mode.ByDate", "Logs.Cleanup.Mode.BySize", "Logs.Cleanup.Mode.ByCount", "Logs.Cleanup.Mode.All"];
+            for (int index = 0; index < modeKeys.Length; index++) { modes[index].Text = _getString(modeKeys[index]); }
+            modes[4].Text = $"{_viewModel.LevelFilterLabelText} / {_viewModel.CategoryFilterLabelText}";
+            levelBox.Header = _viewModel.LevelFilterLabelText;
+            categoryBox.Header = _viewModel.CategoryFilterLabelText;
+            IReadOnlyDictionary<string, string> levels = _viewModel.GetCleanupFilterLabels(filters, levels: true);
+            IReadOnlyDictionary<string, string> categories = _viewModel.GetCleanupFilterLabels(filters, levels: false);
+            foreach (RetainedComboBoxOption option in levelOptions) { option.Text = levels[(string)option.Item.Tag]; }
+            foreach (RetainedComboBoxOption option in categoryOptions) { option.Text = categories[(string)option.Item.Tag]; }
+            UpdateCleanupParameterText(cleanupModeBox.SelectedIndex, parameterBox, descriptionText, filters);
+            RefreshPreviewText();
+        });
 
         bool TryReadParameter(out double value)
         {
@@ -373,12 +422,10 @@ public sealed partial class Logs : Page
         void RequireCleanupParameter()
         {
             previewSession.Cancel();
+            currentPreview = null;
+            previewMessageKey = "Logs.Cleanup.Parameter.Required";
             dialog.IsPrimaryButtonEnabled = false;
-            previewText.Text = string.Format(
-                CultureInfo.CurrentCulture,
-                _getString("Logs.Cleanup.Parameter.Required"),
-                parameterBox.Minimum,
-                parameterBox.Maximum);
+            RefreshPreviewText();
         }
 
         async Task UpdatePreviewAsync(Action? updateEditor = null)
@@ -392,9 +439,11 @@ public sealed partial class Logs : Page
                 updateEditor?.Invoke();
                 int selectedIndex = cleanupModeBox.SelectedIndex;
                 double parameterValue = double.NaN;
-                string? levelFilter = levelBox.SelectedItem as string;
-                string? categoryFilter = categoryBox.SelectedItem as string;
-                previewText.Text = _viewModel.CleanupPreviewPlaceholderText;
+                string? levelFilter = SelectedFilter(levelBox);
+                string? categoryFilter = SelectedFilter(categoryBox);
+                currentPreview = null;
+                previewMessageKey = "Logs.Cleanup.Preview.Loading";
+                RefreshPreviewText();
                 dialog.IsPrimaryButtonEnabled = false;
                 previewParameter = double.NaN;
                 if (selectedIndex is >= 0 and <= 2)
@@ -414,7 +463,7 @@ public sealed partial class Logs : Page
                 await previewSession.RunAsync(
                     async previewToken =>
                     {
-                        string? text = await _viewModel.GetCleanupPreviewTextAsync(
+                        LogsViewModel.CleanupPreview? preview = await _viewModel.GetCleanupPreviewAsync(
                             selectedIndex,
                             parameterValue,
                             levelFilter,
@@ -422,9 +471,11 @@ public sealed partial class Logs : Page
                             previewToken,
                             filters);
                         previewToken.ThrowIfCancellationRequested();
-                        previewText.Text = text ?? _viewModel.CleanupPreviewFailedText;
+                        currentPreview = preview;
+                        previewMessageKey = "Logs.Cleanup.Preview.Failed";
+                        RefreshPreviewText();
                         previewParameter = parameterValue;
-                        dialog.IsPrimaryButtonEnabled = text is not null;
+                        dialog.IsPrimaryButtonEnabled = preview is not null;
                     },
                     CleanupPreviewDebounceDelay,
                     pageToken);
@@ -437,6 +488,10 @@ public sealed partial class Logs : Page
             catch (Exception exception) when (
                 !ExceptionGraphClassifier.IsProcessFatal(exception))
             {
+                currentPreview = null;
+                previewMessageKey = "Logs.Cleanup.Preview.Failed";
+                dialog.IsPrimaryButtonEnabled = false;
+                RefreshPreviewText();
                 await previewSession.RunAsync(
                     _ => Task.FromException(exception),
                     cancellationToken: CancellationToken.None);
@@ -451,7 +506,8 @@ public sealed partial class Logs : Page
                     parameterBox,
                     descriptionText,
                     levelBox,
-                    categoryBox));
+                    categoryBox,
+                    filters));
         }
         async void OnParameterTextChanging(TextBox sender, TextBoxTextChangingEventArgs e) =>
             await UpdatePreviewAsync();
@@ -465,7 +521,9 @@ public sealed partial class Logs : Page
             if (parameterInput is null)
             {
                 previewSession.Cancel();
-                previewText.Text = _viewModel.CleanupPreviewFailedText;
+                currentPreview = null;
+                previewMessageKey = "Logs.Cleanup.Preview.Failed";
+                RefreshPreviewText();
                 dialog.IsPrimaryButtonEnabled = false;
                 return;
             }
@@ -490,8 +548,9 @@ public sealed partial class Logs : Page
                     await UpdatePreviewAsync();
                     return;
                 }
-                acceptedParameter = value;
             }
+            if (currentPreview is null || !dialog.IsPrimaryButtonEnabled) { e.Cancel = true; return; }
+            acceptedPreview = currentPreview;
         }
         cleanupModeBox.SelectionChanged += OnModeChanged;
         parameterBox.Loaded += OnParameterLoaded;
@@ -521,15 +580,11 @@ public sealed partial class Logs : Page
             await Task.WhenAll(initialPreview, previewSession.DrainAsync());
         }
 
-        if (result != ContentDialogResult.Primary)
+        if (result != ContentDialogResult.Primary || acceptedPreview is null)
         {
             return;
         }
 
-        int selectedCleanupMode = cleanupModeBox.SelectedIndex;
-        double cleanupParameter = acceptedParameter;
-        string? selectedLevelFilter = levelBox.SelectedItem as string;
-        string? selectedCategoryFilter = categoryBox.SelectedItem as string;
         IsEnabled = false;
         try
         {
@@ -537,12 +592,8 @@ public sealed partial class Logs : Page
             await _loadSession.DrainAsync();
             pageToken.ThrowIfCancellationRequested();
             await _viewModel.ApplyCleanupModeAsync(
-                selectedCleanupMode,
-                cleanupParameter,
-                selectedLevelFilter,
-                selectedCategoryFilter,
-                pageToken,
-                filters);
+                acceptedPreview,
+                pageToken);
         }
         finally
         {
@@ -572,12 +623,14 @@ public sealed partial class Logs : Page
     /// <param name="descriptionText">Cleanup description text. Must not be null.</param>
     /// <param name="levelBox">Level filter enabled only for filtered cleanup mode.</param>
     /// <param name="categoryBox">Category filter enabled only for filtered cleanup mode.</param>
+    /// <param name="filters">The captured unit and filter choices for this editor.</param>
     private void UpdateCleanupParameterEditor(
         int selectedIndex,
         NumberBox parameterBox,
         TextBlock descriptionText,
         ComboBox levelBox,
-        ComboBox categoryBox)
+        ComboBox categoryBox,
+        LogsViewModel.CleanupFilterSnapshot filters)
     {
         ArgumentNullException.ThrowIfNull(parameterBox);
         ArgumentNullException.ThrowIfNull(descriptionText);
@@ -587,44 +640,55 @@ public sealed partial class Logs : Page
         levelBox.Visibility = selectedIndex == 4 ? Visibility.Visible : Visibility.Collapsed;
         categoryBox.Visibility = levelBox.Visibility;
         parameterBox.Visibility = selectedIndex is >= 0 and <= 2 ? Visibility.Visible : Visibility.Collapsed;
+        UpdateCleanupParameterText(selectedIndex, parameterBox, descriptionText, filters);
 
         switch (selectedIndex)
         {
             case 0:
                 parameterBox.IsEnabled = true;
-                parameterBox.Header = _getString("Logs.Cleanup.Parameter.KeepDays");
                 parameterBox.Minimum = 1;
                 parameterBox.Maximum = 3650;
                 parameterBox.Value = double.IsNaN(parameterBox.Value) ? 30 : Math.Clamp(parameterBox.Value, 1, 3650);
-                descriptionText.Text = _getString("Logs.Cleanup.Description.ByDate");
                 break;
             case 1:
                 parameterBox.IsEnabled = true;
-                parameterBox.Header = _viewModel.CleanupSizeParameterText;
                 parameterBox.Minimum = 1;
                 parameterBox.Maximum = 102400;
                 parameterBox.Value = double.IsNaN(parameterBox.Value) ? 10 : Math.Clamp(parameterBox.Value, 1, 102400);
-                descriptionText.Text = _getString("Logs.Cleanup.Description.BySize");
                 break;
             case 2:
                 parameterBox.IsEnabled = true;
-                parameterBox.Header = _getString("Logs.Cleanup.Parameter.KeepLogCount");
                 parameterBox.Minimum = 1;
                 parameterBox.Maximum = 10000000;
                 parameterBox.Value = double.IsNaN(parameterBox.Value) ? 1000 : Math.Clamp(parameterBox.Value, 1, 10000000);
-                descriptionText.Text = _getString("Logs.Cleanup.Description.ByCount");
                 break;
             case 3:
                 parameterBox.IsEnabled = false;
-                parameterBox.Header = _getString("Logs.Cleanup.Parameter.None");
-                descriptionText.Text = _getString("Logs.Cleanup.Description.All");
                 break;
             case 4:
                 parameterBox.IsEnabled = false;
-                parameterBox.Header = _getString("Logs.Cleanup.Parameter.None");
-                descriptionText.Text = $"{_getString("Logs.Filter.Level")} / {_getString("Logs.Filter.Category")}";
                 break;
         }
+    }
+
+    private void UpdateCleanupParameterText(int selectedIndex, NumberBox parameterBox,
+        TextBlock descriptionText, LogsViewModel.CleanupFilterSnapshot filters)
+    {
+        parameterBox.Header = selectedIndex switch
+        {
+            0 => _getString("Logs.Cleanup.Parameter.KeepDays"),
+            1 => _viewModel.GetCleanupSizeParameterText(filters),
+            2 => _getString("Logs.Cleanup.Parameter.KeepLogCount"),
+            _ => _getString("Logs.Cleanup.Parameter.None"),
+        };
+        descriptionText.Text = selectedIndex switch
+        {
+            0 => _getString("Logs.Cleanup.Description.ByDate"),
+            1 => _getString("Logs.Cleanup.Description.BySize"),
+            2 => _getString("Logs.Cleanup.Description.ByCount"),
+            3 => _getString("Logs.Cleanup.Description.All"),
+            _ => $"{_viewModel.LevelFilterLabelText} / {_viewModel.CategoryFilterLabelText}",
+        };
     }
 
     private Task DrainPageOperationsAsync() => Task.WhenAll(

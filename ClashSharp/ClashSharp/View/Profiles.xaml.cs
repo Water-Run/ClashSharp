@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using ClashSharp.Components;
 using ClashSharp.Model;
 using ClashSharp.Presentation.Composition;
 using ClashSharp.Presentation.Dialogs;
@@ -235,18 +236,13 @@ public sealed partial class Profiles : Page
                 MaxWidth = 420,
                 HorizontalAlignment = HorizontalAlignment.Stretch,
             };
+            List<RetainedComboBoxOption> versions = [];
             foreach (ProfileHistoryPreview preview in historyEntries)
             {
-                versionBox.Items.Add(new ComboBoxItem
-                {
-                    Content = new TextBlock
-                    {
-                        Text = _viewModel.GetHistoryEntryText(preview),
-                        TextWrapping = TextWrapping.Wrap,
-                        MaxWidth = 390,
-                    },
-                    Tag = preview,
-                });
+                RetainedComboBoxOption option = new(_viewModel.GetHistoryEntryText(preview), preview,
+                    TextWrapping.Wrap, maxWidth: 390);
+                versions.Add(option);
+                versionBox.Items.Add(option.Item);
             }
 
             if (versionBox.Items.Count > 0)
@@ -274,10 +270,10 @@ public sealed partial class Profiles : Page
                 dialog.CloseButtonText = _getString("Command.Close");
                 versionBox.Header = _getString("Profiles.Dialog.HistoryVersion");
                 if (content is TextBlock empty) { empty.Text = _getString("Profiles.Dialog.HistoryEmpty"); }
-                foreach (object item in versionBox.Items)
+                foreach (RetainedComboBoxOption option in versions)
                 {
-                    if (item is ComboBoxItem { Tag: ProfileHistoryPreview preview, Content: TextBlock text })
-                    { text.Text = _viewModel.GetHistoryEntryText(preview); }
+                    if (option.Item.Tag is ProfileHistoryPreview preview)
+                    { option.Text = _viewModel.GetHistoryEntryText(preview); }
                 }
             });
             versionBox.SelectionChanged += (_, _) => dialog.IsPrimaryButtonEnabled =

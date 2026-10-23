@@ -533,7 +533,7 @@ internal static partial class LocalizationResources
             ["Logs.Cleanup.Preview.Loading"] = "正在計算清理範圍…",
             ["Logs.Cleanup.Parameter.Required"] = "請輸入 {0:N0} 到 {1:N0} 之間的整數。",
             ["Logs.Cleanup.Preview.Failed"] = "無法計算清理範圍。請重新開啟此對話方塊後重試。",
-            ["Logs.Cleanup.Preview.Count"] = "將清理 {0:N0} 個項目。",
+            ["Logs.Cleanup.Preview.Count"] = "預計清理 {0:N0} 個項目。",
             ["Logs.Cleanup.Preview.SizeTarget"] = "目前佔用 {0}，目標 {1}。實際清理數量取決於壓縮結果。",
             ["Logs.Cleanup.Preview.SizeSatisfied"] = "目前佔用 {0}，已不超過目標 {1}。",
             ["Statistics.Total.Title"] = "總統計",

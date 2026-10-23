@@ -533,7 +533,7 @@ internal static partial class LocalizationResources
             ["Logs.Cleanup.Preview.Loading"] = "Calcul du nettoyage…",
             ["Logs.Cleanup.Parameter.Required"] = "Entrez un nombre entier compris entre {0:N0} et {1:N0}.",
             ["Logs.Cleanup.Preview.Failed"] = "Impossible de calculer le nettoyage. Fermez cette boîte de dialogue et réessayez.",
-            ["Logs.Cleanup.Preview.Count"] = "{0:N0} entrées seront supprimées.",
+            ["Logs.Cleanup.Preview.Count"] = "Nettoyage estimé : {0:N0} entrées.",
             ["Logs.Cleanup.Preview.SizeTarget"] = "Taille actuelle : {0}. Objectif : {1}. Le nombre d’entrées supprimées dépend du résultat de la compression.",
             ["Logs.Cleanup.Preview.SizeSatisfied"] = "Taille actuelle : {0}. L’objectif de {1} est déjà respecté.",
             ["Statistics.Total.Title"] = "Totaux",
