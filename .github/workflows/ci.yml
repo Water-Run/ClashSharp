@@ -21,71 +21,104 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
 
+      - name: Verify CI scope contract (Windows PowerShell 5.1)
+        shell: powershell
+        run: ./eng/Test-CiChangeScopeContract.ps1
+
+      - name: Verify CI scope contract (PowerShell 7)
+        shell: pwsh
+        run: ./eng/Test-CiChangeScopeContract.ps1
+
+      - name: Determine product CI scope
+        id: scope
+        shell: pwsh
+        env:
+          CI_BASE_COMMIT: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: >-
+          ./eng/Get-CiChangeScope.ps1 -BaseCommit $env:CI_BASE_COMMIT -HeadCommit $env:GITHUB_SHA
+          -RecordPath ./artifacts/validation/ci-scope.json -GitHubOutputPath $env:GITHUB_OUTPUT
+
       - name: Verify PowerShell syntax (Windows PowerShell 5.1)
+        if: steps.scope.outputs.product != 'false'
         shell: powershell
         run: ./eng/Test-PowerShellSyntax.ps1
 
       - name: Verify PowerShell syntax (PowerShell 7)
+        if: steps.scope.outputs.product != 'false'
         shell: pwsh
         run: ./eng/Test-PowerShellSyntax.ps1
 
       - name: Verify .NET evidence contract (Windows PowerShell 5.1)
+        if: steps.scope.outputs.product != 'false'
         shell: powershell
         run: ./eng/Test-DotNetResultsContract.ps1
 
       - name: Verify .NET evidence contract (PowerShell 7)
+        if: steps.scope.outputs.product != 'false'
         shell: pwsh
         run: ./eng/Test-DotNetResultsContract.ps1
 
       - name: Verify installer vector icon bytes
+        if: steps.scope.outputs.product != 'false'
         shell: powershell
         run: ./eng/Generate-InstallerIcon.ps1 -Verify
 
       - name: Verify offline .NET package contract
+        if: steps.scope.outputs.product != 'false'
         shell: pwsh
         run: ./ClashSharp/Installer/Test-PackagingRuntimeContract.ps1
 
       - name: Set up pinned .NET SDK
+        if: steps.scope.outputs.product != 'false'
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68
         with:
           global-json-file: global.json
 
       - name: Restore locked dependencies
+        if: steps.scope.outputs.product != 'false'
         run: dotnet restore ClashSharp/ClashSharp.slnx --locked-mode
 
       - name: Verify installer build profiles
+        if: steps.scope.outputs.product != 'false'
         shell: pwsh
         run: ./ClashSharp/Installer/Test-InstallerBuildProfiles.ps1
 
       - name: Verify third-party notices and final MSIX contract
+        if: steps.scope.outputs.product != 'false'
         shell: pwsh
         run: ./ClashSharp/Installer/Test-ThirdPartyNoticesContract.ps1
 
       - name: Verify pinned source-materials contract
+        if: steps.scope.outputs.product != 'false'
         shell: pwsh
         run: ./ClashSharp/Installer/Test-SourceMaterialsContract.ps1
 
       - name: Verify formatting
+        if: steps.scope.outputs.product != 'false'
         env:
           Platform: x64
         run: dotnet format ClashSharp/ClashSharp.slnx --verify-no-changes --no-restore
 
       - name: Verify Sandbox report contract (Windows PowerShell 5.1)
+        if: steps.scope.outputs.product != 'false'
         shell: powershell
         run: |
           ./ClashSharp/SandboxTest/Test-SandboxReportContract.ps1
           ./ClashSharp/SandboxTest/Test-SandboxStartupEvidence.ps1
 
       - name: Verify Sandbox report contract (PowerShell 7)
+        if: steps.scope.outputs.product != 'false'
         shell: pwsh
         run: |
           ./ClashSharp/SandboxTest/Test-SandboxReportContract.ps1
           ./ClashSharp/SandboxTest/Test-SandboxStartupEvidence.ps1
 
       - name: Build Release
+        if: steps.scope.outputs.product != 'false'
         run: dotnet build ClashSharp/ClashSharp.slnx -c Release -p:Platform=x64 --no-restore
 
       - name: Verify green runtime component publishes
+        if: steps.scope.outputs.product != 'false'
         shell: pwsh
         run: |
           $componentRoot = Join-Path $env:RUNNER_TEMP 'clashsharp-installer-components'
@@ -103,9 +136,11 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Self-contained watchdog publish failed.' }
 
       - name: Run tests
+        if: steps.scope.outputs.product != 'false'
         run: dotnet test ClashSharp/ClashSharp.Tests/ClashSharp.Tests.csproj -c Release -p:Platform=x64 --no-build --logger "trx;LogFileName=tests.trx"
 
       - name: Run Installer Core tests
+        if: steps.scope.outputs.product != 'false'
         run: >-
           dotnet test ClashSharp/ClashSharp.Installer.Tests/ClashSharp.Installer.Tests.csproj
           -c Release -p:Platform=AnyCPU --no-build
@@ -114,6 +149,7 @@ jobs:
           --logger "trx;LogFileName=installer-core-tests.trx"
 
       - name: Run Installer presentation tests
+        if: steps.scope.outputs.product != 'false'
         run: >-
           dotnet test ClashSharp/ClashSharp.Installer.Presentation.Tests/ClashSharp.Installer.Presentation.Tests.csproj
           -c Release -p:Platform=AnyCPU --no-build
@@ -122,6 +158,7 @@ jobs:
           --logger "trx;LogFileName=installer-presentation-tests.trx"
 
       - name: Run Installer Windows adapter tests
+        if: steps.scope.outputs.product != 'false'
         run: >-
           dotnet test ClashSharp/ClashSharp.Installer.Windows.Tests/ClashSharp.Installer.Windows.Tests.csproj
           -c Release -p:Platform=x64 --no-build
@@ -129,10 +166,12 @@ jobs:
           --logger "trx;LogFileName=installer-windows-tests.trx"
 
       - name: Verify actual .NET test results and save evidence
+        if: steps.scope.outputs.product != 'false'
         shell: pwsh
         run: ./eng/Test-DotNetResults.ps1 -SummaryPath ./artifacts/validation/dotnet-test-evidence.json
 
       - name: Enforce Installer Core coverage floor
+        if: steps.scope.outputs.product != 'false'
         shell: pwsh
         run: |
           $coverage = Get-ChildItem -LiteralPath 'ClashSharp/ClashSharp.Installer.Tests/TestResults' `
@@ -150,7 +189,7 @@ jobs:
           if ($branchRate -lt 0.80) { throw "Installer Core branch coverage $branchRate is below 0.80." }
 
       - name: Upload test results
-        if: always()
+        if: always() && steps.scope.outputs.product != 'false'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: dotnet-test-results
@@ -164,6 +203,22 @@ jobs:
             ClashSharp/ClashSharp.Installer.Windows.Tests/TestResults/**/*.trx
           if-no-files-found: error
 
+      - name: Explain review-only CI
+        if: steps.scope.outputs.product == 'false'
+        shell: pwsh
+        run: |
+          'Only review Markdown changed. Product build and test jobs were not run; prior product evidence is not reissued.' |
+            Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+
+      - name: Upload CI scope
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: ci-scope-dotnet
+          path: artifacts/validation/ci-scope.json
+          if-no-files-found: error
+          retention-days: 5
+
   installer-package:
     name: Offline Installer package
     runs-on: windows-2025
@@ -171,15 +226,35 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
 
+      - name: Verify CI scope contract (Windows PowerShell 5.1)
+        shell: powershell
+        run: ./eng/Test-CiChangeScopeContract.ps1
+
+      - name: Verify CI scope contract (PowerShell 7)
+        shell: pwsh
+        run: ./eng/Test-CiChangeScopeContract.ps1
+
+      - name: Determine product CI scope
+        id: scope
+        shell: pwsh
+        env:
+          CI_BASE_COMMIT: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: >-
+          ./eng/Get-CiChangeScope.ps1 -BaseCommit $env:CI_BASE_COMMIT -HeadCommit $env:GITHUB_SHA
+          -RecordPath ./artifacts/validation/ci-scope.json -GitHubOutputPath $env:GITHUB_OUTPUT
+
       - name: Set up pinned .NET SDK
+        if: steps.scope.outputs.product != 'false'
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68
         with:
           global-json-file: global.json
 
       - name: Restore locked dependencies
+        if: steps.scope.outputs.product != 'false'
         run: dotnet restore ClashSharp/ClashSharp.slnx --locked-mode
 
       - name: Acquire and stage pinned offline data
+        if: steps.scope.outputs.product != 'false'
         shell: pwsh
         run: |
           ./Tools/Get-ReleaseInputs.ps1
@@ -190,13 +265,31 @@ jobs:
           ./Tools/Get-MihomoSourceMaterials.ps1
 
       - name: Build complete development Installer payload
+        if: steps.scope.outputs.product != 'false'
         shell: pwsh
         run: ./ClashSharp/Installer/build.ps1 -Development
 
       - name: Upload development package
+        if: steps.scope.outputs.product != 'false'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: ClashSharp-1.0.0-development-package
           path: artifacts/installer/release/
+          if-no-files-found: error
+          retention-days: 5
+
+      - name: Explain review-only CI
+        if: steps.scope.outputs.product == 'false'
+        shell: pwsh
+        run: |
+          'Only review Markdown changed. Product build and test jobs were not run; prior product evidence is not reissued.' |
+            Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+
+      - name: Upload CI scope
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: ci-scope-installer
+          path: artifacts/validation/ci-scope.json
           if-no-files-found: error
           retention-days: 5
