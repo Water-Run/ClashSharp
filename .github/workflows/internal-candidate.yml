@@ -1,0 +1,171 @@
+name: Internal signed candidate and payload audit
+run-name: Internal candidate from CI ${{ inputs.run_id }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Successful full ci.yml run on main
+        required: true
+        type: string
+      source_commit:
+        description: Exact lowercase source commit of that product run
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  candidate:
+    name: Build internal self-signed candidate
+    runs-on: windows-2025
+    timeout-minutes: 40
+    outputs:
+      artifact_id: ${{ steps.transport.outputs.artifact-id }}
+      archive_sha256: ${{ steps.sign.outputs.archive_sha256 }}
+      identity_sha256: ${{ steps.sign.outputs.identity_sha256 }}
+      authenticode_thumbprint: ${{ steps.sign.outputs.authenticode_thumbprint }}
+      msix_thumbprint: ${{ steps.sign.outputs.msix_thumbprint }}
+    steps:
+      - name: Require mainline manual dispatch
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_REF -cne 'refs/heads/main' -or $env:GITHUB_EVENT_NAME -cne 'workflow_dispatch') { throw 'Internal candidates require a manual mainline dispatch.' }
+
+      - name: Check out trusted controller
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+
+      - name: Verify exact product CI bytes
+        id: ci
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRODUCT_RUN_ID: ${{ inputs.run_id }}
+          PRODUCT_SOURCE_COMMIT: ${{ inputs.source_commit }}
+        run: |
+          $result = ./Tools/Get-ProductCiArtifacts.ps1 -RunId $env:PRODUCT_RUN_ID -SourceCommit $env:PRODUCT_SOURCE_COMMIT -Destination ./artifacts/ci-inputs -OutputPath ./artifacts/validation/product-ci-artifact-evidence.json
+          $hash = (Get-FileHash ./artifacts/validation/product-ci-artifact-evidence.json).Hash.ToLowerInvariant()
+          "evidence_sha256=$hash" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Check out exact product source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          ref: ${{ inputs.source_commit }}
+          path: candidate-source
+          persist-credentials: false
+
+      - name: Set up pinned source SDK
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68
+        with:
+          global-json-file: candidate-source/global.json
+
+      - name: Restore exact source dependencies
+        shell: pwsh
+        working-directory: candidate-source
+        run: |
+          dotnet restore ClashSharp/ClashSharp.slnx --locked-mode
+          if ($LASTEXITCODE) { throw 'Locked restore failed.' }
+
+      - name: Acquire pinned source inputs
+        shell: pwsh
+        working-directory: candidate-source
+        run: |
+          ./Tools/Get-ReleaseInputs.ps1
+          $inputRoot = Join-Path $PWD 'artifacts/release-inputs/1.0.0'
+          $assets = @('Country.mmdb', 'GeoIP.dat', 'GeoSite.dat', 'ASN.mmdb') | ForEach-Object { Join-Path $inputRoot $_ }
+          ./Tools/Prepare-GeoData.ps1 -AssetPath $assets
+          ./Tools/Get-MihomoSourceMaterials.ps1
+
+      - name: Sign and seal internal candidate
+        id: sign
+        shell: pwsh
+        env:
+          PRODUCT_SOURCE_COMMIT: ${{ inputs.source_commit }}
+          EXPECTED_CI_SHA256: ${{ steps.ci.outputs.evidence_sha256 }}
+          INTERNAL_DISPOSABLE_RUNNER: ${{ runner.environment }}
+        run: |
+          $result = ./Tools/New-InternalCandidate.ps1 -RepositoryRoot (Join-Path $PWD 'candidate-source') -SourceCommit $env:PRODUCT_SOURCE_COMMIT -CiEvidencePath (Join-Path $PWD 'artifacts/validation/product-ci-artifact-evidence.json') -ExpectedCiEvidenceSha256 $env:EXPECTED_CI_SHA256 -OutputDirectory (Join-Path $PWD 'artifacts/internal-operation')
+          if (-not $result.temporarySigningMaterialRemoved -or $result.publicReleaseAuthorized -or $result.promotionAuthorized) { throw 'Internal candidate scope or cleanup failed.' }
+          "archive_sha256=$($result.archiveSha256)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "identity_sha256=$($result.candidateIdentitySha256)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "authenticode_thumbprint=$($result.authenticodeThumbprint)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "msix_thumbprint=$($result.msixThumbprint)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Upload public internal-candidate files
+        id: transport
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: internal-signed-candidate-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            artifacts/internal-operation/public/internal-candidate.zip
+            artifacts/internal-operation/public/candidate-identity.json
+            artifacts/internal-operation/public/ci-evidence.json
+            artifacts/internal-operation/public/internal-candidate-result.json
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 5
+
+      - name: Retain failed build diagnostics
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: internal-candidate-failure-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/internal-operation/build.log
+          if-no-files-found: warn
+          retention-days: 5
+
+  payload:
+    name: Independent internal payload check (${{ matrix.platform }})
+    needs: candidate
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-2025
+            platform: windows-server
+    steps:
+      - name: Check out trusted collector
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+
+      - name: Download exact producer artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          artifact-ids: ${{ needs.candidate.outputs.artifact_id }}
+          merge-multiple: true
+          path: transport-input
+
+      - name: Receive and audit original candidate bytes
+        shell: pwsh
+        env:
+          PRODUCT_SOURCE_COMMIT: ${{ inputs.source_commit }}
+          EXPECTED_ARCHIVE_SHA256: ${{ needs.candidate.outputs.archive_sha256 }}
+          EXPECTED_IDENTITY_SHA256: ${{ needs.candidate.outputs.identity_sha256 }}
+          EXPECTED_AUTHENTICODE_THUMBPRINT: ${{ needs.candidate.outputs.authenticode_thumbprint }}
+          EXPECTED_MSIX_THUMBPRINT: ${{ needs.candidate.outputs.msix_thumbprint }}
+          EXPECTED_PLATFORM: ${{ matrix.platform }}
+        run: |
+          ./Tools/Invoke-InternalCandidateAudit.ps1 -ArchivePath (Join-Path $PWD 'transport-input/internal-candidate.zip') -ExpectedArchiveSha256 $env:EXPECTED_ARCHIVE_SHA256 -ExpectedIdentitySha256 $env:EXPECTED_IDENTITY_SHA256 -SourceCommit $env:PRODUCT_SOURCE_COMMIT -AuthenticodeThumbprint $env:EXPECTED_AUTHENTICODE_THUMBPRINT -MsixThumbprint $env:EXPECTED_MSIX_THUMBPRINT -ExpectedPlatform $env:EXPECTED_PLATFORM -OutputDirectory (Join-Path $PWD 'artifacts/internal-audit')
+          'Internal self-signed candidate: read-only payload check passed. Installation, Win11 UI and public promotion remain separate gates.' | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+
+      - name: Retain actual collector evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: internal-payload-${{ matrix.platform }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            artifacts/internal-audit/internal-audit-result.json
+            artifacts/internal-audit/archive-received.json
+            artifacts/internal-audit/payload/process.json
+            artifacts/internal-audit/payload/stdout.json
+            artifacts/internal-audit/payload/stderr.txt
+            artifacts/internal-audit/payload/payload-execution.json
+          if-no-files-found: warn
+          retention-days: 5
