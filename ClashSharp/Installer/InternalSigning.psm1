@@ -3,6 +3,27 @@ Set-StrictMode -Version Latest
 Import-Module (Join-Path $PSScriptRoot 'PackagingContract.psm1') -Force
 $script:InternalSigningLeases=[Collections.Generic.Dictionary[string,object]]::new([StringComparer]::Ordinal)
 
+function Get-ClashSharpInternalSigningSdk {
+    <#
+    .SYNOPSIS
+        Resolves and validates the fixed internal acceptance SignTool before any key creation.
+    .DESCRIPTION
+        Keeps the SDK choice explicit rather than falling back to PATH or a newest directory.
+        The normal build and signing module repeat their native tool and output checks.
+    #>
+    [CmdletBinding()]
+    param()
+    $version='10.0.26100.0'
+    $programFiles=[Environment]::GetFolderPath([Environment+SpecialFolder]::ProgramFilesX86)
+    $path=Assert-ClashSharpOrdinaryPath -LiteralPath (Join-Path $programFiles ('Windows Kits/10/bin/'+$version+'/x64/signtool.exe')) -RequireFile
+    $signature=Get-AuthenticodeSignature -LiteralPath $path
+    if([string]$signature.Status -cne 'Valid' -or $null -eq $signature.TimeStamperCertificate -or
+        $null -eq $signature.SignerCertificate -or $signature.SignerCertificate.Subject -cnotmatch '(^|,\s*)O=Microsoft Corporation(,|$)'){
+        throw 'internal-signing.sdk-tool-trust'
+    }
+    [pscustomobject]@{version=$version;signToolPath=$path;trustedMicrosoftTool=$true}
+}
+
 function Get-ClashSharpInternalCertificateSnapshot {
     <#
     .SYNOPSIS
@@ -233,4 +254,4 @@ function Close-ClashSharpInternalSigningLease {
     [pscustomobject]@{success=$true;certificatesRemoved=$state.certificates.Count;privateKeysDeleted=$keysDeleted;ownedKeySlotsConfirmedAbsent=$state.keys.Count;signingFilesRemoved=$state.files.Count;originalCurrentUserStoresPreserved=$true;originalMachineTrustPreserved=$true;temporaryMachineRootsRemoved=$true}
 }
 
-Export-ModuleMember -Function New-ClashSharpInternalSigningLease, Get-ClashSharpInternalSigningLeaseInfo, Close-ClashSharpInternalSigningLease
+Export-ModuleMember -Function Get-ClashSharpInternalSigningSdk, New-ClashSharpInternalSigningLease, Get-ClashSharpInternalSigningLeaseInfo, Close-ClashSharpInternalSigningLease

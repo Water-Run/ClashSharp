@@ -56,8 +56,8 @@ $null=Assert-ClashSharpOrdinaryPath -LiteralPath (Split-Path -Parent $output) -R
 if((Test-Path -LiteralPath $output) -or $output.StartsWith($source.TrimEnd([char[]]@('\','/'))+[IO.Path]::DirectorySeparatorChar,[StringComparison]::OrdinalIgnoreCase)){throw 'internal-candidate.new-external-output-required'}
 $ciPath=Assert-ClashSharpOrdinaryPath -LiteralPath $CiEvidencePath -RequireFile
 $ciLease=[IO.File]::Open($ciPath,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read)
-$signingLease=$null;$cleanup=$null;$failure=$null;$result=$null
-$variables=@('CLASHSHARP_AUTHENTICODE_CERTIFICATE_THUMBPRINT','CLASHSHARP_MSIX_CERTIFICATE_THUMBPRINT','CLASHSHARP_AUTHENTICODE_TIMESTAMP_URL','CLASHSHARP_CERTIFICATE_PASSWORD')
+$signingLease=$null;$cleanup=$null;$failure=$null;$result=$null;$outputCreated=$false;$stage='ci-input'
+$variables=@('CLASHSHARP_AUTHENTICODE_CERTIFICATE_THUMBPRINT','CLASHSHARP_MSIX_CERTIFICATE_THUMBPRINT','CLASHSHARP_AUTHENTICODE_TIMESTAMP_URL','CLASHSHARP_CERTIFICATE_PASSWORD','CLASHSHARP_WINDOWS_SDK_VERSION')
 $beforeEnvironment=@{};foreach($name in $variables){$beforeEnvironment[$name]=[Environment]::GetEnvironmentVariable($name,'Process')}
 try{
     if($ciLease.Length -le 0 -or $ciLease.Length -gt 1048576){throw 'internal-candidate.ci-budget'}
@@ -73,7 +73,9 @@ try{
     try{$manifest=[Xml.XmlDocument]::new();$manifest.XmlResolver=$null;$manifest.Load($xmlReader)}finally{$xmlReader.Dispose()}
     $identity=@($manifest.SelectNodes("/*[local-name()='Package']/*[local-name()='Identity']"))
     if($identity.Count -ne 1){throw 'internal-candidate.package-publisher'}
+    $sdk=Get-ClashSharpInternalSigningSdk
     $null=[IO.Directory]::CreateDirectory($output)
+    $outputCreated=$true;$stage='signing-material'
     $public=Join-Path $output 'public';$null=[IO.Directory]::CreateDirectory($public)
     $signingLease=New-ClashSharpInternalSigningLease -Publisher $identity[0].GetAttribute('Publisher') -SigningDirectory (Join-Path $source 'ClashSharp/Installer/signing')
     $signers=Get-ClashSharpInternalSigningLeaseInfo -Lease $signingLease
@@ -81,13 +83,17 @@ try{
     [Environment]::SetEnvironmentVariable('CLASHSHARP_MSIX_CERTIFICATE_THUMBPRINT',$signers.msixThumbprint,'Process')
     [Environment]::SetEnvironmentVariable('CLASHSHARP_AUTHENTICODE_TIMESTAMP_URL','http://timestamp.digicert.com','Process')
     [Environment]::SetEnvironmentVariable('CLASHSHARP_CERTIFICATE_PASSWORD',$null,'Process')
+    [Environment]::SetEnvironmentVariable('CLASHSHARP_WINDOWS_SDK_VERSION',$sdk.version,'Process')
+    $stage='build'
     Push-Location -LiteralPath $source
     try{& "$source/ClashSharp/Installer/build.ps1" *> "$output/build.log"}finally{Pop-Location}
+    $stage='identity'
     $identityReceipt=& "$PSScriptRoot/New-SignedCandidateIdentity.ps1" -RepositoryRoot $source -ReleaseDirectory "$source/artifacts/installer/release" -CiEvidencePath $ciPath -ExpectedCiEvidenceSha256 $ExpectedCiEvidenceSha256 -AuthenticodeSubject $signers.authenticodeSubject -AuthenticodeThumbprint $signers.authenticodeThumbprint -MsixThumbprint $signers.msixThumbprint -OutputPath "$public/candidate-identity.json"
+    $stage='archive'
     $archive=& "$PSScriptRoot/New-CandidateArchive.ps1" -IdentityPath "$public/candidate-identity.json" -ExpectedIdentitySha256 $identityReceipt.identitySha256 -ReleaseDirectory "$source/artifacts/installer/release" -OutputPath "$public/internal-candidate.zip"
     $result=[ordered]@{
         schemaVersion=1;kind='clashsharp-internal-candidate';scope='internal-self-signed';toolCommit=$toolCommit
-        sourceCommit=$SourceCommit;ciRunId=$ci.runId;ciEvidenceSha256=$ExpectedCiEvidenceSha256
+        sourceCommit=$SourceCommit;ciRunId=$ci.runId;ciEvidenceSha256=$ExpectedCiEvidenceSha256;windowsSdkVersion=$sdk.version
         candidateIdentitySha256=$identityReceipt.identitySha256;archiveSha256=$archive.archiveSha256;archiveLength=$archive.archiveLength
         authenticodeThumbprint=$signers.authenticodeThumbprint;msixThumbprint=$signers.msixThumbprint
         temporarySigningMaterialRemoved=$false;publicReleaseAuthorized=$false;promotionAuthorized=$false
@@ -100,6 +106,14 @@ finally{
     }catch{$failure=$_}
     foreach($name in $variables){[Environment]::SetEnvironmentVariable($name,$beforeEnvironment[$name],'Process')}
     $ciLease.Dispose()
+    if($outputCreated){
+        $observation=[ordered]@{schemaVersion=1;kind='internal-signing-cleanup-observation';toolCommit=$toolCommit;sourceCommit=$SourceCommit;
+            stage=$stage;failureObserved=($null -ne $failure);candidateArchiveCreated=($null -ne $result);
+            cleanupConfirmed=($null -ne $cleanup -and $cleanup.success);cleanup=$cleanup;publicReleaseAuthorized=$false;promotionAuthorized=$false}
+        $bytes=[Text.UTF8Encoding]::new($false).GetBytes(($observation|ConvertTo-Json -Depth 8)+[char]10)
+        $writer=[IO.File]::Open("$output/operation-result.json",[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)
+        try{$writer.Write($bytes);$writer.Flush($true)}finally{$writer.Dispose()}
+    }
 }
 if($null -ne $failure){throw $failure}
 if($null -eq $result -or $null -eq $cleanup -or -not $cleanup.success){throw 'internal-candidate.cleanup-required'}

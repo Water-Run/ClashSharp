@@ -118,7 +118,9 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: internal-candidate-failure-${{ github.run_id }}-${{ github.run_attempt }}
-          path: artifacts/internal-operation/build.log
+          path: |
+            artifacts/internal-operation/build.log
+            artifacts/internal-operation/operation-result.json
           if-no-files-found: warn
           retention-days: 5
 

@@ -37,7 +37,7 @@ Assert-Condition ($yaml.Contains('platform: windows-server') -and $yaml.Contains
 Assert-Condition ($yaml.Contains('github.run_attempt') -and $yaml -notmatch '(?m)^\s+overwrite:\s*true') 'New attempts must retain prior artifacts without replacing them.'
 $publicPaths=@([regex]::Matches($yaml,'(?m)^            artifacts/internal-operation/public/([^\r\n]+)')|ForEach-Object {$_.Groups[1].Value})
 Assert-Condition (($publicPaths -join ',') -ceq 'internal-candidate.zip,candidate-identity.json,ci-evidence.json,internal-candidate-result.json') 'Only four exact public output files may be uploaded.'
-Assert-Condition ($yaml.Contains('path: artifacts/internal-operation/build.log') -and $yaml.Contains('if: failure()')) 'Failed builds must retain bounded-scope diagnostics.'
+Assert-Condition ($yaml.Contains('artifacts/internal-operation/build.log') -and $yaml.Contains('artifacts/internal-operation/operation-result.json') -and $yaml.Contains('if: failure()')) 'Failed builds must retain logs and actual cleanup observations.'
 Assert-Condition ($yaml.Contains('Installation, Win11 UI and public promotion remain separate gates.')) 'Workflow summary must preserve its actual read-only scope.'
 
 $creator=Get-Content "$repository/Tools/New-InternalCandidate.ps1" -Raw
@@ -57,6 +57,8 @@ foreach($path in @("$repository/Tools/New-InternalCandidate.ps1","$repository/To
   $owned=[pscustomobject]@{lease=$null}
   try{
    if(@($commands|Where-Object {$_.Extent.Text.Contains('InternalSigning.psm1')}).Count){
+    $sdk=Get-ClashSharpInternalSigningSdk
+    Assert-Condition ($sdk.version -ceq '10.0.26100.0' -and $sdk.trustedMicrosoftTool) 'Actual controller SDK preflight must resolve the fixed trusted Microsoft tool.'
     $admin=[Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent())
     $expected=if($admin.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)){'internal-signing.existing-material'}else{'internal-signing.elevated-disposable-context-required'}
     Assert-Rejected {$owned.lease=New-ClashSharpInternalSigningLease -Publisher 'CN=Composition fixture' -SigningDirectory $fixture} $expected
@@ -75,6 +77,8 @@ foreach($path in @("$repository/Tools/New-InternalCandidate.ps1","$repository/To
 Assert-Condition ($creator.Contains('Close-ClashSharpInternalSigningLease') -and $creator.IndexOf('Close-ClashSharpInternalSigningLease') -lt $creator.IndexOf('$result.temporarySigningMaterialRemoved=$true')) 'Successful references require observed key and trust cleanup.'
 Assert-Condition ($creator.Contains('New-SignedCandidateIdentity.ps1') -and $creator.Contains('New-CandidateArchive.ps1') -and -not $creator.Contains('build.ps1 -Development')) 'Formal-shaped internal output must retain existing signature, identity and archive gates.'
 Assert-Condition ($creator.Contains('publicReleaseAuthorized=$false;promotionAuthorized=$false')) 'Self-signed producer cannot authorize a public release.'
+Assert-Condition ($creator.Contains("'CLASHSHARP_WINDOWS_SDK_VERSION'") -and $creator.Contains('$sdk.version') -and $creator.IndexOf('Get-ClashSharpInternalSigningSdk') -lt $creator.IndexOf('$signingLease=New-ClashSharpInternalSigningLease')) 'The fixed SDK must be preflighted before keys and passed to the unmodified build.'
+Assert-Condition ($creator.Contains('internal-signing-cleanup-observation') -and $creator.Contains('cleanupConfirmed=')) 'Failures must retain observed cleanup rather than infer it from a thrown build error.'
 Assert-Condition ($creator.Contains('internal-candidate.disposable-mainline-ci-required') -and $yaml.Contains('INTERNAL_DISPOSABLE_RUNNER: ${{ runner.environment }}')) 'Fresh key creation must stay in the explicitly disposable hosted CI context.'
 Assert-Condition ($signing.Contains('Container=$keyName') -and $signing.IndexOf('$state.keys.Add($keyName)') -lt $signing.IndexOf('New-SelfSignedCertificate @parameters')) 'A known-absent owned key slot must be recorded before enrollment.'
 Assert-Condition ($signing.Contains('[object]::ReferenceEquals($Lease,$state.token)') -and $signing.Contains('rawSha256') -and $signing.Contains('CngKeyOpenOptions]::Silent')) 'Cleanup must retain live ownership, exact identity and silent key handling.'
