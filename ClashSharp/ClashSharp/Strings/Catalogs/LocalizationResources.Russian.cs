@@ -850,7 +850,7 @@ internal static partial class LocalizationResources
             ["Settings.CheckStaleProxy.Title"] = "Проверять остаточный прокси при запуске",
             ["Settings.CheckStaleProxy.Description"] = "При запуске удалять оставшиеся настройки системного прокси, указывающие на Clash#.",
             ["Settings.RestoreProxyOnExit.Title"] = "Восстанавливать системный прокси при выходе",
-            ["Settings.RestoreProxyOnExit.Description"] = "Останавливать ядро и отключать системный прокси Windows при закрытии Clash#.",
+            ["Settings.RestoreProxyOnExit.Description"] = "При выходе остановить ядро и восстановить настройки прокси Windows, которыми управляет Clash#. Если опция выключена, настройки сохраняются: соединения системного прокси прекращаются вместе с приложением, а фоновая служба TUN может продолжить работу.",
             ["Settings.Section.MainlandChina"] = "Функции материкового Китая",
             ["Settings.MainlandChinaDisplay.Title"] = "Встроенный фильтр проверки",
             ["Settings.MainlandChinaDisplay.Description"] = "Управляет заменой флагов, дополнением текста, фильтрацией ключевых слов и маскированием указанных URL.",

@@ -850,7 +850,7 @@ internal static partial class LocalizationResources
             ["Settings.CheckStaleProxy.Title"] = "Veralteten Proxy beim Start prüfen",
             ["Settings.CheckStaleProxy.Description"] = "Beim Start verbliebene Systemproxyeinstellungen entfernen, die noch auf Clash# verweisen.",
             ["Settings.RestoreProxyOnExit.Title"] = "Systemproxy beim Beenden wiederherstellen",
-            ["Settings.RestoreProxyOnExit.Description"] = "Beim Schließen von Clash# den Kern stoppen und den Windows-Systemproxy deaktivieren.",
+            ["Settings.RestoreProxyOnExit.Description"] = "Beim Beenden den Kern stoppen und die von Clash# übernommenen Windows-Proxyeinstellungen wiederherstellen. Ausgeschaltet bleiben diese Einstellungen erhalten: Systemproxy-Verbindungen enden mit der App; ein TUN-Dienst kann weiterlaufen.",
             ["Settings.Section.MainlandChina"] = "Festlandchina-Funktionen",
             ["Settings.MainlandChinaDisplay.Title"] = "Integrierter Prüfungsfilter",
             ["Settings.MainlandChinaDisplay.Description"] = "Steuert Flaggenersetzung, Textergänzung, Schlüsselwortfilterung und Maskierung angegebener URLs.",

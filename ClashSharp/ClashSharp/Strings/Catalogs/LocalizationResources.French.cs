@@ -850,7 +850,7 @@ internal static partial class LocalizationResources
             ["Settings.CheckStaleProxy.Title"] = "Vérifier le proxy résiduel au démarrage",
             ["Settings.CheckStaleProxy.Description"] = "Au démarrage, supprimez les paramètres du proxy système qui pointent encore vers Clash#.",
             ["Settings.RestoreProxyOnExit.Title"] = "Restaurer le proxy système à la fermeture",
-            ["Settings.RestoreProxyOnExit.Description"] = "Arrêter le noyau et désactiver le proxy système Windows à la fermeture de Clash#.",
+            ["Settings.RestoreProxyOnExit.Description"] = "À la fermeture, arrêter le noyau et restaurer les paramètres proxy Windows gérés par Clash#. Si cette option est désactivée, ces paramètres sont conservés : les connexions du proxy système s’arrêtent avec l’application ; un service TUN peut continuer à fonctionner.",
             ["Settings.Section.MainlandChina"] = "Fonctions Chine continentale",
             ["Settings.MainlandChinaDisplay.Title"] = "Filtre de contrôle intégré",
             ["Settings.MainlandChinaDisplay.Description"] = "Contrôle le remplacement des drapeaux, la complétion du texte, le filtrage par mots-clés et le masquage d’URL spécifiées.",

@@ -848,7 +848,7 @@ internal static partial class LocalizationResources
             ["Settings.CheckStaleProxy.Title"] = "시작 시 남은 프록시 확인",
             ["Settings.CheckStaleProxy.Description"] = "시작 시 여전히 Clash#을 가리키는 시스템 프록시 설정을 지웁니다.",
             ["Settings.RestoreProxyOnExit.Title"] = "종료 시 시스템 프록시 복원",
-            ["Settings.RestoreProxyOnExit.Description"] = "Clash#를 닫을 때 코어를 멈추고 Windows 시스템 프록시를 끕니다.",
+            ["Settings.RestoreProxyOnExit.Description"] = "종료할 때 코어를 멈추고 Clash#가 관리하던 Windows 프록시 설정을 복원합니다. 이 옵션을 끄면 설정이 유지되지만 시스템 프록시 연결은 앱과 함께 종료됩니다. 백그라운드 TUN 서비스는 계속 실행될 수 있습니다.",
             ["Settings.Section.MainlandChina"] = "중국 본토 특화 기능",
             ["Settings.MainlandChinaDisplay.Title"] = "내장 심의 필터",
             ["Settings.MainlandChinaDisplay.Description"] = "국기 대체, 텍스트 보완, 키워드 필터링, 지정 URL 가림을 제어합니다.",

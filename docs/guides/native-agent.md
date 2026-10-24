@@ -11,6 +11,8 @@ Clash# provides an authenticated local MCP server. You choose what an Agent can 
 3. Choose **Copy client configuration**. In a client that supports **Streamable HTTP**, enter the copied URL and `Authorization` header. Clients may wrap these fields in their own configuration format.
 4. Keep Clash# running. Closing its window normally leaves it running in the tray; exiting the application stops the MCP server.
 
+Turning off **Restore system proxy on exit** keeps the Windows proxy settings, but system proxy connections end when the application exits. A background TUN service can keep running. Keep Clash# running or in the tray when an Agent needs ongoing control.
+
 The copied fields have this shape. Replace the placeholder with the configuration copied from your own application:
 
 ```json

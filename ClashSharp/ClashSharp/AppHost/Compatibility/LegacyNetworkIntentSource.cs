@@ -44,6 +44,9 @@ internal sealed class LegacyNetworkIntentSource(AppSettingsService settings)
         bool transparentProxyEnabled,
         int mixedPort)
     {
+        // Retaining proxy settings does not detach the App-owned process Job. Only a
+        // service-owned TUN can outlive the GUI; callers must not promise a background
+        // system-proxy runtime when this preference is disabled.
         ClashSharpMode mode = restoreProxyOnExit ? ClashSharpMode.Disabled : currentMode;
         return NetworkIntent.Shutdown(mode, transparentProxyEnabled, mixedPort);
     }

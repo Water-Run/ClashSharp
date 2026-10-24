@@ -848,7 +848,7 @@ internal static partial class LocalizationResources
             ["Settings.CheckStaleProxy.Title"] = "启动时检查代理残留",
             ["Settings.CheckStaleProxy.Description"] = "启动时清理仍指向 Clash# 的系统代理残留设置。",
             ["Settings.RestoreProxyOnExit.Title"] = "退出时还原系统代理",
-            ["Settings.RestoreProxyOnExit.Description"] = "关闭 Clash# 时停止核心并关闭 Windows 系统代理。",
+            ["Settings.RestoreProxyOnExit.Description"] = "退出时停止内核，并还原 Clash# 接管的 Windows 代理设置。关闭此选项会保留代理设置：系统代理连接仍随应用退出结束，后台 TUN 服务可继续运行。",
             ["Settings.Section.MainlandChina"] = "中国大陆特色功能",
             ["Settings.MainlandChinaDisplay.Title"] = "内置审核过滤",
             ["Settings.MainlandChinaDisplay.Description"] = "控制旗帜替换、文本补全、关键字过滤和指定 URL 屏蔽。",

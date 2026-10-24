@@ -848,7 +848,7 @@ internal static partial class LocalizationResources
             ["Settings.CheckStaleProxy.Title"] = "بررسی پروکسی کهنه هنگام راه‌اندازی",
             ["Settings.CheckStaleProxy.Description"] = "هنگام اجرا، تنظیمات باقی‌ماندهٔ پراکسی سیستم را که هنوز به Clash# اشاره دارند پاک کنید.",
             ["Settings.RestoreProxyOnExit.Title"] = "بازگردانی پروکسی سیستم هنگام خروج",
-            ["Settings.RestoreProxyOnExit.Description"] = "هنگام بستن Clash# هسته را متوقف کنید و پروکسی سیستم Windows را غیرفعال کنید.",
+            ["Settings.RestoreProxyOnExit.Description"] = "هنگام خروج، هسته را متوقف و تنظیمات پروکسی Windows تحت مدیریت Clash# را بازیابی کنید. با خاموش کردن این گزینه، تنظیمات حفظ می‌شوند؛ اتصال‌های پروکسی سیستم با خروج برنامه پایان می‌یابند، اما سرویس پس‌زمینهٔ TUN می‌تواند ادامه دهد.",
             ["Settings.Section.MainlandChina"] = "قابلیت‌های چین قاره‌ای",
             ["Settings.MainlandChinaDisplay.Title"] = "پالایه بررسی داخلی",
             ["Settings.MainlandChinaDisplay.Description"] = "جایگزینی پرچم، تکمیل متن، پالایه کلیدواژه و پوشاندن URL مشخص‌شده را کنترل می‌کند.",
