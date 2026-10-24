@@ -38,7 +38,6 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 $repository=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 Import-Module "$repository/ClashSharp/Installer/CandidateAcceptance.psm1" -Force
-Import-Module "$repository/ClashSharp/Installer/CandidateIdentity.psm1" -Force
 Import-Module "$repository/ClashSharp/Installer/PackagingContract.psm1" -Force
 $git=(Get-Command git -CommandType Application|Select-Object -First 1).Source
 $toolCommit=[string](& $git -C $repository rev-parse HEAD)
@@ -63,6 +62,10 @@ try{
     $received=& "$PSScriptRoot/Expand-CandidateArchive.ps1" -ArchivePath $archive -ExpectedArchiveSha256 $ExpectedArchiveSha256 -ExpectedIdentitySha256 $ExpectedIdentitySha256 -Destination "$output/candidate"
     $received|ConvertTo-Json -Depth 8|Set-Content "$output/archive-received.json" -Encoding utf8NoBOM
     if($received.sourceCommit -cne $SourceCommit){throw 'internal-audit.source-mismatch'}
+    # The archive child reloads its dependencies in its own module scope.
+    # Restore this controller's imports only after the child has returned.
+    Import-Module "$repository/ClashSharp/Installer/CandidateIdentity.psm1" -Force
+    Import-Module "$repository/ClashSharp/Installer/PackagingContract.psm1" -Force
     $signature=Invoke-ClashSharpCandidateIdentity -IdentityPath "$output/candidate/candidate-identity.json" -ExpectedIdentitySha256 $ExpectedIdentitySha256 -ReleaseDirectory "$output/candidate/release" -Consume {
         param($identity)
         if($identity.signatures.installer.thumbprint -cne $AuthenticodeThumbprint -or $identity.signatures.primary.thumbprint -cne $MsixThumbprint -or

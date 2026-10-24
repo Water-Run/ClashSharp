@@ -64,9 +64,11 @@ $signing=Get-Content (Join-Path $PSScriptRoot 'InternalSigning.psm1') -Raw
 foreach($path in @("$repository/Tools/New-InternalCandidate.ps1","$repository/Tools/Invoke-InternalCandidateAudit.ps1")){
  $ast=[Management.Automation.Language.Parser]::ParseFile($path,[ref]$null,[ref]$null)
  $imports=@($ast.FindAll({param($node)$node -is [Management.Automation.Language.CommandAst] -and $node.GetCommandName() -ceq 'Import-Module'},$true))
+ $expand=@($ast.FindAll({param($node)$node -is [Management.Automation.Language.CommandAst] -and $node.CommandElements[0].Extent.Text.Contains('/Expand-CandidateArchive.ps1')},$true))
+ $restorations=if($expand.Count -eq 1){@($imports|Where-Object {$_.Extent.StartLineNumber -gt $expand[0].Extent.EndLineNumber})}else{@()}
  Assert-Condition ($imports.Count -ge 2) 'Each controller must declare its actual module composition.'
  $resolved=& {
-  param($commands,$root)
+  param($commands,$root,$restorationCommands)
   $controllerRoot=$root;$repository=$root
   foreach($command in $commands){$null=& ([scriptblock]::Create($command.Extent.Text))}
   $fixture=Join-Path ([IO.Path]::GetTempPath()) ('clashsharp-composition-'+[Guid]::NewGuid().ToString('N'))
@@ -81,6 +83,11 @@ foreach($path in @("$repository/Tools/New-InternalCandidate.ps1","$repository/To
     $expected=if($admin.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)){'internal-signing.existing-material'}else{'internal-signing.elevated-disposable-context-required'}
     Assert-Rejected {$owned.lease=New-ClashSharpInternalSigningLease -Publisher 'CN=Composition fixture' -SigningDirectory $fixture} $expected
    }else{
+    $childFailed=$false
+    try{$null=& "$root/Tools/Expand-CandidateArchive.ps1" -ArchivePath (Join-Path $fixture 'absent.zip') -ExpectedArchiveSha256 ('a'*64) -ExpectedIdentitySha256 ('b'*64) -Destination (Join-Path $fixture 'new-output')}catch{$childFailed=$true}
+    Assert-Condition ($childFailed -and $restorationCommands.Count -ge 2) 'Actual archive child must fail without data and the controller must declare post-child imports.'
+    foreach($command in $restorationCommands){$null=& ([scriptblock]::Create($command.Extent.Text))}
+    Assert-Condition ($null -ne (Get-Command Invoke-ClashSharpCandidateIdentity -CommandType Function -ErrorAction Stop)) 'Candidate identity consumption must remain callable after actual child module reload.'
     Assert-Rejected {Get-ClashSharpCandidateFileSnapshot -ReleaseDirectory $fixture -Consume {param($files)$files}} 'candidate.file-inventory'
    }
   }finally{
@@ -89,7 +96,7 @@ foreach($path in @("$repository/Tools/New-InternalCandidate.ps1","$repository/To
    [IO.Directory]::Delete($fixture)
   }
   Assert-ClashSharpOrdinaryPath -LiteralPath $root -RequireDirectory
- } $imports $repository
+ } $imports $repository $restorations
  Assert-Condition ($resolved -ceq $repository) 'Actual production import order must keep path validation visible in the controller scope.'
 }
 Assert-Condition ($creator.Contains('Close-ClashSharpInternalSigningLease') -and $creator.IndexOf('Close-ClashSharpInternalSigningLease') -lt $creator.IndexOf('$result.temporarySigningMaterialRemoved=$true')) 'Successful references require observed key and trust cleanup.'
