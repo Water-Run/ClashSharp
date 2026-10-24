@@ -56,7 +56,7 @@ public sealed class InstallerBuildScriptTests
             "Remove-Item Env:\\CLASHSHARP_CERTIFICATE_PASSWORD",
             StringComparison.Ordinal);
         int publish = script.IndexOf("dotnet publish $appProject", StringComparison.Ordinal);
-        int signStaged = script.IndexOf("& $signToolPath sign", StringComparison.Ordinal);
+        int signStaged = script.IndexOf("Invoke-ClashSharpAuthenticodeSign", StringComparison.Ordinal);
         int publishOfficialName = script.IndexOf(
             "Move-Item -LiteralPath $stagedInstallerExecutable -Destination $installerExecutable",
             StringComparison.Ordinal);

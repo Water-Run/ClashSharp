@@ -1,4 +1,4 @@
-#Requires -Version 7.0
+#Requires -Version 7.4
 
 [CmdletBinding()]
 param(
@@ -33,6 +33,7 @@ if ($packagingContractModuleItem.PSIsContainer -or
     throw "PackagingContract.psm1 must be an ordinary local file."
 }
 Import-Module -Name $packagingContractModule -Force
+Import-Module -Name (Join-Path $installerRoot 'AuthenticodeSigning.psm1') -Force
 
 $authenticodeThumbprint = if ($Development) {
     '0000000000000000000000000000000000000000'
@@ -877,20 +878,15 @@ Write-Host 'WPF Installer passed its isolated single-file build contract.'
             throw "The pinned Windows SDK SignTool is not a trusted, timestamped Microsoft executable."
         }
 
-        & $signToolPath sign `
-            /fd SHA256 `
-            /sha1 $authenticodeThumbprint `
-            /tr $timestampUri.AbsoluteUri `
-            /td SHA256 `
-            $stagedInstallerExecutable
-        if ($LASTEXITCODE -ne 0) {
-            throw "Authenticode signing failed with exit code $LASTEXITCODE."
+        $signingResult = Invoke-ClashSharpAuthenticodeSign `
+            -LiteralPath $stagedInstallerExecutable `
+            -SignToolPath $signToolPath `
+            -SignerThumbprint $authenticodeThumbprint `
+            -TimestampUri $timestampUri
+        if (-not $signingResult.success -or -not $signingResult.nativeVerificationPassed) {
+            throw 'Bounded Authenticode signing did not verify its output.'
         }
-
-        & $signToolPath verify /pa /all /tw /v $stagedInstallerExecutable
-        if ($LASTEXITCODE -ne 0) {
-            throw "Authenticode verification failed with exit code $LASTEXITCODE."
-        }
+        Write-Host "Authenticode signing completed in $($signingResult.attempts.Count) attempt(s)."
 
         $authenticodeSignature = Microsoft.PowerShell.Security\Get-AuthenticodeSignature `
             -LiteralPath $stagedInstallerExecutable

@@ -18,6 +18,7 @@ function Get-ClashSharpRequiredProductCiSteps {
             'Verify PowerShell syntax (Windows PowerShell 5.1)', 'Verify PowerShell syntax (PowerShell 7)',
             'Verify .NET evidence contract (Windows PowerShell 5.1)', 'Verify .NET evidence contract (PowerShell 7)',
             'Verify installer vector icon bytes', 'Verify offline .NET package contract',
+            'Verify bounded Authenticode signing contract',
             'Verify installer build profiles', 'Verify third-party notices and final MSIX contract',
             'Verify pinned source-materials contract', 'Verify formatting',
             'Verify Sandbox report contract (Windows PowerShell 5.1)', 'Verify Sandbox report contract (PowerShell 7)',
