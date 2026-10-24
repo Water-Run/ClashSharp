@@ -357,6 +357,86 @@ public sealed class NetworkMutationConcurrencyTests
         Assert.True(fixture.Store.Current.Journal.HasCommitMarker);
     }
 
+    [Theory]
+    [InlineData(ClashSharpMode.RuleTakeover)]
+    [InlineData(ClashSharpMode.FullTakeover)]
+    public async Task ApplyShutdownAsync_EquivalentActiveTun_PreservesNativeOwnerAndStillCommits(ClashSharpMode mode)
+    {
+        Fixture fixture = new();
+        _ = await fixture.Network.ApplyAsync(NetworkIntent.ChangeMode(mode, true, 7890), CancellationToken.None);
+        fixture.Adapter.EquivalentAggregateHashes = true;
+        fixture.Trace.Clear();
+        await using MutationAdmissionLease lease = await fixture.Barrier.CloseAndDrainAsync(
+            MutationAdmissionClosure.Destructive, CancellationToken.None);
+
+        MutationResult<NetworkTransitionResult> result = await fixture.Network.ApplyShutdownAsync(
+            NetworkIntent.Shutdown(mode, true, 7890), lease, CancellationToken.None);
+
+        Assert.Equal(MutationOutcome.Succeeded, result.Outcome);
+        Assert.NotNull(result.Value);
+        Assert.True(result.Value.TransparentProxyEnabled);
+        Assert.DoesNotContain(fixture.Trace, item => item.StartsWith("apply:", StringComparison.Ordinal));
+        Assert.Equal(2, fixture.Trace.Count(item => item == "validate"));
+        Assert.Contains(fixture.Trace, item => item.StartsWith("commit:", StringComparison.Ordinal));
+        Assert.Contains($"cleanup:{mode}", fixture.Trace);
+        Assert.Null(fixture.Store.Current);
+    }
+
+    [Theory]
+    [InlineData("disable")]
+    [InlineData("system-proxy")]
+    [InlineData("different-port")]
+    [InlineData("different-mode")]
+    [InlineData("different-aggregate")]
+    [InlineData("ordinary-transition")]
+    public async Task NetworkTransition_ChangedOrNonShutdownTarget_StillAppliesNativeState(string scenario)
+    {
+        Fixture fixture = new();
+        _ = await fixture.Network.ApplyAsync(NetworkIntent.ChangeMode(ClashSharpMode.RuleTakeover, true, 7890), CancellationToken.None);
+        fixture.Adapter.EquivalentAggregateHashes = scenario != "different-aggregate";
+        fixture.Trace.Clear();
+        ClashSharpMode mode = scenario == "disable" ? ClashSharpMode.Disabled
+            : scenario == "different-mode" ? ClashSharpMode.FullTakeover : ClashSharpMode.RuleTakeover;
+        bool tun = scenario != "system-proxy";
+        int port = scenario == "different-port" ? 7891 : 7890;
+        MutationResult<NetworkTransitionResult> result;
+        if (scenario == "ordinary-transition")
+        {
+            result = await fixture.Network.ApplyAsync(NetworkIntent.ChangeMode(mode, tun, port), CancellationToken.None);
+        }
+        else
+        {
+            await using MutationAdmissionLease lease = await fixture.Barrier.CloseAndDrainAsync(
+                MutationAdmissionClosure.Destructive, CancellationToken.None);
+            result = await fixture.Network.ApplyShutdownAsync(NetworkIntent.Shutdown(mode, tun, port), lease, CancellationToken.None);
+        }
+
+        Assert.Equal(MutationOutcome.Succeeded, result.Outcome);
+        Assert.Contains($"apply:{mode}", fixture.Trace);
+        Assert.Null(fixture.Store.Current);
+    }
+
+    [Fact]
+    public async Task ApplyShutdownAsync_PreservedTunFailsFreshValidation_DoesNotMutateNativeState()
+    {
+        Fixture fixture = new();
+        _ = await fixture.Network.ApplyAsync(NetworkIntent.ChangeMode(ClashSharpMode.RuleTakeover, true, 7890), CancellationToken.None);
+        fixture.Adapter.EquivalentAggregateHashes = true;
+        fixture.Adapter.ValidationFailureAfter = fixture.Adapter.ValidationCount + 1;
+        fixture.Trace.Clear();
+        await using MutationAdmissionLease lease = await fixture.Barrier.CloseAndDrainAsync(
+            MutationAdmissionClosure.Destructive, CancellationToken.None);
+
+        MutationResult<NetworkTransitionResult> result = await fixture.Network.ApplyShutdownAsync(
+            NetworkIntent.Shutdown(ClashSharpMode.RuleTakeover, true, 7890), lease, CancellationToken.None);
+
+        Assert.NotEqual(MutationOutcome.Succeeded, result.Outcome);
+        Assert.DoesNotContain(fixture.Trace, item => item.StartsWith("apply:", StringComparison.Ordinal));
+        Assert.DoesNotContain(fixture.Trace, item => item.StartsWith("commit:", StringComparison.Ordinal));
+        Assert.True(fixture.Adapter.Current.TransparentProxyEnabled);
+        Assert.Null(fixture.Store.Current);
+    }
+
     private sealed class Fixture
     {
         public Fixture()
@@ -408,6 +488,12 @@ public sealed class NetworkMutationConcurrencyTests
 
         public int PlanCount { get; private set; }
 
+        public bool EquivalentAggregateHashes { get; set; }
+
+        public int ValidationCount { get; private set; }
+
+        public int? ValidationFailureAfter { get; set; }
+
         public List<ClashSharpMode> PlannedModes { get; } = [];
 
         public Task<NetworkPlan> PlanAsync(NetworkIntent intent, CancellationToken cancellationToken)
@@ -417,12 +503,15 @@ public sealed class NetworkMutationConcurrencyTests
             PlannedModes.Add(intent.Mode);
             trace.Add($"plan:{intent.Mode}:{Current.StateHash}");
             NetworkStateSnapshot desired = CreateState(intent.Mode, intent.TransparentProxyEnabled, intent.MixedPort);
+            string baselineHash = $"baseline:{Current.Mode}:{Current.TransparentProxyEnabled}:{Current.MixedPort}";
+            string desiredHash = EquivalentAggregateHashes && Current == desired
+                ? baselineHash : $"desired:{intent.Mode}:{intent.TransparentProxyEnabled}:{intent.MixedPort}";
             _lastPlan = new NetworkPlan(
                 intent,
                 Current,
                 desired,
-                $"baseline:{Current.Mode}:{Current.TransparentProxyEnabled}:{Current.MixedPort}",
-                $"desired:{intent.Mode}:{intent.TransparentProxyEnabled}:{intent.MixedPort}",
+                baselineHash,
+                desiredHash,
                 $"restore:{Current.StateHash}");
             return Task.FromResult(_lastPlan);
         }
@@ -437,6 +526,11 @@ public sealed class NetworkMutationConcurrencyTests
         {
             cancellationToken.ThrowIfCancellationRequested();
             trace.Add("validate");
+            ValidationCount++;
+            if (ValidationFailureAfter is { } limit && ValidationCount > limit)
+            {
+                throw new InvalidOperationException("The native baseline changed before retention.");
+            }
             return Task.CompletedTask;
         }
 

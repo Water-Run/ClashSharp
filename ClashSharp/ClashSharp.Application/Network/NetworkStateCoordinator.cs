@@ -1,5 +1,6 @@
 using ClashSharp.ApplicationModel.Lifecycle;
 using ClashSharp.ApplicationModel.Mutations;
+using ClashSharp.Model;
 
 namespace ClashSharp.ApplicationModel.Network;
 
@@ -393,9 +394,28 @@ internal sealed class NetworkMutationParticipant(
 
     public async Task ApplyAsync(MutationContext context, CancellationToken cancellationToken)
     {
+        if (CanPreserveActiveTunOnShutdown())
+        {
+            // A retained service-owned TUN already satisfies this exit policy. Revalidate
+            // its complete baseline immediately before retention instead of reloading the
+            // core and dropping established connections. Verification and durable commit
+            // still run through the ordinary journaled shutdown path.
+            await adapter.ValidateAsync(plan, cancellationToken).ConfigureAwait(false);
+            _applied = true;
+            return;
+        }
+
         await adapter.ApplyAsync(plan, cancellationToken).ConfigureAwait(false);
         _applied = true;
     }
+
+    private bool CanPreserveActiveTunOnShutdown() =>
+        plan.Intent.Kind == NetworkIntentKind.Shutdown
+        && plan.Intent.Mode is ClashSharpMode.RuleTakeover or ClashSharpMode.FullTakeover
+        && plan.Intent.TransparentProxyEnabled
+        && plan.Baseline is { IsKnown: true, CoreRunning: true, TransparentProxyEnabled: true, SystemProxyEnabled: false }
+        && plan.Baseline == plan.Desired
+        && StringComparer.Ordinal.Equals(plan.BaselineHash, plan.DesiredHash);
 
     public async Task VerifyAsync(MutationContext context, CancellationToken cancellationToken)
     {
