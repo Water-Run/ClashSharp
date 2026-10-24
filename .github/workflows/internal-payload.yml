@@ -1,0 +1,104 @@
+name: Audit an existing internal candidate
+run-name: Audit existing candidate ${{ inputs.candidate_run_id }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_run_id:
+        description: Completed internal-candidate.yml run with a successful producer
+        required: true
+        type: string
+      artifact_id:
+        description: Exact immutable producer artifact ID
+        required: true
+        type: string
+      source_commit:
+        description: Product source commit from the trusted producer
+        required: true
+        type: string
+      archive_sha256:
+        description: Independently retained original candidate ZIP SHA256
+        required: true
+        type: string
+      identity_sha256:
+        description: Independently retained original candidate identity
+        required: true
+        type: string
+      authenticode_thumbprint:
+        description: Exact temporary Installer signer from the trusted producer
+        required: true
+        type: string
+      msix_thumbprint:
+        description: Exact temporary primary signer from the trusted producer
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  audit:
+    name: Recheck original internal candidate (windows-server)
+    runs-on: windows-2025
+    timeout-minutes: 15
+    steps:
+      - name: Require mainline manual dispatch
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_REF -cne 'refs/heads/main' -or $env:GITHUB_EVENT_NAME -cne 'workflow_dispatch') { throw 'Internal checks require a manual mainline dispatch.' }
+
+      - name: Check out trusted collector
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+
+      - name: Verify successful producer provenance
+        id: source
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+          CANDIDATE_ARTIFACT_ID: ${{ inputs.artifact_id }}
+        run: |
+          $null = [IO.Directory]::CreateDirectory((Join-Path $PWD 'artifacts/validation'))
+          $reference = ./Tools/Get-InternalCandidateSource.ps1 -RunId $env:CANDIDATE_RUN_ID -ArtifactId $env:CANDIDATE_ARTIFACT_ID -OutputPath (Join-Path $PWD 'artifacts/validation/internal-source.json')
+          "run_id=$($reference.runId)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "artifact_id=$($reference.artifactId)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Download original immutable candidate
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ steps.source.outputs.run_id }}
+          artifact-ids: ${{ steps.source.outputs.artifact_id }}
+          merge-multiple: true
+          path: transport-input
+
+      - name: Audit original candidate bytes
+        shell: pwsh
+        env:
+          PRODUCT_SOURCE_COMMIT: ${{ inputs.source_commit }}
+          EXPECTED_ARCHIVE_SHA256: ${{ inputs.archive_sha256 }}
+          EXPECTED_IDENTITY_SHA256: ${{ inputs.identity_sha256 }}
+          EXPECTED_AUTHENTICODE_THUMBPRINT: ${{ inputs.authenticode_thumbprint }}
+          EXPECTED_MSIX_THUMBPRINT: ${{ inputs.msix_thumbprint }}
+        run: |
+          ./Tools/Invoke-InternalCandidateAudit.ps1 -ArchivePath (Join-Path $PWD 'transport-input/internal-candidate.zip') -ExpectedArchiveSha256 $env:EXPECTED_ARCHIVE_SHA256 -ExpectedIdentitySha256 $env:EXPECTED_IDENTITY_SHA256 -SourceCommit $env:PRODUCT_SOURCE_COMMIT -AuthenticodeThumbprint $env:EXPECTED_AUTHENTICODE_THUMBPRINT -MsixThumbprint $env:EXPECTED_MSIX_THUMBPRINT -ExpectedPlatform windows-server -OutputDirectory (Join-Path $PWD 'artifacts/internal-audit')
+          'Original candidate retained: independent read-only payload check passed. No rebuild, signing or installation was performed.' | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+
+      - name: Retain independent evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: existing-internal-payload-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            artifacts/validation/internal-source.json
+            artifacts/internal-audit/internal-audit-result.json
+            artifacts/internal-audit/archive-received.json
+            artifacts/internal-audit/payload/process.json
+            artifacts/internal-audit/payload/stdout.json
+            artifacts/internal-audit/payload/stderr.txt
+            artifacts/internal-audit/payload/payload-execution.json
+          if-no-files-found: warn
+          retention-days: 5

@@ -25,3 +25,11 @@ InternalSigning.psm1在密钥创建前保留已确认不存在的独立CNG容器
 Invoke-InternalCandidateAudit.ps1先检查干净控制器及真实CIM平台／x64，再固定归档读取句柄，展开准确字节，核对源码及内部签名引用。实际Installer签名元数据必须匹配独立指纹且含时间戳；不导入生产作业临时Root，Windows链状态如实记录，不声称再次完成信任／撤销验证。只有既有固定--verify-payload入口可执行，进程、终态、规范载荷回执及原归档引用一并保留。
 
 当前矩阵只有windows-2025／windows-server；Server即使build26100也不算Win11。成功范围仅installer-read-only-payload；installationVerified、win11AcceptanceSatisfied、publicReleaseAuthorized和promotionAuthorized仍为false。独立收集器、实际源码及平台都记录在回执中。完整安装、标准用户／替代管理员、恢复／重启／故障、真实Win11界面及受保护公共签名发行仍须另外完成。
+
+## 复用已生产的同一候选
+
+internal-payload.yml提供单独的手动收集入口。调用者从可信生产操作独立保留源run／artifact ID、原ZIP摘要、候选身份和两个签名指纹；新作业先用Get-InternalCandidateSource.ps1读取新鲜API，确认同仓库main手动生产工作流、完整job列表、成功生产作业及全部关键步骤、准确artifact名称／ID／来源／digest／有效期。元数据不是字节验证或执行批准，输入引用仍须由可信调用者选择。
+
+来源工作流可因后续收集器失败而整体failure，但生产作业必须实际成功；回执分别记录sourceWorkflowConclusion与producerExecutionVerified，acceptanceVerified和promotionAuthorized保持false。这样可以保留原artifact，在新隔离作业中重验相同字节，不重新构建或签名。来源解析契约属于收集控制器，不追溯改写旧候选已有的产品CI事实。
+
+跨run按已验证artifact ID下载，独立SHA和指纹继续直接传给原审计器；不会从下载的JSON自行挑选批准值。收集作业显式准备证据父目录，操作目录仍须全新，失败现场保留。新入口只有读权限、固定动作及窄范围证据上传，不调用构建、签名或证书导入。

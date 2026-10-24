@@ -93,6 +93,11 @@ jobs:
         shell: pwsh
         run: ./ClashSharp/Installer/Test-InternalCandidateContract.ps1
 
+      - name: Verify existing internal candidate source contract
+        if: steps.scope.outputs.product != 'false'
+        shell: pwsh
+        run: ./eng/Test-InternalCandidateSourceContract.ps1
+
       - name: Verify bounded Authenticode signing contract
         if: steps.scope.outputs.product != 'false'
         shell: pwsh

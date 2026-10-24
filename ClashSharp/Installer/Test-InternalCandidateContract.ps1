@@ -39,6 +39,24 @@ $publicPaths=@([regex]::Matches($yaml,'(?m)^            artifacts/internal-opera
 Assert-Condition (($publicPaths -join ',') -ceq 'internal-candidate.zip,candidate-identity.json,ci-evidence.json,internal-candidate-result.json') 'Only four exact public output files may be uploaded.'
 Assert-Condition ($yaml.Contains('artifacts/internal-operation/build.log') -and $yaml.Contains('artifacts/internal-operation/operation-result.json') -and $yaml.Contains('if: failure()')) 'Failed builds must retain logs and actual cleanup observations.'
 Assert-Condition ($yaml.Contains('Installation, Win11 UI and public promotion remain separate gates.')) 'Workflow summary must preserve its actual read-only scope.'
+$collectorRun=[regex]::Match($yaml,'(?ms)^      - name: Receive and audit original candidate bytes.*?^        run: \|\r?\n(?<body>(?:^          [^\r\n]*\r?\n)+)')
+$runErrors=$null
+$runAst=[Management.Automation.Language.Parser]::ParseInput($collectorRun.Groups['body'].Value,[ref]$null,[ref]$runErrors)
+if(-not $collectorRun.Success -or $runErrors){throw 'Actual collector workflow body must parse.'}
+$firstStatement=$runAst.EndBlock.Statements[0]
+if($firstStatement -isnot [Management.Automation.Language.AssignmentStatementAst] -or
+ $firstStatement.Extent.Text -cnotmatch "^\`$null\s*=\s*\[IO\.Directory\]::CreateDirectory\(\(Join-Path \`$PWD 'artifacts'\)\)\s*\z"){throw 'Collector must prepare only its output parent before executing the audit.'}
+$parentFixture=Join-Path ([IO.Path]::GetTempPath()) ('clashsharp-workflow-parent-'+[Guid]::NewGuid().ToString('N'))
+$null=[IO.Directory]::CreateDirectory($parentFixture)
+Push-Location -LiteralPath $parentFixture
+try{
+ $null=& ([scriptblock]::Create($firstStatement.Extent.Text))
+ Assert-Condition ([IO.Directory]::Exists((Join-Path $parentFixture 'artifacts')) -and -not [IO.Directory]::Exists((Join-Path $parentFixture 'artifacts/internal-audit'))) 'Actual workflow prelude must prepare the parent while keeping the audit output new.'
+}finally{
+ Pop-Location
+ if([IO.Directory]::Exists((Join-Path $parentFixture 'artifacts'))){[IO.Directory]::Delete((Join-Path $parentFixture 'artifacts'))}
+ [IO.Directory]::Delete($parentFixture)
+}
 
 $creator=Get-Content "$repository/Tools/New-InternalCandidate.ps1" -Raw
 $auditor=Get-Content "$repository/Tools/Invoke-InternalCandidateAudit.ps1" -Raw
