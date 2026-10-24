@@ -43,6 +43,35 @@ Assert-Condition ($yaml.Contains('Installation, Win11 UI and public promotion re
 $creator=Get-Content "$repository/Tools/New-InternalCandidate.ps1" -Raw
 $auditor=Get-Content "$repository/Tools/Invoke-InternalCandidateAudit.ps1" -Raw
 $signing=Get-Content (Join-Path $PSScriptRoot 'InternalSigning.psm1') -Raw
+foreach($path in @("$repository/Tools/New-InternalCandidate.ps1","$repository/Tools/Invoke-InternalCandidateAudit.ps1")){
+ $ast=[Management.Automation.Language.Parser]::ParseFile($path,[ref]$null,[ref]$null)
+ $imports=@($ast.FindAll({param($node)$node -is [Management.Automation.Language.CommandAst] -and $node.GetCommandName() -ceq 'Import-Module'},$true))
+ Assert-Condition ($imports.Count -ge 2) 'Each controller must declare its actual module composition.'
+ $resolved=& {
+  param($commands,$root)
+  $controllerRoot=$root;$repository=$root
+  foreach($command in $commands){$null=& ([scriptblock]::Create($command.Extent.Text))}
+  $fixture=Join-Path ([IO.Path]::GetTempPath()) ('clashsharp-composition-'+[Guid]::NewGuid().ToString('N'))
+  $null=[IO.Directory]::CreateDirectory($fixture)
+  $sentinel=Join-Path $fixture 'existing-material.txt';[IO.File]::WriteAllText($sentinel,'non-executable fixture')
+  $owned=[pscustomobject]@{lease=$null}
+  try{
+   if(@($commands|Where-Object {$_.Extent.Text.Contains('InternalSigning.psm1')}).Count){
+    $admin=[Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent())
+    $expected=if($admin.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)){'internal-signing.existing-material'}else{'internal-signing.elevated-disposable-context-required'}
+    Assert-Rejected {$owned.lease=New-ClashSharpInternalSigningLease -Publisher 'CN=Composition fixture' -SigningDirectory $fixture} $expected
+   }else{
+    Assert-Rejected {Get-ClashSharpCandidateFileSnapshot -ReleaseDirectory $fixture -Consume {param($files)$files}} 'candidate.file-inventory'
+   }
+  }finally{
+   if($null -ne $owned.lease){$null=Close-ClashSharpInternalSigningLease -Lease $owned.lease}
+   Remove-Item -LiteralPath $sentinel
+   [IO.Directory]::Delete($fixture)
+  }
+  Assert-ClashSharpOrdinaryPath -LiteralPath $root -RequireDirectory
+ } $imports $repository
+ Assert-Condition ($resolved -ceq $repository) 'Actual production import order must keep path validation visible in the controller scope.'
+}
 Assert-Condition ($creator.Contains('Close-ClashSharpInternalSigningLease') -and $creator.IndexOf('Close-ClashSharpInternalSigningLease') -lt $creator.IndexOf('$result.temporarySigningMaterialRemoved=$true')) 'Successful references require observed key and trust cleanup.'
 Assert-Condition ($creator.Contains('New-SignedCandidateIdentity.ps1') -and $creator.Contains('New-CandidateArchive.ps1') -and -not $creator.Contains('build.ps1 -Development')) 'Formal-shaped internal output must retain existing signature, identity and archive gates.'
 Assert-Condition ($creator.Contains('publicReleaseAuthorized=$false;promotionAuthorized=$false')) 'Self-signed producer cannot authorize a public release.'

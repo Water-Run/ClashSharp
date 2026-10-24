@@ -51,6 +51,10 @@ jobs:
           $hash = (Get-FileHash ./artifacts/validation/product-ci-artifact-evidence.json).Hash.ToLowerInvariant()
           "evidence_sha256=$hash" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
+      - name: Verify actual controller composition
+        shell: pwsh
+        run: ./ClashSharp/Installer/Test-InternalCandidateContract.ps1
+
       - name: Check out exact product source
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:

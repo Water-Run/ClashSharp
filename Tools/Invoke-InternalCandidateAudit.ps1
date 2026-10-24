@@ -37,9 +37,9 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 $repository=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
-Import-Module "$repository/ClashSharp/Installer/PackagingContract.psm1" -Force
 Import-Module "$repository/ClashSharp/Installer/CandidateAcceptance.psm1" -Force
 Import-Module "$repository/ClashSharp/Installer/CandidateIdentity.psm1" -Force
+Import-Module "$repository/ClashSharp/Installer/PackagingContract.psm1" -Force
 $git=(Get-Command git -CommandType Application|Select-Object -First 1).Source
 $toolCommit=[string](& $git -C $repository rev-parse HEAD)
 if($LASTEXITCODE -or $toolCommit -cnotmatch '^[0-9a-f]{40}\z'){throw 'internal-audit.controller-identity'}

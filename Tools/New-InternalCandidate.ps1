@@ -35,8 +35,8 @@ if($env:GITHUB_ACTIONS -cne 'true' -or $env:GITHUB_REPOSITORY -cne 'Water-Run/Cl
     throw 'internal-candidate.disposable-mainline-ci-required'
 }
 $controllerRoot=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
-Import-Module "$controllerRoot/ClashSharp/Installer/PackagingContract.psm1" -Force
 Import-Module "$controllerRoot/ClashSharp/Installer/InternalSigning.psm1" -Force
+Import-Module "$controllerRoot/ClashSharp/Installer/PackagingContract.psm1" -Force
 $source=Assert-ClashSharpOrdinaryPath -LiteralPath $RepositoryRoot -RequireDirectory
 $git=(Get-Command git -CommandType Application|Select-Object -First 1).Source
 $toolCommit=[string](& $git -C $controllerRoot rev-parse HEAD)
