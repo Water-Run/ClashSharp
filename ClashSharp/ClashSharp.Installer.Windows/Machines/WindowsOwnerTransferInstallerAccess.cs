@@ -66,7 +66,8 @@ internal sealed class WindowsOwnerTransferInstallerAccess
             _backend.VerifyServiceAbsent(cancellationToken);
             await VerifyStateAsync(tree, plan, requireTransferred: true, cancellationToken).ConfigureAwait(false);
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or Win32Exception)
+        catch (Exception exception) when (!ClashSharp.Installer.Contracts.InstallerExceptionPolicy.IsProcessFatal(exception)
+            && (exception is IOException or UnauthorizedAccessException or Win32Exception))
         {
             throw new InstallerProtocolException("installer.owner_transfer.installer_access_failed");
         }

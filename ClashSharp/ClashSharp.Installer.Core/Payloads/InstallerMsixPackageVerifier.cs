@@ -94,12 +94,13 @@ public static class InstallerMsixPackageVerifier
         {
             throw;
         }
-        catch (Exception exception) when (exception is IOException
+        catch (Exception exception) when (!ClashSharp.Installer.Contracts.InstallerExceptionPolicy.IsProcessFatal(exception)
+            && (exception is IOException
             or InvalidDataException
             or NotSupportedException
             or UnauthorizedAccessException
             or DecoderFallbackException
-            or XmlException)
+            or XmlException))
         {
             throw new InstallerProtocolException(
                 "installer.release.package_metadata_invalid",

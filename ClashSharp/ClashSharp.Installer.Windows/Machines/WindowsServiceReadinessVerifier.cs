@@ -97,7 +97,8 @@ internal sealed class WindowsServiceReadinessVerifier
         {
             throw new InstallerProtocolException("installer.machine.service_readiness_timeout", exception);
         }
-        catch (Exception exception) when (exception is IOException or Win32Exception or UnauthorizedAccessException)
+        catch (Exception exception) when (!ClashSharp.Installer.Contracts.InstallerExceptionPolicy.IsProcessFatal(exception)
+            && (exception is IOException or Win32Exception or UnauthorizedAccessException))
         {
             throw new InstallerProtocolException("installer.machine.service_readiness_failed", exception);
         }

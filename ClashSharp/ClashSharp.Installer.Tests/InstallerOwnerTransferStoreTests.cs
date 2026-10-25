@@ -5,6 +5,29 @@ namespace ClashSharp.Installer.Tests;
 
 public sealed class InstallerOwnerTransferStoreTests
 {
+    [Theory]
+    [InlineData("aggregate")]
+    [InlineData("protocol")]
+    [InlineData("cancel")]
+    [InlineData("io")]
+    public async Task FatalReadAfterWritePreservesCauseAndCommittedJournal(string wrapper)
+    {
+        Exception cause = InstallerFatalFailureTests.Fatal("memory");
+        Exception failure = wrapper == "io" ? new IOException("Wrapper", cause)
+            : InstallerFatalFailureTests.Wrap(wrapper, cause, CancellationToken.None);
+        var persistence = new FakePersistence();
+        persistence.OnMutation = () => persistence.BeforeRead = _ => Task.FromException(failure);
+        var store = new InstallerOwnerTransferStore(persistence);
+        InstallerOwnerTransferJournal journal = InstallerOwnerTransferJournalTests.CreateJournal();
+
+        Assert.Same(failure, await Record.ExceptionAsync(() =>
+            store.SaveAsync(journal, null, CancellationToken.None)));
+        persistence.BeforeRead = null;
+        Assert.Equal(journal, (await store.LoadAsync(CancellationToken.None))?.Journal);
+        Assert.Equal(1, persistence.WriteCalls);
+        Assert.Equal(0, persistence.DeleteCalls);
+    }
+
     [Fact]
     public async Task CreateAdvanceAndReplayObserveTheSameDurableEvidenceWithoutRewritingReplay()
     {

@@ -60,7 +60,8 @@ internal sealed class WindowsMaintenanceRecoveryCoordinator : IDisposable
             using IWindowsMaintenanceOriginalSession original = await _sessions.OpenAsync(Request(state), release, cancellationToken).ConfigureAwait(false);
             baseline = await original.CaptureAsync(state.Journal, cancellationToken).ConfigureAwait(false);
         }
-        catch (InstallerProtocolException exception) when (!exception.DiagnosticCode.StartsWith("installer.release.", StringComparison.Ordinal))
+        catch (InstallerProtocolException exception) when (!InstallerExceptionPolicy.IsProcessFatal(exception)
+            && !exception.DiagnosticCode.StartsWith("installer.release.", StringComparison.Ordinal))
         {
             // A damaged installation must remain repairable. This durable marker prevents later
             // retries from mistaking fenced or partially repaired state for the original.

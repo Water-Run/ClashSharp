@@ -253,7 +253,8 @@ internal sealed class WindowsMachineHelperBroker :
         {
             server = _serverFactory.Create(bootstrap);
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        catch (Exception exception) when (!ClashSharp.Installer.Contracts.InstallerExceptionPolicy.IsProcessFatal(exception)
+            && (exception is IOException or UnauthorizedAccessException))
         {
             // A second parent resuming the same transaction cannot create the first-instance
             // pipe while its existing helper session is alive. No elevation has started here.

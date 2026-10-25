@@ -299,7 +299,7 @@ internal sealed class WindowsMachineHelperMachineOperations
                 _backend.VerifyProfileIndependentRemovalPostcondition(cancellationToken);
                 return;
             }
-            catch (InstallerProtocolException removedFailure)
+            catch (InstallerProtocolException removedFailure) when (!InstallerExceptionPolicy.IsProcessFatal(removedFailure))
             {
                 try
                 {
@@ -321,7 +321,7 @@ internal sealed class WindowsMachineHelperMachineOperations
                     return;
                 }
                 catch (InstallerProtocolException profileIndependentFailure) when (
-                    string.Equals(
+                    !InstallerExceptionPolicy.IsProcessFatal(profileIndependentFailure) && string.Equals(
                         profileIndependentFailure.DiagnosticCode,
                         "installer.machine.removal_not_authorized",
                         StringComparison.Ordinal))
@@ -330,7 +330,7 @@ internal sealed class WindowsMachineHelperMachineOperations
                 }
             }
         }
-        catch (InstallerProtocolException exception)
+        catch (InstallerProtocolException exception) when (!InstallerExceptionPolicy.IsProcessFatal(exception))
         {
             authorizationFailure = exception;
         }
@@ -551,7 +551,7 @@ internal sealed class WindowsMachineHelperMachineOperations
                 _backend.VerifyProfileIndependentRemovalPostcondition(cancellationToken);
                 return null;
             }
-            catch (InstallerProtocolException removedFailure)
+            catch (InstallerProtocolException removedFailure) when (!InstallerExceptionPolicy.IsProcessFatal(removedFailure))
             {
                 try
                 {
@@ -562,7 +562,7 @@ internal sealed class WindowsMachineHelperMachineOperations
                         .ConfigureAwait(false);
                 }
                 catch (InstallerProtocolException profileIndependentFailure) when (
-                    string.Equals(
+                    !InstallerExceptionPolicy.IsProcessFatal(profileIndependentFailure) && string.Equals(
                         profileIndependentFailure.DiagnosticCode,
                         "installer.machine.removal_not_authorized",
                         StringComparison.Ordinal))
@@ -758,7 +758,7 @@ internal sealed class WindowsMachineHelperMachineOperations
     }
 
     private static bool IsTargetProfileMissing(InstallerProtocolException exception) =>
-        string.Equals(
+        !InstallerExceptionPolicy.IsProcessFatal(exception) && string.Equals(
             exception.DiagnosticCode,
             TargetProfileMissingDiagnosticCode,
             StringComparison.Ordinal);

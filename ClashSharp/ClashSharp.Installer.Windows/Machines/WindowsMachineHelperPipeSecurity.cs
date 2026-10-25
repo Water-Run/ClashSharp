@@ -78,9 +78,10 @@ internal static class WindowsMachineHelperPipeSecurity
         {
             throw;
         }
-        catch (Exception exception) when (exception is Win32Exception
+        catch (Exception exception) when (!ClashSharp.Installer.Contracts.InstallerExceptionPolicy.IsProcessFatal(exception)
+            && (exception is Win32Exception
             or ArgumentException
-            or UnauthorizedAccessException)
+            or UnauthorizedAccessException))
         {
             throw new InstallerProtocolException(
                 "installer.machine_helper.logon_identity_invalid",

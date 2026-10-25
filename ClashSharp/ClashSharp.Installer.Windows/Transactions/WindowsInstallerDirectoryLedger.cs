@@ -157,7 +157,8 @@ internal static class WindowsInstallerDirectoryLedgerCodec
             }
             return ledger;
         }
-        catch (Exception exception) when (exception is JsonException or InvalidOperationException or FormatException or OverflowException)
+        catch (Exception exception) when (!ClashSharp.Installer.Contracts.InstallerExceptionPolicy.IsProcessFatal(exception)
+            && (exception is JsonException or InvalidOperationException or FormatException or OverflowException))
         {
             throw new InstallerProtocolException("installer.directory_ledger.document_invalid", exception);
         }

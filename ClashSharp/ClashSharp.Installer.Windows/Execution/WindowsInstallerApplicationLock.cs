@@ -114,7 +114,8 @@ internal sealed class WindowsInstallerApplicationLock : IWindowsInstallerApplica
             }
             return new ApplicationLockLease(targetSid, handles, identities);
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or Win32Exception)
+        catch (Exception exception) when (!ClashSharp.Installer.Contracts.InstallerExceptionPolicy.IsProcessFatal(exception)
+            && (exception is IOException or UnauthorizedAccessException or Win32Exception))
         {
             DisposeHandles(handles);
             throw new InstallerProtocolException("installer.application_lock.unavailable", exception);

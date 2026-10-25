@@ -49,7 +49,7 @@ internal sealed class WindowsRetiredUninstallHost(
         {
             handoff = await authorityFactory.CreateAsync(request, deadline.Token).ConfigureAwait(false);
         }
-        catch (InstallerProtocolException exception)
+        catch (InstallerProtocolException exception) when (!InstallerExceptionPolicy.IsProcessFatal(exception))
         {
             await InstallerRetiredUninstallProtocol.WriteFailureAsync(client.Transport, exception.DiagnosticCode, deadline.Token).ConfigureAwait(false);
             return;

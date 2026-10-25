@@ -99,7 +99,8 @@ internal sealed class WindowsInstallerEmptyDirectoryFinalizer
             if (!directory.IsEmpty) { return InstallerDirectoryCleanupDisposition.RetainedNonEmpty; }
             cancellationToken.ThrowIfCancellationRequested();
             try { directory.DeleteEmpty(); }
-            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or Win32Exception)
+            catch (Exception exception) when (!ClashSharp.Installer.Contracts.InstallerExceptionPolicy.IsProcessFatal(exception)
+            && (exception is IOException or UnauthorizedAccessException or Win32Exception))
             {
                 deletionFailure = exception;
             }
@@ -157,7 +158,8 @@ internal sealed class WindowsInstallerEmptyDirectoryNative : IWindowsInstallerEm
             anchor?.Dispose();
             return null;
         }
-        catch (Exception exception) when (exception is FileNotFoundException or DirectoryNotFoundException)
+        catch (Exception exception) when (!ClashSharp.Installer.Contracts.InstallerExceptionPolicy.IsProcessFatal(exception)
+            && (exception is FileNotFoundException or DirectoryNotFoundException))
         {
             handle?.Dispose();
             anchor?.Dispose();

@@ -65,7 +65,8 @@ internal sealed class WindowsPackageDeploymentPreflight(
                     manifest.Files.Single(entry => entry.Path == dependency.Path), cancellationToken);
             }
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
+        catch (Exception exception) when (!ClashSharp.Installer.Contracts.InstallerExceptionPolicy.IsProcessFatal(exception)
+            && (exception is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception))
         {
             throw new InstallerProtocolException("installer.package.content_inspection_failed", exception);
         }

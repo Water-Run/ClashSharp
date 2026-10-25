@@ -58,7 +58,8 @@ internal sealed class WindowsOwnerTransferMachineAccess
             tree.Reverify(requireTransferred: true, cancellationToken);
             tree.VerifyContinuation(current.Continuation);
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or Win32Exception)
+        catch (Exception exception) when (!ClashSharp.Installer.Contracts.InstallerExceptionPolicy.IsProcessFatal(exception)
+            && (exception is IOException or UnauthorizedAccessException or Win32Exception))
         {
             // Preserve the durable phase and completed ACL changes for exact replay; never expose
             // native paths or identities in an exception that could cross the helper boundary.

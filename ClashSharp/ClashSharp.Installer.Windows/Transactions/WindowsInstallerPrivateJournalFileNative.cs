@@ -226,7 +226,8 @@ internal sealed class WindowsInstallerPrivateJournalFileNative :
             file?.Dispose();
             return null;
         }
-        catch (Exception exception) when (exception is Win32Exception or IOException or UnauthorizedAccessException)
+        catch (Exception exception) when (!ClashSharp.Installer.Contracts.InstallerExceptionPolicy.IsProcessFatal(exception)
+            && (exception is Win32Exception or IOException or UnauthorizedAccessException))
         {
             file?.Dispose();
             throw Failure("file_open_failed");
@@ -270,7 +271,8 @@ internal sealed class WindowsInstallerPrivateJournalFileNative :
 
             File.Delete(path);
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InstallerProtocolException)
+        catch (Exception exception) when (!InstallerExceptionPolicy.IsProcessFatal(exception)
+            && exception is (IOException or UnauthorizedAccessException or InstallerProtocolException))
         {
             // Only this invocation's random temporary path is eligible for cleanup. An abandoned
             // private temporary is never trusted as journal state or removed by a subsequent writer.

@@ -101,7 +101,8 @@ internal sealed class WindowsMaintenancePackageStateLease : IDisposable
             returned = true;
             return lease;
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or Win32Exception)
+        catch (Exception exception) when (!ClashSharp.Installer.Contracts.InstallerExceptionPolicy.IsProcessFatal(exception)
+            && (exception is IOException or UnauthorizedAccessException or Win32Exception))
         {
             throw new InstallerProtocolException("installer.recovery.original_package_contents_inspection_failed", exception);
         }
@@ -151,7 +152,8 @@ internal sealed class WindowsMaintenancePackageStateLease : IDisposable
                 }
             }
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or Win32Exception)
+        catch (Exception exception) when (!ClashSharp.Installer.Contracts.InstallerExceptionPolicy.IsProcessFatal(exception)
+            && (exception is IOException or UnauthorizedAccessException or Win32Exception))
         {
             throw new InstallerProtocolException("installer.recovery.original_package_contents_inspection_failed", exception);
         }

@@ -272,7 +272,8 @@ public sealed class FileInstallerCertificateOwnershipStore :
         {
             return false;
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        catch (Exception exception) when (!ClashSharp.Installer.Contracts.InstallerExceptionPolicy.IsProcessFatal(exception)
+            && (exception is IOException or UnauthorizedAccessException))
         {
             throw new InstallerProtocolException(
                 "installer.certificate.target_query_failed",

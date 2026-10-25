@@ -125,7 +125,8 @@ internal sealed class WindowsRetiredUninstallSharedState : IWindowsRetiredUninst
             cancellationToken.ThrowIfCancellationRequested();
             return Task.CompletedTask;
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or Win32Exception)
+        catch (Exception exception) when (!ClashSharp.Installer.Contracts.InstallerExceptionPolicy.IsProcessFatal(exception)
+            && (exception is IOException or UnauthorizedAccessException or Win32Exception))
         {
             throw new InstallerProtocolException("installer.retired_uninstall.shared_inspection_failed");
         }
@@ -304,7 +305,8 @@ internal sealed class WindowsRetiredUninstallObservationNative : IWindowsRetired
             _ = File.GetAttributes(path);
             return true;
         }
-        catch (Exception exception) when (exception is FileNotFoundException or DirectoryNotFoundException)
+        catch (Exception exception) when (!ClashSharp.Installer.Contracts.InstallerExceptionPolicy.IsProcessFatal(exception)
+            && (exception is FileNotFoundException or DirectoryNotFoundException))
         {
             return false;
         }

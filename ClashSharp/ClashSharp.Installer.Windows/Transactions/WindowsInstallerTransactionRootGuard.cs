@@ -484,9 +484,10 @@ public sealed class WindowsInstallerTransactionRootGuard :
         {
             throw;
         }
-        catch (Exception exception) when (exception is ArgumentException
+        catch (Exception exception) when (!ClashSharp.Installer.Contracts.InstallerExceptionPolicy.IsProcessFatal(exception)
+            && (exception is ArgumentException
             or IOException
-            or NotSupportedException)
+            or NotSupportedException))
         {
             throw new InstallerProtocolException(
                 "installer.transaction.root_path_invalid",

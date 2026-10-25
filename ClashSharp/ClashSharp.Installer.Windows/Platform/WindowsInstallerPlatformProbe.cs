@@ -81,7 +81,8 @@ public sealed class WindowsInstallerPlatformProbe : IInstallerPlatformProbe
             using RegistryKey? version = machine.OpenSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion", writable: false);
             return version?.GetValue("InstallationType", null, RegistryValueOptions.DoNotExpandEnvironmentNames) as string;
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SecurityException)
+        catch (Exception exception) when (!ClashSharp.Installer.Contracts.InstallerExceptionPolicy.IsProcessFatal(exception)
+            && (exception is IOException or UnauthorizedAccessException or SecurityException))
         {
             return null;
         }

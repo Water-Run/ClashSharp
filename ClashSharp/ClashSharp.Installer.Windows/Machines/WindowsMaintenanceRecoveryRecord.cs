@@ -186,7 +186,8 @@ internal sealed class WindowsMaintenanceRecoveryRecord
             finally { CryptographicOperations.ZeroMemory(canonical); }
             return record;
         }
-        catch (Exception exception) when (exception is JsonException or ArgumentException or InvalidOperationException)
+        catch (Exception exception) when (!ClashSharp.Installer.Contracts.InstallerExceptionPolicy.IsProcessFatal(exception)
+            && (exception is JsonException or ArgumentException or InvalidOperationException))
         {
             throw new InstallerProtocolException("installer.recovery.record_invalid", exception);
         }

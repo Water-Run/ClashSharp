@@ -97,9 +97,10 @@ internal static class WindowsInstallerPayloadLocker
                 lockedFiles,
                 directoryGuards);
         }
-        catch (Exception exception) when (exception is IOException
+        catch (Exception exception) when (!ClashSharp.Installer.Contracts.InstallerExceptionPolicy.IsProcessFatal(exception)
+            && (exception is IOException
             or UnauthorizedAccessException
-            or Win32Exception)
+            or Win32Exception))
         {
             DisposeAll(lockedFiles, directoryGuards);
             throw new InstallerProtocolException("installer.release.payload_lock_failed", exception);

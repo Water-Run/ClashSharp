@@ -142,7 +142,8 @@ public static class InstallerOwnerTransferFraming
             }
             return value;
         }
-        catch (Exception exception) when (exception is JsonException or InvalidOperationException or KeyNotFoundException or FormatException)
+        catch (Exception exception) when (!ClashSharp.Installer.Contracts.InstallerExceptionPolicy.IsProcessFatal(exception)
+            && (exception is JsonException or InvalidOperationException or KeyNotFoundException or FormatException))
         {
             throw new InstallerProtocolException("installer.owner_transfer.frame_invalid", exception);
         }

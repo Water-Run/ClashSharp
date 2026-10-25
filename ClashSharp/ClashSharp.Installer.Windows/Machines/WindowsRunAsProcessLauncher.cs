@@ -150,11 +150,13 @@ internal sealed class WindowsRunAsProcessLauncher : IWindowsRunAsProcessLauncher
                     "installer.elevation.process_missing");
             completion.TrySetResult(new WindowsElevatedHelperProcess(process));
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException exception) when (
+            cancellationToken.IsCancellationRequested && !InstallerExceptionPolicy.IsProcessFatal(exception))
         {
             completion.TrySetCanceled(cancellationToken);
         }
-        catch (Win32Exception exception) when (exception.NativeErrorCode == ErrorCancelled)
+        catch (Win32Exception exception) when (
+            exception.NativeErrorCode == ErrorCancelled && !InstallerExceptionPolicy.IsProcessFatal(exception))
         {
             completion.TrySetException(new InstallerUserCancelledException(
                 "installer.elevation.user_cancelled"));

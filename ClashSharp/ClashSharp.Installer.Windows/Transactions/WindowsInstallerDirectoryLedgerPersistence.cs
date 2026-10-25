@@ -319,7 +319,8 @@ internal sealed class WindowsInstallerDirectoryLedgerFileNative : IWindowsInstal
                 DeleteHandle(temporary);
             }
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or Win32Exception or InstallerProtocolException)
+        catch (Exception exception) when (!InstallerExceptionPolicy.IsProcessFatal(exception)
+            && exception is (IOException or UnauthorizedAccessException or Win32Exception or InstallerProtocolException))
         {
             // Never adopt or delete a temporary from a different call, or one whose identity changed.
         }

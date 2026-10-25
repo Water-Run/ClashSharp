@@ -164,7 +164,8 @@ public sealed class InstallerArchivedCertificateStore : IInstallerArchivedCertif
         {
             bytes = await _persistence.ReadAsync(cancellationToken).ConfigureAwait(false);
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        catch (Exception exception) when (!ClashSharp.Installer.Contracts.InstallerExceptionPolicy.IsProcessFatal(exception)
+            && (exception is IOException or UnauthorizedAccessException))
         {
             throw new InstallerProtocolException("installer.certificate_archive.read_failed");
         }
@@ -182,7 +183,7 @@ public sealed class InstallerArchivedCertificateStore : IInstallerArchivedCertif
                 ledger = InstallerCertificateOwnershipCodec.Parse(bytes);
                 canonical = InstallerCertificateOwnershipCodec.Serialize(ledger);
             }
-            catch (InstallerProtocolException)
+            catch (InstallerProtocolException exception) when (!InstallerExceptionPolicy.IsProcessFatal(exception))
             {
                 // Parser details and private account evidence must not reach the parent.
                 throw new InstallerProtocolException("installer.certificate_archive.document_invalid");
@@ -218,8 +219,9 @@ public sealed class InstallerArchivedCertificateStore : IInstallerArchivedCertif
             // Keep all caller-owned authority until this observation has actually completed.
             return await LoadCoreAsync(CancellationToken.None).ConfigureAwait(false);
         }
-        catch (Exception exception) when (exception is InstallerProtocolException
-            or InstallerStateUncertainException or OperationCanceledException)
+        catch (Exception exception) when (!ClashSharp.Installer.Contracts.InstallerExceptionPolicy.IsProcessFatal(exception)
+            && (exception is InstallerProtocolException
+            or InstallerStateUncertainException or OperationCanceledException))
         {
             throw new InstallerStateUncertainException(diagnosticCode);
         }

@@ -145,7 +145,8 @@ public sealed class InstallerRetiredUninstallStore : IInstallerTransactionStore
         cancellationToken.ThrowIfCancellationRequested();
         byte[]? bytes;
         try { bytes = await _persistence.ReadAsync(cancellationToken).ConfigureAwait(false); }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        catch (Exception exception) when (!ClashSharp.Installer.Contracts.InstallerExceptionPolicy.IsProcessFatal(exception)
+            && (exception is IOException or UnauthorizedAccessException))
         {
             throw new InstallerProtocolException("installer.retired_uninstall.read_failed");
         }
@@ -163,7 +164,7 @@ public sealed class InstallerRetiredUninstallStore : IInstallerTransactionStore
                 journal = InstallerTransactionCodec.Parse(bytes);
                 canonical = InstallerTransactionCodec.Serialize(journal);
             }
-            catch (InstallerProtocolException)
+            catch (InstallerProtocolException exception) when (!InstallerExceptionPolicy.IsProcessFatal(exception))
             {
                 throw new InstallerProtocolException("installer.retired_uninstall.document_invalid");
             }
@@ -200,7 +201,8 @@ public sealed class InstallerRetiredUninstallStore : IInstallerTransactionStore
     private async Task<InstallerTransactionSnapshot?> ReconcileAsync(string code)
     {
         try { return await LoadCoreAsync(CancellationToken.None).ConfigureAwait(false); }
-        catch (Exception exception) when (exception is InstallerProtocolException or InstallerStateUncertainException or OperationCanceledException)
+        catch (Exception exception) when (!ClashSharp.Installer.Contracts.InstallerExceptionPolicy.IsProcessFatal(exception)
+            && (exception is InstallerProtocolException or InstallerStateUncertainException or OperationCanceledException))
         {
             throw new InstallerStateUncertainException(code);
         }

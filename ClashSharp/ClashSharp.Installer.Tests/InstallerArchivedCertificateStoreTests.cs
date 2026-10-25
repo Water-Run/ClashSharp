@@ -7,6 +7,33 @@ namespace ClashSharp.Installer.Tests;
 
 public sealed class InstallerArchivedCertificateStoreTests
 {
+    [Theory]
+    [InlineData("aggregate")]
+    [InlineData("protocol")]
+    [InlineData("cancel")]
+    [InlineData("io")]
+    public async Task FatalPostMutationReadIsNotReplacedByUncertainStateAndReleasesGate(string wrapper)
+    {
+        InstallerCertificateOwnershipLedger ledger = InstallerTestData.CertificateLedger();
+        Exception cause = InstallerFatalFailureTests.Fatal("memory");
+        Exception failure = wrapper == "io" ? new IOException("Wrapper", cause)
+            : InstallerFatalFailureTests.Wrap(wrapper, cause, CancellationToken.None);
+        var files = new MemoryArchive(ledger);
+        files.AfterMutation = _ =>
+        {
+            files.BeforeRead = _ => Task.FromException(failure);
+            return Task.CompletedTask;
+        };
+        var store = new InstallerArchivedCertificateStore(ledger.TargetSid, files);
+
+        Assert.Same(failure, await Record.ExceptionAsync(() =>
+            store.ReleaseReferenceAsync(Snapshot(ledger), CancellationToken.None)));
+        Assert.Equal(1, files.SuccessfulMutations);
+        files.BeforeRead = null;
+        Assert.Equal(ledger.PrepareRemoval(), (await store.LoadAsync(CancellationToken.None))?.Ledger);
+        Assert.Equal(1, files.Writes);
+    }
+
     [Fact]
     public async Task ConstructorAndMissingReadNeverCreateOwnership()
     {

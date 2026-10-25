@@ -112,7 +112,8 @@ internal sealed class WindowsServicePreparationBaseline
             }
             return baseline;
         }
-        catch (Exception exception) when (exception is JsonException or ArgumentException or InvalidOperationException)
+        catch (Exception exception) when (!ClashSharp.Installer.Contracts.InstallerExceptionPolicy.IsProcessFatal(exception)
+            && (exception is JsonException or ArgumentException or InvalidOperationException))
         {
             throw new InstallerProtocolException("installer.recovery.service_baseline_invalid", exception);
         }

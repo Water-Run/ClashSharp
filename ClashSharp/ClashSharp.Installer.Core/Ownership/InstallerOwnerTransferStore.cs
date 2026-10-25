@@ -146,7 +146,8 @@ public sealed class InstallerOwnerTransferStore : IInstallerOwnerTransferStore
         {
             bytes = await _persistence.ReadAsync(cancellationToken).ConfigureAwait(false);
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        catch (Exception exception) when (!ClashSharp.Installer.Contracts.InstallerExceptionPolicy.IsProcessFatal(exception)
+            && (exception is IOException or UnauthorizedAccessException))
         {
             throw new InstallerProtocolException("installer.owner_transfer.read_failed");
         }
@@ -177,8 +178,9 @@ public sealed class InstallerOwnerTransferStore : IInstallerOwnerTransferStore
             // the caller still owns all authority leases instead of discarding committed evidence.
             return await LoadCoreAsync(CancellationToken.None).ConfigureAwait(false);
         }
-        catch (Exception exception) when (exception is InstallerProtocolException
-            or InstallerStateUncertainException or OperationCanceledException)
+        catch (Exception exception) when (!ClashSharp.Installer.Contracts.InstallerExceptionPolicy.IsProcessFatal(exception)
+            && (exception is InstallerProtocolException
+            or InstallerStateUncertainException or OperationCanceledException))
         {
             throw new InstallerStateUncertainException(uncertainCode);
         }

@@ -10,6 +10,22 @@ namespace ClashSharp.Installer.Windows.Tests;
 public sealed class WindowsRunAsProcessLauncherTests
 {
     [Fact]
+    public async Task WrappedFatalCancellationOnStaIsNotReplacedByCanceledCompletion()
+    {
+        WindowsPayloadFixture.AssertWindows11X64();
+        using CancellationTokenSource caller = new();
+        OperationCanceledException cause = new("Wrapper", new FatalTestException("sentinel"), caller.Token);
+        WindowsRunAsProcessLauncher launcher = new(_ =>
+        {
+            caller.Cancel();
+            throw cause;
+        });
+
+        Assert.Same(cause, await Record.ExceptionAsync(() => launcher.StartAsync(
+            ExecutablePath(), Bootstrap(), caller.Token)));
+    }
+
+    [Fact]
     public async Task LaunchUsesExactSelfPathRunasAndArgumentListOnSta()
     {
         WindowsPayloadFixture.AssertWindows11X64();

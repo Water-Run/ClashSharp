@@ -66,9 +66,10 @@ internal sealed class WindowsInstallerReleaseLease : IInstallerReleaseLease
                 file.Reverify(cancellationToken);
             }
         }
-        catch (Exception exception) when (exception is IOException
+        catch (Exception exception) when (!ClashSharp.Installer.Contracts.InstallerExceptionPolicy.IsProcessFatal(exception)
+            && (exception is IOException
             or UnauthorizedAccessException
-            or System.ComponentModel.Win32Exception)
+            or System.ComponentModel.Win32Exception))
         {
             throw new InstallerProtocolException(
                 "installer.release.payload_reverify_failed",
