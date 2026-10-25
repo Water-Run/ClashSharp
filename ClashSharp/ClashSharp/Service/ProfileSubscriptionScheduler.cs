@@ -129,6 +129,12 @@ internal sealed class ProfileSubscriptionScheduler : IRuntimeParticipant
             {
                 throw;
             }
+            catch (ProfileCatalogMutationCanceledException exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
+            {
+                // Admission closes before the participant supervisor is stopped. End this pass;
+                // do not report a provider failure or attempt the remaining links during the drain.
+                return;
+            }
             catch (Exception exception) when (
                 exception is ArgumentException
                     or HttpRequestException

@@ -231,6 +231,8 @@ public sealed class ProfileCatalogServiceTests
         await ExchangeSubscriptionAsync(listener,
             token => service.ImportSubscriptionLinkAsync(link, token), "upload=1; download=2; total=1024");
         ProfileSubscriptionLink baseline = Assert.Single(service.GetSubscriptionLinks());
+        using JsonDocument beforeAttempt = JsonDocument.Parse(File.ReadAllText(tempFile.Path));
+        string scheduleBefore = beforeAttempt.RootElement.GetProperty("SubscriptionSchedules")[0].GetRawText();
         ConfigurationProfile[] profiles = [.. service.GetProfiles()];
         ProfileHistoryEntry[] history = [.. service.GetProfileHistory("subscription-" + link.Id)];
         using CancellationTokenSource caller = new();
@@ -252,6 +254,17 @@ public sealed class ProfileCatalogServiceTests
             Assert.Equal(profiles, service.GetProfiles());
             Assert.Equal(history, service.GetProfileHistory("subscription-" + link.Id));
             Assert.Single(core.Imports);
+            using JsonDocument afterAttempt = JsonDocument.Parse(File.ReadAllText(tempFile.Path));
+            JsonElement scheduleAfter = afterAttempt.RootElement.GetProperty("SubscriptionSchedules")[0];
+            if (cancelCaller)
+            {
+                Assert.Equal(scheduleBefore, scheduleAfter.GetRawText());
+            }
+            else
+            {
+                Assert.Equal(1, scheduleAfter.GetProperty("ConsecutiveFailures").GetInt32());
+                Assert.NotEqual(scheduleBefore, scheduleAfter.GetRawText());
+            }
         }
         finally
         {
@@ -267,6 +280,142 @@ public sealed class ProfileCatalogServiceTests
             token => service.ImportSubscriptionLinkAsync(Assert.Single(service.GetSubscriptionLinks()), token));
         Assert.Equal(2, core.Imports.Count);
         Assert.Equal("ProfileCatalog.Subscription.Updated", Assert.Single(service.GetSubscriptionLinks()).Status);
+    }
+
+    /// <summary>Canceling an unfinished HEAD check records cancellation without replacing it with failed validation.</summary>
+    [Fact]
+    public async Task CheckSubscriptionLinkAsync_CallerCancellationPreservesScheduleAndMarksCanceled()
+    {
+        using TempFile file = new();
+        await using ProfileCatalogService catalog = CreateService(file.Path, new FakeProfileCatalogSettings());
+        using TcpListener listener = new(IPAddress.Loopback, 0);
+        listener.Start();
+        int port = ((IPEndPoint)listener.LocalEndpoint).Port;
+        ProfileSubscriptionLink link = await catalog.AddSubscriptionLinkAsync(
+            "Cancelable check", $"http://127.0.0.1:{port}/profile.yaml", CancellationToken.None);
+        using JsonDocument before = JsonDocument.Parse(File.ReadAllText(file.Path));
+        string scheduleBefore = before.RootElement.GetProperty("SubscriptionSchedules")[0].GetRawText();
+        using CancellationTokenSource caller = new();
+        using CancellationTokenSource server = new(TimeSpan.FromSeconds(10));
+        TaskCompletionSource accepted = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        Task response = Task.Run(async () =>
+        {
+            using TcpClient client = await listener.AcceptTcpClientAsync(server.Token);
+            accepted.TrySetResult();
+            await Task.Delay(Timeout.InfiniteTimeSpan, server.Token);
+        });
+        Task check = catalog.CheckSubscriptionLinkAsync(link, caller.Token);
+        try
+        {
+            await accepted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await caller.CancelAsync();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => check.WaitAsync(TimeSpan.FromSeconds(5)));
+            Assert.Equal("ProfileCatalog.Status.Canceled", Assert.Single(catalog.GetSubscriptionLinks()).Status);
+            using JsonDocument after = JsonDocument.Parse(File.ReadAllText(file.Path));
+            Assert.Equal(scheduleBefore, after.RootElement.GetProperty("SubscriptionSchedules")[0].GetRawText());
+        }
+        finally
+        {
+            await caller.CancelAsync();
+            await server.CancelAsync();
+            try { await check; } catch (OperationCanceledException) { }
+            try { await response; } catch (OperationCanceledException) { }
+        }
+    }
+
+    /// <summary>Cancellation preserves durable due state whether requested by the caller or admission shutdown.</summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CanceledSubscriptionImport_DoesNotAdvancePersistedRetryBackoff(bool revokeAdmission)
+    {
+        using TempFile file = new();
+        MutationAdmissionBarrier admission = new();
+        FairAsyncMutationGate gate = new();
+        await using ProfileCatalogService catalog = CreateService(file.Path, new FakeProfileCatalogSettings(),
+            coordinator: new ProfileCatalogMutationCoordinator(admission, gate));
+        using TcpListener listener = new(IPAddress.Loopback, 0);
+        listener.Start();
+        int port = ((IPEndPoint)listener.LocalEndpoint).Port;
+        ProfileSubscriptionLink added = await catalog.AddSubscriptionLinkAsync(
+            "Cancelable", $"http://127.0.0.1:{port}/profile.yaml", CancellationToken.None);
+        Assert.True(await catalog.TryUpdateSubscriptionLinkAsync(added.Id, added.Name, added.Uri, true, 24, CancellationToken.None));
+        ProfileSubscriptionLink link = Assert.Single(catalog.GetSubscriptionLinks());
+        using JsonDocument before = JsonDocument.Parse(File.ReadAllText(file.Path));
+        string scheduleBefore = before.RootElement.GetProperty("SubscriptionSchedules")[0].GetRawText();
+        using CancellationTokenSource caller = new();
+        using CancellationTokenSource server = new(TimeSpan.FromSeconds(10));
+        TaskCompletionSource headers = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        Task response = ServeSubscriptionAsync(listener, server.Token, headersSent: headers);
+        Task import = catalog.ImportDueSubscriptionLinkAsync(link, DateTimeOffset.Now.AddMinutes(1), caller.Token);
+        Task<MutationAdmissionLease>? closing = null;
+        try
+        {
+            await headers.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            if (revokeAdmission) { closing = admission.CloseAndDrainAsync(MutationAdmissionClosure.Shutdown, CancellationToken.None).AsTask(); }
+            else { await caller.CancelAsync(); }
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => import.WaitAsync(TimeSpan.FromSeconds(5)));
+            Assert.Equal(!revokeAdmission, caller.IsCancellationRequested);
+            Assert.Equal("ProfileCatalog.Status.Canceled", Assert.Single(catalog.GetSubscriptionLinks()).Status);
+            using JsonDocument after = JsonDocument.Parse(File.ReadAllText(file.Path));
+            Assert.Equal(scheduleBefore, after.RootElement.GetProperty("SubscriptionSchedules")[0].GetRawText());
+            Assert.Single(catalog.GetDueSubscriptionLinks(DateTimeOffset.Now.AddMinutes(1)));
+        }
+        finally
+        {
+            await caller.CancelAsync();
+            await server.CancelAsync();
+            try { await import; } catch (OperationCanceledException) { }
+            try { await response; } catch (OperationCanceledException) { }
+            if (closing is not null) { (await closing.WaitAsync(TimeSpan.FromSeconds(5))).Dispose(); }
+        }
+    }
+
+    /// <summary>A real revoked catalog operation stops its scheduler pass without logging provider failure or importing the next link.</summary>
+    [Fact]
+    public async Task SubscriptionScheduler_AdmissionRevocationStopsPassWithoutFailureWarnings()
+    {
+        using TempFile file = new();
+        MutationAdmissionBarrier admission = new();
+        FairAsyncMutationGate gate = new();
+        await using ProfileCatalogService catalog = CreateService(file.Path, new FakeProfileCatalogSettings(),
+            coordinator: new ProfileCatalogMutationCoordinator(admission, gate));
+        using TcpListener listener = new(IPAddress.Loopback, 0);
+        listener.Start();
+        int port = ((IPEndPoint)listener.LocalEndpoint).Port;
+        foreach (string name in new[] { "first", "second" })
+        {
+            ProfileSubscriptionLink link = await catalog.AddSubscriptionLinkAsync(
+                name, $"http://127.0.0.1:{port}/{name}.yaml", CancellationToken.None);
+            Assert.True(await catalog.TryUpdateSubscriptionLinkAsync(link.Id, link.Name, link.Uri, true, 24, CancellationToken.None));
+        }
+        List<string> levels = [];
+        ProfileSubscriptionScheduler scheduler = new(new ProfileSubscriptionSchedulerCatalogAdapter(catalog),
+            TimeProvider.System, (level, _, _, _) => levels.Add(level));
+        using CancellationTokenSource server = new(TimeSpan.FromSeconds(10));
+        TaskCompletionSource headers = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        Task response = ServeSubscriptionAsync(listener, server.Token, headersSent: headers);
+        Task pass = scheduler.UpdateDueSubscriptionsAsync(CancellationToken.None);
+        Task<MutationAdmissionLease>? closing = null;
+        try
+        {
+            await headers.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            closing = admission.CloseAndDrainAsync(MutationAdmissionClosure.Shutdown, CancellationToken.None).AsTask();
+            await pass.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.Empty(levels);
+            ProfileSubscriptionLink second = Assert.Single(catalog.GetSubscriptionLinks(), link => link.Name == "second");
+            Assert.Equal("ProfileCatalog.Status.Added", second.Status);
+            using JsonDocument saved = JsonDocument.Parse(File.ReadAllText(file.Path));
+            Assert.All(saved.RootElement.GetProperty("SubscriptionSchedules").EnumerateArray(),
+                schedule => Assert.Equal(0, schedule.GetProperty("ConsecutiveFailures").GetInt32()));
+        }
+        finally
+        {
+            await server.CancelAsync();
+            try { await response; } catch (OperationCanceledException) { }
+            await pass.WaitAsync(TimeSpan.FromSeconds(5));
+            if (closing is not null) { (await closing.WaitAsync(TimeSpan.FromSeconds(5))).Dispose(); }
+        }
     }
 
     [Fact]

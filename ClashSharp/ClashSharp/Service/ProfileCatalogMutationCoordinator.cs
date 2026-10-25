@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using ClashSharp.ApplicationModel.Diagnostics;
 using ClashSharp.ApplicationModel.Mutations;
 
 namespace ClashSharp.Service;
@@ -45,12 +46,22 @@ internal sealed class ProfileCatalogMutationCoordinator(
                 CancellationTokenSource.CreateLinkedTokenSource(
                     cancellationToken,
                     admissionLease.RevocationToken);
-            return await _mutationGate
-                .ExecuteAsync(
-                    operationId,
-                    (_, gateToken) => mutation(admissionLease, gateToken),
-                    admittedCancellation.Token)
-                .ConfigureAwait(false);
+            try
+            {
+                return await _mutationGate
+                    .ExecuteAsync(
+                        operationId,
+                        (_, gateToken) => mutation(admissionLease, gateToken),
+                        admittedCancellation.Token)
+                    .ConfigureAwait(false);
+            }
+            catch (OperationCanceledException exception) when (
+                admissionLease.RevocationToken.IsCancellationRequested && !ExceptionGraphClassifier.IsProcessFatal(exception))
+            {
+                // The scheduler's own stop token can still be live while shutdown drains admission.
+                // Preserve the trusted cancellation cause without disguising independent HTTP timeouts.
+                throw new ProfileCatalogMutationCanceledException(exception, admittedCancellation.Token);
+            }
         }
         finally
         {

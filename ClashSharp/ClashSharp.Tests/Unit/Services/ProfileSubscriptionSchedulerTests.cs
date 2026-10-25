@@ -80,6 +80,74 @@ public sealed class ProfileSubscriptionSchedulerTests
         Assert.Equal(now, catalog.ObservedNow);
     }
 
+    /// <summary>A provider timeout can carry a canceled internal token without being admission cancellation.</summary>
+    [Fact]
+    public async Task UpdateDueSubscriptionsAsync_ProviderTimeoutStillWarnsAndContinues()
+    {
+        using CancellationTokenSource timeout = new();
+        timeout.Cancel();
+        FakeSchedulerCatalog catalog = new([Link("first"), Link("second")])
+        {
+            FailingLinkId = "first",
+            Failure = new TaskCanceledException("Provider timeout", new TimeoutException(), timeout.Token),
+        };
+        List<(string Level, string? Detail)> logs = [];
+        ProfileSubscriptionScheduler scheduler = new(catalog, TimeProvider.System,
+            (level, _, _, detail) => logs.Add((level, detail)));
+
+        await scheduler.UpdateDueSubscriptionsAsync(CancellationToken.None);
+
+        Assert.Equal(["first", "second"], catalog.ImportedLinkIds);
+        Assert.Contains(logs, log => log.Level == "Warning" && log.Detail == "first:TaskCanceledException");
+        Assert.Contains(logs, log => log.Level == "Info" && log.Detail == "subscription-second");
+    }
+
+    /// <summary>Supervisor cancellation still propagates and prevents remaining subscription work.</summary>
+    [Fact]
+    public async Task UpdateDueSubscriptionsAsync_CallerCancellationPropagatesWithoutWarning()
+    {
+        using CancellationTokenSource caller = new();
+        FakeSchedulerCatalog catalog = new([Link("first"), Link("second")])
+        {
+            FailingLinkId = "first",
+            Failure = new OperationCanceledException(caller.Token),
+            Imported = caller.Cancel,
+        };
+        List<string> logs = [];
+        ProfileSubscriptionScheduler scheduler = new(catalog, TimeProvider.System,
+            (level, _, _, _) => logs.Add(level));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => scheduler.UpdateDueSubscriptionsAsync(caller.Token));
+
+        Assert.Equal(["first"], catalog.ImportedLinkIds);
+        Assert.Empty(logs);
+    }
+
+    /// <summary>Cooperative cancellation cannot hide a process-fatal nested failure.</summary>
+    [Fact]
+    public async Task UpdateDueSubscriptionsAsync_AdmissionSignalDoesNotSuppressFatalCause()
+    {
+        using CancellationTokenSource revoked = new();
+        revoked.Cancel();
+#pragma warning disable CA2201 // Deliberately construct a synthetic fatal cause to verify it is never suppressed.
+        ProfileCatalogMutationCanceledException failure = new(
+            new OperationCanceledException("Fatal nested failure", new OutOfMemoryException(), revoked.Token), revoked.Token);
+#pragma warning restore CA2201
+        FakeSchedulerCatalog catalog = new([Link("first"), Link("second")])
+        {
+            FailingLinkId = "first",
+            Failure = failure,
+        };
+        List<string> logs = [];
+        ProfileSubscriptionScheduler scheduler = new(catalog, TimeProvider.System,
+            (level, _, _, _) => logs.Add(level));
+
+        Assert.Same(failure, await Assert.ThrowsAsync<ProfileCatalogMutationCanceledException>(
+            () => scheduler.UpdateDueSubscriptionsAsync(CancellationToken.None)));
+        Assert.Equal(["first"], catalog.ImportedLinkIds);
+        Assert.Empty(logs);
+    }
+
     private static ProfileSubscriptionLink Link(string id)
     {
         return new ProfileSubscriptionLink(
@@ -96,6 +164,7 @@ public sealed class ProfileSubscriptionSchedulerTests
         IProfileSubscriptionSchedulerCatalog
     {
         public string? FailingLinkId { get; init; }
+        public Exception? Failure { get; init; }
         public int Reads { get; private set; }
         public Action? Imported { get; set; }
 
@@ -124,7 +193,7 @@ public sealed class ProfileSubscriptionSchedulerTests
             Imported?.Invoke();
             if (StringComparer.Ordinal.Equals(link.Id, FailingLinkId))
             {
-                throw new HttpRequestException("simulated failure");
+                throw Failure ?? new HttpRequestException("simulated failure");
             }
 
             return Task.FromResult<ProfileImportResult?>(new ProfileImportResult(

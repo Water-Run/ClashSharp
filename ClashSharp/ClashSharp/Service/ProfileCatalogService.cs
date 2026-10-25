@@ -912,6 +912,12 @@ public sealed partial class ProfileCatalogService : IProfileCatalog, IAsyncDispo
             TryUpdateSubscriptionLinkStatus(currentLink.Id, status, usage, updateUsage: usage is not null);
             return SubscriptionStatusText.Localize(status, GetString);
         }
+        catch (OperationCanceledException exception) when (
+            cancellationToken.IsCancellationRequested && !ExceptionGraphClassifier.IsProcessFatal(exception))
+        {
+            TryRecordSubscriptionCancellation(currentLink.Id);
+            throw;
+        }
         catch (Exception exception) when (exception is ArgumentException or HttpRequestException or OperationCanceledException or InvalidOperationException)
         {
             TryUpdateSubscriptionLinkStatus(currentLink.Id, GetString("ProfileCatalog.Subscription.CheckFailed"));
@@ -1104,6 +1110,12 @@ public sealed partial class ProfileCatalogService : IProfileCatalog, IAsyncDispo
 
             return importResult;
         }
+        catch (OperationCanceledException exception) when (
+            cancellationToken.IsCancellationRequested && !ExceptionGraphClassifier.IsProcessFatal(exception))
+        {
+            TryRecordSubscriptionCancellation(link.Id);
+            throw;
+        }
         catch (Exception exception) when (
             exception is ArgumentException
                 or HttpRequestException
@@ -1117,11 +1129,22 @@ public sealed partial class ProfileCatalogService : IProfileCatalog, IAsyncDispo
         {
             TryRecordSubscriptionFailure(
                 link.Id,
-                cancellationToken.IsCancellationRequested
-                    ? GetString("ProfileCatalog.Status.Canceled")
-                    : GetString("ProfileCatalog.Subscription.UpdateFailed"),
+                GetString("ProfileCatalog.Subscription.UpdateFailed"),
                 DateTimeOffset.Now);
             throw;
+        }
+    }
+
+    /// <summary>Records a canceled status without changing the last completed attempt or retry backoff.</summary>
+    private void TryRecordSubscriptionCancellation(string linkId)
+    {
+        try
+        {
+            TryUpdateSubscriptionLinkStatus(linkId, GetString("ProfileCatalog.Status.Canceled"));
+        }
+        catch (Exception maintenanceFailure) when (!ExceptionGraphClassifier.IsProcessFatal(maintenanceFailure))
+        {
+            TryAppendMaintenanceWarning("Subscription cancellation status could not be persisted.", maintenanceFailure);
         }
     }
 
