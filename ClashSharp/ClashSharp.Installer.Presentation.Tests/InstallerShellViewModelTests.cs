@@ -6,6 +6,18 @@ namespace ClashSharp.Installer.Presentation.Tests;
 
 public sealed class InstallerShellViewModelTests
 {
+    private static Exception WrapFatalPresentationFailure(string wrapper)
+    {
+        Exception fatal = new FatalPresentationTestException("fatal test sentinel");
+        return wrapper switch
+        {
+            "aggregate" => new AggregateException(new IOException("Ordinary sibling"), fatal),
+            "protocol" => new InstallerProtocolException("installer.test.wrapped_failure", fatal),
+            "cancel" => new OperationCanceledException("Wrapper", fatal),
+            _ => fatal,
+        };
+    }
+
     [Theory]
     [InlineData("installer.machine_certificate.ownership_conflict", false)]
     [InlineData("installer.machine_certificate.ownership_conflict", true)]
@@ -459,29 +471,33 @@ public sealed class InstallerShellViewModelTests
         Assert.Equal("installer.transaction.release_conflict", viewModel.DiagnosticCode);
     }
 
-    [Fact]
-    public async Task FatalInspectionFailurePropagatesAfterReleasingTheSingleFlightGate()
+    [Theory]
+    [InlineData("direct")]
+    [InlineData("aggregate")]
+    [InlineData("protocol")]
+    [InlineData("cancel")]
+    public async Task FatalInspectionFailurePropagatesAfterReleasingTheSingleFlightGate(string wrapper)
     {
-        var cause = new FatalPresentationTestException("fatal test sentinel");
+        Exception cause = WrapFatalPresentationFailure(wrapper);
         var runtime = new ScriptedInstallerRuntime
         {
             Inspect = _ => Task.FromException<InstallerRuntimeReadiness>(cause),
         };
         using var viewModel = new InstallerShellViewModel(runtime);
 
-        FatalPresentationTestException exception =
-            await Assert.ThrowsAsync<FatalPresentationTestException>(
-                viewModel.InitializeAsync);
-
-        Assert.Same(cause, exception);
+        Assert.Same(cause, await Record.ExceptionAsync(viewModel.InitializeAsync));
         Assert.False(viewModel.IsBusy);
         Assert.True(viewModel.RefreshCommand.CanExecute(parameter: null));
     }
 
-    [Fact]
-    public async Task FatalExecutionFailurePropagatesAfterInvalidatingReadiness()
+    [Theory]
+    [InlineData("direct")]
+    [InlineData("aggregate")]
+    [InlineData("protocol")]
+    [InlineData("cancel")]
+    public async Task FatalExecutionFailurePropagatesAfterInvalidatingReadiness(string wrapper)
     {
-        var cause = new FatalPresentationTestException("fatal test sentinel");
+        Exception cause = WrapFatalPresentationFailure(wrapper);
         var runtime = new ScriptedInstallerRuntime
         {
             Execute = (_, _, _) => Task.FromException<InstallerExecutionResult>(cause),
@@ -489,11 +505,7 @@ public sealed class InstallerShellViewModelTests
         using var viewModel = new InstallerShellViewModel(runtime);
         await viewModel.InitializeAsync();
 
-        FatalPresentationTestException exception =
-            await Assert.ThrowsAsync<FatalPresentationTestException>(
-                viewModel.PrimaryActionCommand.ExecuteAsync);
-
-        Assert.Same(cause, exception);
+        Assert.Same(cause, await Record.ExceptionAsync(viewModel.PrimaryActionCommand.ExecuteAsync));
         Assert.False(viewModel.IsBusy);
         Assert.False(viewModel.CanExecuteMutations);
         Assert.False(viewModel.PrimaryActionCommand.CanExecute(parameter: null));

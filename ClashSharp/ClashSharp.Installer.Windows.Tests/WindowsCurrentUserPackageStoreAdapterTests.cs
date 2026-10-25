@@ -335,21 +335,30 @@ public sealed class WindowsCurrentUserPackageStoreAdapterTests
         Assert.DoesNotContain("sensitive", exception.Message, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public async Task FatalDeploymentFailureIsNotConvertedIntoARecoverableProtocolResult()
+    [Theory]
+    [InlineData("direct")]
+    [InlineData("aggregate")]
+    [InlineData("protocol")]
+    [InlineData("cancel")]
+    public async Task FatalDeploymentFailureIsNotConvertedIntoARecoverableProtocolResult(string wrapper)
     {
         WindowsPayloadFixture.AssertWindows11X64();
         using var fixture = new WindowsPayloadFixture();
         InstallerRequest request = fixture.Request();
         await using WindowsInstallerReleaseLease lease = fixture.Lock(request);
-        var cause = new FatalTestException("fatal test sentinel");
+        Exception fatal = new FatalTestException("fatal test sentinel");
+        Exception cause = wrapper switch
+        {
+            "aggregate" => new AggregateException(new IOException("Ordinary sibling"), fatal),
+            "protocol" => new InstallerProtocolException("installer.test.wrapped_failure", fatal),
+            "cancel" => new OperationCanceledException("Wrapper", fatal),
+            _ => fatal,
+        };
         var facade = new FakePackageManagerFacade { DeploymentException = cause };
         var adapter = Adapter(facade, request);
 
-        FatalTestException exception = await Assert.ThrowsAsync<FatalTestException>(
-            () => adapter.DeployAsync(request, lease, CancellationToken.None));
-
-        Assert.Same(cause, exception);
+        Assert.Same(cause, await Record.ExceptionAsync(
+            () => adapter.DeployAsync(request, lease, CancellationToken.None)));
     }
 
     [Fact]

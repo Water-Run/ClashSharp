@@ -191,6 +191,5 @@ internal sealed class WindowsMaintenanceRecoveryStore : IWindowsMaintenanceRecov
     }
     private static InstallerProtocolException Conflict() => new("installer.recovery.record_write_conflict");
     private static InstallerStateUncertainException Uncertain() => new("installer.recovery.record_commit_uncertain");
-    private static bool IsRecoverable(Exception exception) => exception is not
-        (OutOfMemoryException or StackOverflowException or AccessViolationException or AppDomainUnloadedException);
+    private static bool IsRecoverable(Exception exception) => !ClashSharp.Installer.Contracts.InstallerExceptionPolicy.IsProcessFatal(exception);
 }

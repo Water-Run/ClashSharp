@@ -513,10 +513,7 @@ public sealed class WindowsInstallerTransactionRootGuard :
             or IOException
             or UnauthorizedAccessException
             or SystemException)
-        && exception is not (OutOfMemoryException
-            or StackOverflowException
-            or AccessViolationException
-            or AppDomainUnloadedException);
+        && !ClashSharp.Installer.Contracts.InstallerExceptionPolicy.IsProcessFatal(exception);
 
     private static bool IsMissingDirectory(Exception exception) =>
         exception is DirectoryNotFoundException or FileNotFoundException

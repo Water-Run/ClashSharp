@@ -176,10 +176,7 @@ internal sealed class WindowsRunAsProcessLauncher : IWindowsRunAsProcessLauncher
     }
 
     private static bool IsRecoverable(Exception exception) =>
-        exception is not (OutOfMemoryException
-            or StackOverflowException
-            or AccessViolationException
-            or AppDomainUnloadedException);
+        !ClashSharp.Installer.Contracts.InstallerExceptionPolicy.IsProcessFatal(exception);
 }
 
 internal sealed class WindowsElevatedHelperProcess : IWindowsElevatedHelperProcess

@@ -84,10 +84,7 @@ internal sealed class WindowsMachineHelperPipeIdentity
     }
 
     private static bool IsRecoverable(Exception exception) =>
-        exception is not (OutOfMemoryException
-            or StackOverflowException
-            or AccessViolationException
-            or AppDomainUnloadedException);
+        !ClashSharp.Installer.Contracts.InstallerExceptionPolicy.IsProcessFatal(exception);
 }
 
 /// <summary>Uses kernel32 to query the process bound to an already-connected pipe instance.</summary>

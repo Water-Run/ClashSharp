@@ -143,8 +143,5 @@ public sealed class WindowsInstallerEnvironment : IInstallerEnvironment
     }
 
     private static bool IsRecoverable(Exception exception) =>
-        exception is not (OutOfMemoryException
-            or StackOverflowException
-            or AccessViolationException
-            or AppDomainUnloadedException);
+        !ClashSharp.Installer.Contracts.InstallerExceptionPolicy.IsProcessFatal(exception);
 }

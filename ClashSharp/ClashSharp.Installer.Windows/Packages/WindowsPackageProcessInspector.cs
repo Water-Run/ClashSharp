@@ -203,10 +203,7 @@ internal sealed class WindowsPackageProcessCatalog : IWindowsPackageProcessCatal
         PackageFamilyName: null);
 
     private static bool IsRecoverable(Exception exception) =>
-        exception is not (OutOfMemoryException
-            or StackOverflowException
-            or AccessViolationException
-            or AppDomainUnloadedException);
+        !ClashSharp.Installer.Contracts.InstallerExceptionPolicy.IsProcessFatal(exception);
 
     [DllImport("kernel32.dll", SetLastError = true)]
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]

@@ -265,8 +265,5 @@ internal sealed class WindowsMachinePayloadTreeVerifier : IWindowsMachinePayload
         || exception is Win32Exception { NativeErrorCode: 2 or 3 };
 
     private static bool IsRecoverable(Exception exception) =>
-        exception is not (OutOfMemoryException
-            or StackOverflowException
-            or AccessViolationException
-            or AppDomainUnloadedException);
+        !ClashSharp.Installer.Contracts.InstallerExceptionPolicy.IsProcessFatal(exception);
 }

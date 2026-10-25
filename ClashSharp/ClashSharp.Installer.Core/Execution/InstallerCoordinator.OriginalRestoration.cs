@@ -41,7 +41,7 @@ public sealed partial class InstallerCoordinator
             if (!durable.Journal.Matches(request)) { throw new InstallerProtocolException("installer.transaction.release_conflict"); }
             return await CompleteOriginalRestorationAsync(request, release, durable, progress, cancellationToken).ConfigureAwait(false);
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException exception) when (cancellationToken.IsCancellationRequested && !ClashSharp.Installer.Contracts.InstallerExceptionPolicy.IsProcessFatal(exception))
         {
             if (transactionStateReached) { durable = await RefreshDurableAsync(durable).ConfigureAwait(false); }
             return Result(InstallerExecutionOutcome.Cancelled, "installer.cancelled", durable?.Journal.Phase, durable is not null);
@@ -61,7 +61,7 @@ public sealed partial class InstallerCoordinator
             if (transactionStateReached) { durable = await RefreshDurableAsync(durable).ConfigureAwait(false); }
             return Result(InstallerExecutionOutcome.Uncertain, exception.DiagnosticCode, durable?.Journal.Phase, durable is not null);
         }
-        catch (InstallerProtocolException exception)
+        catch (InstallerProtocolException exception) when (!ClashSharp.Installer.Contracts.InstallerExceptionPolicy.IsProcessFatal(exception))
         {
             if (transactionStateReached) { durable = await RefreshDurableAsync(durable).ConfigureAwait(false); }
             return Result(durable is null ? InstallerExecutionOutcome.Blocked : InstallerExecutionOutcome.Failed,

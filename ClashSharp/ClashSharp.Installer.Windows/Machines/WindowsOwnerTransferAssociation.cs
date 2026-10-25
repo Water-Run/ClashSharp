@@ -122,6 +122,7 @@ internal sealed class WindowsOwnerTransferAssociation
     }
 
     private static bool IsRecoverable(Exception exception) =>
-        exception is IOException or UnauthorizedAccessException or Win32Exception or InstallerProtocolException
-            or InstallerStateUncertainException or OperationCanceledException;
+        !InstallerExceptionPolicy.IsProcessFatal(exception)
+        && exception is (IOException or UnauthorizedAccessException or Win32Exception or InstallerProtocolException
+            or InstallerStateUncertainException or OperationCanceledException);
 }

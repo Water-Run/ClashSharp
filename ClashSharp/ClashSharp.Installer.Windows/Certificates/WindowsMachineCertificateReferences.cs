@@ -29,7 +29,7 @@ internal sealed class WindowsMachineCertificateReferences : IInstallerMachineCer
         {
             throw;
         }
-        catch (Exception exception) when (exception is not (OutOfMemoryException or StackOverflowException or AccessViolationException))
+        catch (Exception exception) when (!InstallerExceptionPolicy.IsProcessFatal(exception))
         {
             throw new InstallerProtocolException("installer.machine_certificate.reference_query_failed", exception);
         }

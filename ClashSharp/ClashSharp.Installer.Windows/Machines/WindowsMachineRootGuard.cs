@@ -327,10 +327,7 @@ internal sealed class WindowsMachineRootGuard : IWindowsMachineRootGuard
     }
 
     private static bool IsRecoverable(Exception exception) =>
-        exception is not (OutOfMemoryException
-            or StackOverflowException
-            or AccessViolationException
-            or AppDomainUnloadedException);
+        !ClashSharp.Installer.Contracts.InstallerExceptionPolicy.IsProcessFatal(exception);
 
     private sealed record DirectorySpec(
         string Path,

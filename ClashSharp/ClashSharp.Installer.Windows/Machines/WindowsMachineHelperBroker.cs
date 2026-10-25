@@ -381,10 +381,7 @@ internal sealed class WindowsMachineHelperBroker :
     }
 
     private static bool IsRecoverable(Exception exception) =>
-        exception is not (OutOfMemoryException
-            or StackOverflowException
-            or AccessViolationException
-            or AppDomainUnloadedException);
+        !ClashSharp.Installer.Contracts.InstallerExceptionPolicy.IsProcessFatal(exception);
 
     private static async Task DisposeUnadmittedSessionAsync(IWindowsMachineHelperServer server,
         IWindowsElevatedHelperProcess? process, IWindowsInstallerExecutableTrustLease? trust)

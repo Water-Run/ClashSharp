@@ -184,7 +184,7 @@ public sealed partial class InstallerCoordinator : IDisposable
                 DirectoryCleanupReport = clearReceipt.DirectoryCleanupReport,
             };
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException exception) when (cancellationToken.IsCancellationRequested && !ClashSharp.Installer.Contracts.InstallerExceptionPolicy.IsProcessFatal(exception))
         {
             if (transactionStateReached)
             {
@@ -232,7 +232,7 @@ public sealed partial class InstallerCoordinator : IDisposable
                 durable?.Journal.Phase,
                 recoveryPending: durable is not null);
         }
-        catch (InstallerProtocolException exception)
+        catch (InstallerProtocolException exception) when (!ClashSharp.Installer.Contracts.InstallerExceptionPolicy.IsProcessFatal(exception))
         {
             if (transactionStateReached)
             {
@@ -463,7 +463,7 @@ public sealed partial class InstallerCoordinator : IDisposable
                 .LoadAsync(cancellationToken)
                 .ConfigureAwait(false);
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException exception) when (cancellationToken.IsCancellationRequested && !ClashSharp.Installer.Contracts.InstallerExceptionPolicy.IsProcessFatal(exception))
         {
             throw;
         }
@@ -530,7 +530,7 @@ public sealed partial class InstallerCoordinator : IDisposable
                 .LoadAsync(cancellationToken)
                 .ConfigureAwait(false);
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException exception) when (cancellationToken.IsCancellationRequested && !ClashSharp.Installer.Contracts.InstallerExceptionPolicy.IsProcessFatal(exception))
         {
             throw;
         }
@@ -722,8 +722,5 @@ public sealed partial class InstallerCoordinator : IDisposable
         new(outcome, diagnosticCode, phase, recoveryPending);
 
     private static bool IsRecoverable(Exception exception) =>
-        exception is not (OutOfMemoryException
-            or StackOverflowException
-            or AccessViolationException
-            or AppDomainUnloadedException);
+        !ClashSharp.Installer.Contracts.InstallerExceptionPolicy.IsProcessFatal(exception);
 }

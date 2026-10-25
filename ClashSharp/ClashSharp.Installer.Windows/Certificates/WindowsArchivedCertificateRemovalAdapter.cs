@@ -107,7 +107,7 @@ internal sealed class WindowsArchivedCertificateRemovalAdapter : IInstallerArchi
         return presence;
     }
 
-    private static bool IsUnexpectedRecoverable(Exception exception) => exception is not (
-        InstallerProtocolException or OperationCanceledException or OutOfMemoryException
-        or StackOverflowException or AccessViolationException or AppDomainUnloadedException);
+    private static bool IsUnexpectedRecoverable(Exception exception) =>
+        exception is not (InstallerProtocolException or OperationCanceledException)
+        && !InstallerExceptionPolicy.IsProcessFatal(exception);
 }

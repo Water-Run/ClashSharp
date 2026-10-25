@@ -299,11 +299,8 @@ internal sealed class WindowsMachineAssociationStore : IWindowsMachineAssociatio
     }
 
     private static bool IsRecoverable(Exception exception) =>
-        exception is not (OutOfMemoryException
-            or StackOverflowException
-            or AccessViolationException
-            or AppDomainUnloadedException
-            or OperationCanceledException
+        !InstallerExceptionPolicy.IsProcessFatal(exception)
+        && exception is not (OperationCanceledException
             or InstallerProtocolException
             or InstallerStateUncertainException);
 }

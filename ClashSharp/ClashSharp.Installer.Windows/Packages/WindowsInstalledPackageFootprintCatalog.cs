@@ -35,8 +35,8 @@ internal sealed class WindowsInstalledPackageFootprintCatalog : IWindowsInstalle
             cancellationToken.ThrowIfCancellationRequested();
             return roots.ToArray();
         }
-        catch (Exception exception) when (exception is not (InstallerProtocolException or OperationCanceledException
-            or OutOfMemoryException or StackOverflowException or AccessViolationException or AppDomainUnloadedException))
+        catch (Exception exception) when (exception is not (InstallerProtocolException or OperationCanceledException)
+            && !InstallerExceptionPolicy.IsProcessFatal(exception))
         {
             throw new InstallerProtocolException("installer.package.inspection_failed", exception);
         }

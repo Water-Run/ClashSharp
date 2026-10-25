@@ -125,11 +125,8 @@ internal sealed class WindowsMachineRootCleanup
     }
 
     private static bool IsRecoverable(Exception exception) =>
-        exception is not (OutOfMemoryException
-            or StackOverflowException
-            or AccessViolationException
-            or AppDomainUnloadedException
-            or InstallerProtocolException
+        !InstallerExceptionPolicy.IsProcessFatal(exception)
+        && exception is not (InstallerProtocolException
             or InstallerStateUncertainException
             or OperationCanceledException);
 }

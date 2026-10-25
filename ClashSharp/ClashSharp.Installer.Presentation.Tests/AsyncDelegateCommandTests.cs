@@ -6,6 +6,29 @@ namespace ClashSharp.Installer.Presentation.Tests;
 public sealed class AsyncDelegateCommandTests
 {
     [Theory]
+    [InlineData("aggregate")]
+    [InlineData("protocol")]
+    [InlineData("cancel")]
+    public async Task WrappedFatalFailureNeverInvokesOrdinaryFailureCallback(string kind)
+    {
+#pragma warning disable CA2201 // Deliberate synthetic severe cause; the test does not exhaust memory.
+        Exception cause = new OutOfMemoryException();
+#pragma warning restore CA2201
+        Exception failure = kind switch
+        {
+            "aggregate" => new AggregateException(new IOException("Ordinary sibling"), cause),
+            "protocol" => new ClashSharp.Installer.Contracts.InstallerProtocolException("installer.test.wrapped_failure", cause),
+            _ => new OperationCanceledException("Wrapper", cause),
+        };
+        int callbacks = 0;
+        AsyncDelegateCommand command = new(() => Task.FromException(failure), null, () => callbacks++);
+
+        Assert.Same(failure, await Record.ExceptionAsync(command.ExecuteAsync));
+        Assert.Equal(0, callbacks);
+        Assert.True(command.CanExecute(null));
+    }
+
+    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public async Task PendingExecutionSurvivesCollectionAndReleasesItsOperation(bool fail)

@@ -139,6 +139,5 @@ internal sealed class WindowsServicePreparationBaselineStore : IDisposable
         (_readGuard as IDisposable)?.Dispose();
     }
 
-    private static bool IsRecoverable(Exception exception) => exception is not
-        (OutOfMemoryException or StackOverflowException or AccessViolationException or AppDomainUnloadedException);
+    private static bool IsRecoverable(Exception exception) => !ClashSharp.Installer.Contracts.InstallerExceptionPolicy.IsProcessFatal(exception);
 }

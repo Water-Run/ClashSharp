@@ -128,7 +128,7 @@ public sealed class InstallerMachineHelperAuthoritySession
                         await evidence.CapturePreparationEvidenceAsync(command, cancellationToken).ConfigureAwait(false);
                     }
                 }
-                catch (InstallerProtocolException exception)
+                catch (InstallerProtocolException exception) when (!ClashSharp.Installer.Contracts.InstallerExceptionPolicy.IsProcessFatal(exception))
                 {
                     return await CompleteStableFailureAsync(command, disposition,
                         exception.DiagnosticCode, cancellationToken).ConfigureAwait(false);
@@ -164,7 +164,7 @@ public sealed class InstallerMachineHelperAuthoritySession
                     await _operations.ExecuteAsync(command, disposition, cancellationToken).ConfigureAwait(false);
                 }
             }
-            catch (InstallerProtocolException exception)
+            catch (InstallerProtocolException exception) when (!ClashSharp.Installer.Contracts.InstallerExceptionPolicy.IsProcessFatal(exception))
             {
                 return await CompleteStableFailureAsync(
                         command,
@@ -218,7 +218,7 @@ public sealed class InstallerMachineHelperAuthoritySession
             _ = _guard.Complete(result, protectedAfter);
             return result;
         }
-        catch
+        catch (Exception exception) when (!InstallerExceptionPolicy.IsProcessFatal(exception))
         {
             await ReconcileAfterAbortAsync().ConfigureAwait(false);
             throw;
@@ -282,8 +282,5 @@ public sealed class InstallerMachineHelperAuthoritySession
     }
 
     private static bool IsRecoverable(Exception exception) =>
-        exception is not (OutOfMemoryException
-            or StackOverflowException
-            or AccessViolationException
-            or AppDomainUnloadedException);
+        !ClashSharp.Installer.Contracts.InstallerExceptionPolicy.IsProcessFatal(exception);
 }

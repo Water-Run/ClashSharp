@@ -138,6 +138,8 @@ internal sealed class WindowsOwnerTransferStartupBlock
         tree.Reverify(requireTransferred: true, cancellationToken);
     }
 
-    private static bool IsRecoverable(Exception exception) => exception is IOException or UnauthorizedAccessException
-        or Win32Exception or InstallerProtocolException or InstallerStateUncertainException or OperationCanceledException;
+    private static bool IsRecoverable(Exception exception) =>
+        !InstallerExceptionPolicy.IsProcessFatal(exception)
+        && exception is (IOException or UnauthorizedAccessException or Win32Exception or InstallerProtocolException
+            or InstallerStateUncertainException or OperationCanceledException);
 }

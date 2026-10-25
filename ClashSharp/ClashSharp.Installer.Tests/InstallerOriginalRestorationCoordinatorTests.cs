@@ -7,6 +7,29 @@ namespace ClashSharp.Installer.Tests;
 public sealed class InstallerOriginalRestorationCoordinatorTests
 {
     [Theory]
+    [InlineData("aggregate")]
+    [InlineData("protocol")]
+    [InlineData("cancel")]
+    public async Task WrappedFatalDuringOriginalRestorationPropagatesWithoutClaimingCancellation(string wrapper)
+    {
+        using CancellationTokenSource caller = new();
+        Exception failure = InstallerFatalFailureTests.Wrap(wrapper, InstallerFatalFailureTests.Fatal("memory"), caller.Token);
+        Ports ports = new(true)
+        {
+            BeforeRestore = () =>
+            {
+                if (wrapper == "cancel") { caller.Cancel(); }
+                return Task.FromException(failure);
+            },
+        };
+        using InstallerCoordinator coordinator = ports.Coordinator();
+
+        Assert.Same(failure, await Record.ExceptionAsync(() => coordinator.RestoreOriginalAsync(ports.Request, null, caller.Token)));
+        Assert.Equal(0, ports.RestoreEffects);
+        Assert.Equal(0, ports.ClearCalls);
+    }
+
+    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public async Task LateCancellationStillObservesTheOriginalClearReceipt(bool journalRemains)

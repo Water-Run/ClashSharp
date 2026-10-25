@@ -390,11 +390,11 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
                 : "请查看上方提示。";
             ProgressValue = 0;
         }
-        catch (OperationCanceledException) when (operation.Cancellation.IsCancellationRequested)
+        catch (OperationCanceledException exception) when (operation.Cancellation.IsCancellationRequested && !ClashSharp.Installer.Contracts.InstallerExceptionPolicy.IsProcessFatal(exception))
         {
             SetCancelledIfCurrent(operation);
         }
-        catch (InstallerProtocolException exception)
+        catch (InstallerProtocolException exception) when (!ClashSharp.Installer.Contracts.InstallerExceptionPolicy.IsProcessFatal(exception))
         {
             SetInspectionFailureIfCurrent(operation, exception.DiagnosticCode);
         }
@@ -508,7 +508,7 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
                 ApplyRetiredUninstallResult(result);
             }
         }
-        catch (OperationCanceledException) when (generation.Cancellation.IsCancellationRequested)
+        catch (OperationCanceledException exception) when (generation.Cancellation.IsCancellationRequested && !ClashSharp.Installer.Contracts.InstallerExceptionPolicy.IsProcessFatal(exception))
         {
             SetCancelledIfCurrent(generation);
         }
@@ -516,7 +516,7 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
         {
             SetCancelledIfCurrent(generation);
         }
-        catch (InstallerProtocolException exception)
+        catch (InstallerProtocolException exception) when (!ClashSharp.Installer.Contracts.InstallerExceptionPolicy.IsProcessFatal(exception))
         {
             SetExecutionFailureIfCurrent(generation, exception.DiagnosticCode);
         }

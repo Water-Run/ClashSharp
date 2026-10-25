@@ -325,6 +325,5 @@ public sealed class DurableInstallerMachineCertificateMutation : IInstallerCerti
         }
     }
 
-    private static bool MayHaveMutated(Exception exception) => exception is not
-        (OutOfMemoryException or StackOverflowException or AccessViolationException or AppDomainUnloadedException);
+    private static bool MayHaveMutated(Exception exception) => !ClashSharp.Installer.Contracts.InstallerExceptionPolicy.IsProcessFatal(exception);
 }
