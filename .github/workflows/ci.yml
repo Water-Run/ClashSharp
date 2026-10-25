@@ -83,6 +83,11 @@ jobs:
         shell: pwsh
         run: ./ClashSharp/Installer/Test-CandidateAcceptanceContract.ps1
 
+      - name: Verify installed candidate content contract
+        if: steps.scope.outputs.product != 'false'
+        shell: pwsh
+        run: ./ClashSharp/Installer/Test-CandidateInstallationContract.ps1
+
       - name: Verify candidate archive transport contract
         if: steps.scope.outputs.product != 'false'
         shell: pwsh
