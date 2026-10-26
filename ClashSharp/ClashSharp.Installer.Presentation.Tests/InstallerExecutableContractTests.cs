@@ -108,7 +108,7 @@ public sealed class InstallerExecutableContractTests
                 || element.Name == presentation + "Page"
                 || element.Name == presentation + "NavigationWindow");
         XElement pageHeading = Assert.Single(
-            shell.Descendants(presentation + "TextBlock"),
+            status.Descendants(presentation + "TextBlock"),
             static element =>
                 (string?)element.Attribute("AutomationProperties.HeadingLevel") ==
                     "Level1");
@@ -123,7 +123,10 @@ public sealed class InstallerExecutableContractTests
             static element => (string?)element.Attribute("AutomationProperties.Name") == "安装操作");
         Assert.DoesNotContain(actions.Ancestors(), element => element.Name == presentation + "ScrollViewer");
         XElement[] buttons = actions.Descendants(presentation + "Button").ToArray();
-        Assert.Equal(5, buttons.Length);
+        Assert.Equal(4, buttons.Length);
+        XElement close = Assert.Single(shell.Descendants(presentation + "Button"),
+            static button => (string?)button.Attribute("Click") == "OnCloseClicked");
+        Assert.DoesNotContain(close.Ancestors(), element => element.Name == presentation + "ScrollViewer");
 
         XElement preservation = Assert.Single(buttons,
             static button => (string?)button.Attribute("Command") == "{Binding RestoreOriginalCommand}");
@@ -224,7 +227,7 @@ public sealed class InstallerExecutableContractTests
         Assert.Contains("Closed=\"OnClosed\"", shell, StringComparison.Ordinal);
         Assert.Contains("_viewModel.IsBusy", codeBehind, StringComparison.Ordinal);
         Assert.Contains("e.Cancel = true", codeBehind, StringComparison.Ordinal);
-        Assert.Contains("_viewModel.RequestCancellation()", codeBehind, StringComparison.Ordinal);
+        Assert.Contains("_viewModel.RequestShutdown()", codeBehind, StringComparison.Ordinal);
         Assert.Contains("Dispatcher.BeginInvoke", codeBehind, StringComparison.Ordinal);
     }
 
@@ -243,7 +246,8 @@ public sealed class InstallerExecutableContractTests
             style => (string?)style.Attribute(x + "Key") == "InstallerWindowStyle");
         Assert.Equal("{StaticResource DefaultWindowStyle}", (string?)windowStyle.Attribute("BasedOn"));
         XDocument application = XDocument.Load(SourcePath("ClashSharp.Installer", "App.xaml"));
-        Assert.Contains(application.Descendants(presentation + "ResourceDictionary"), dictionary =>
+        Assert.Equal("System", (string?)application.Root!.Attribute("ThemeMode"));
+        Assert.DoesNotContain(application.Descendants(presentation + "ResourceDictionary"), dictionary =>
             (string?)dictionary.Attribute("Source") == "pack://application:,,,/PresentationFramework.Fluent;component/Themes/Fluent.xaml");
         Assert.DoesNotContain(windowStyle.Elements(presentation + "Setter"),
             setter => (string?)setter.Attribute("Property") is "Background" or "Foreground");

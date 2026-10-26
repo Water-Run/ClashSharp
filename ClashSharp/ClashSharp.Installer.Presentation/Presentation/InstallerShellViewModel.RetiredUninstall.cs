@@ -21,7 +21,7 @@ public sealed partial class InstallerShellViewModel
 
     /// <summary>Gets whether the trusted runtime supplies the idle dedicated uninstall action.</summary>
     public bool IsRetiredUninstallActionVisible =>
-        !IsBusy && _runtime is IInstallerRetiredUninstallRuntime { SupportsRetiredUninstall: true };
+        CanStartOperation && _runtime is IInstallerRetiredUninstallRuntime { SupportsRetiredUninstall: true };
 
     /// <summary>Gets whether explicit account-copy removal consent is pending.</summary>
     public bool IsRetiredUninstallConfirmationVisible
@@ -32,6 +32,7 @@ public sealed partial class InstallerShellViewModel
             if (SetProperty(ref _isRetiredUninstallConfirmationVisible, value))
             {
                 OnPropertyChanged(nameof(IsCancelActionVisible));
+                OnPropertyChanged(nameof(IsOperationSummaryVisible));
                 ConfirmRetiredUninstallCommand.NotifyCanExecuteChanged();
                 DeclineRetiredUninstallCommand.NotifyCanExecuteChanged();
             }

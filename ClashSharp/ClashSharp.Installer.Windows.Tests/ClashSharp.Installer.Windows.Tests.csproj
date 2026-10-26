@@ -11,7 +11,10 @@
 
   <ItemGroup>
     <Compile Include="..\ClashSharp.Installer\InstallerBackdropBootstrap.cs" Link="Installer\InstallerBackdropBootstrap.cs" />
+    <Compile Include="..\ClashSharp.Installer\MainWindow.xaml.cs" Link="Installer\MainWindow.xaml.cs" />
+    <Page Include="..\ClashSharp.Installer\MainWindow.xaml" Link="Installer\MainWindow.xaml" />
     <ProjectReference Include="..\ClashSharp.Installer.Core\ClashSharp.Installer.Core.csproj" />
+    <ProjectReference Include="..\ClashSharp.Installer.Presentation\ClashSharp.Installer.Presentation.csproj" />
     <ProjectReference Include="..\ClashSharp.Installer.Windows\ClashSharp.Installer.Windows.csproj" />
   </ItemGroup>
 

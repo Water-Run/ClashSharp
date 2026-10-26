@@ -1,5 +1,7 @@
 using System.ComponentModel;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Threading;
 using ClashSharp.Installer.Presentation;
 
 namespace ClashSharp.Installer;
@@ -38,6 +40,7 @@ public partial class MainWindow : Window
     {
         if (_allowClose || !_viewModel.IsBusy)
         {
+            _viewModel.RequestShutdown();
             DisposeViewModel();
             return;
         }
@@ -49,7 +52,7 @@ public partial class MainWindow : Window
         }
 
         _closeRequested = true;
-        _viewModel.RequestCancellation();
+        _viewModel.RequestShutdown();
     }
 
     private void OnViewModelPropertyChanged(
@@ -98,8 +101,7 @@ public partial class MainWindow : Window
     {
         if (e.NewValue is true && sender is FrameworkElement confirmation && IsLoaded)
         {
-            confirmation.BringIntoView();
-            _ = DeclineOwnerTransferButton.Focus();
+            QueueConfirmationFocus(confirmation, DeclineOwnerTransferButton);
         }
     }
 
@@ -107,9 +109,25 @@ public partial class MainWindow : Window
     {
         if (e.NewValue is true && sender is FrameworkElement confirmation && IsLoaded)
         {
-            confirmation.BringIntoView();
-            _ = DeclineRetiredUninstallButton.Focus();
+            QueueConfirmationFocus(confirmation, DeclineRetiredUninstallButton);
         }
+    }
+
+    private void QueueConfirmationFocus(FrameworkElement confirmation, Button declineButton)
+    {
+        // IsVisibleChanged precedes layout and descendant visibility propagation. Focusing
+        // immediately can fail, leaving a newly displayed confirmation without a safe default.
+        _ = Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () =>
+        {
+            if (_viewModelDisposed || _closeRequested || !IsLoaded
+                || !confirmation.IsVisible || !declineButton.IsVisible)
+            {
+                return;
+            }
+
+            confirmation.BringIntoView();
+            _ = declineButton.Focus();
+        });
     }
 
     private void DisposeViewModel()

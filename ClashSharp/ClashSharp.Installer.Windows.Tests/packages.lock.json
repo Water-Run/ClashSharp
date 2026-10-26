@@ -105,6 +105,12 @@
       "clashsharp.installer.core": {
         "type": "Project"
       },
+      "clashsharp.installer.presentation": {
+        "type": "Project",
+        "dependencies": {
+          "ClashSharp.Installer.Core": "[1.0.0, )"
+        }
+      },
       "clashsharp.installer.windows": {
         "type": "Project",
         "dependencies": {

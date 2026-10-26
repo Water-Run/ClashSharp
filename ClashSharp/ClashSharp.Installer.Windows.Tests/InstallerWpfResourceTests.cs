@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Markup;
+using System.Windows.Threading;
 using System.Xml.Linq;
 
 namespace ClashSharp.Installer.Windows.Tests;
@@ -23,7 +24,9 @@ public sealed class InstallerWpfResourceTests
             try
             {
                 InstallerBackdropBootstrap.Configure();
-                Application application = new();
+#pragma warning disable WPF0001 // Match the production application's native Fluent theme selection.
+                Application application = new() { ThemeMode = ThemeMode.System, ShutdownMode = ShutdownMode.OnExplicitShutdown };
+#pragma warning restore WPF0001
                 try
                 {
                     string source = FindInstallerSource();
@@ -71,6 +74,13 @@ public sealed class InstallerWpfResourceTests
                     };
                     try { window.Show(); }
                     finally { window.Close(); }
+
+                    SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext());
+                    Task behavior = InstallerWpfShellBehavior.VerifyAsync().WaitAsync(TimeSpan.FromSeconds(15));
+                    DispatcherFrame frame = new();
+                    _ = behavior.ContinueWith(_ => application.Dispatcher.BeginInvoke(() => frame.Continue = false), TaskScheduler.Default);
+                    Dispatcher.PushFrame(frame);
+                    behavior.GetAwaiter().GetResult();
                 }
                 finally
                 {

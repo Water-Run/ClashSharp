@@ -34,6 +34,7 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
     private CancellationTokenSource? _activeCancellation;
     private long _generation;
     private bool _disposed;
+    private bool _shutdownRequested;
     private bool _runtimeDisposePending;
     private bool _isBusy;
     private bool _isCancellationRequested;
@@ -64,15 +65,15 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
         _runtime = runtime;
         RefreshCommand = new AsyncDelegateCommand(
             RefreshAsync,
-            () => !IsBusy,
+            () => CanStartOperation,
             SetUnhandledCommandFailure);
         PrimaryActionCommand = new AsyncDelegateCommand(
             ExecutePrimaryOperationAsync,
-            () => !IsBusy && CanExecuteMutations,
+            () => CanStartOperation && CanExecuteMutations,
             SetUnhandledCommandFailure);
         SecondaryActionCommand = new AsyncDelegateCommand(
             ExecuteSecondaryOperationAsync,
-            () => !IsBusy && CanExecuteMutations && HasSecondaryAction,
+            () => CanStartOperation && CanExecuteMutations && HasSecondaryAction,
             SetUnhandledCommandFailure);
         RestoreOriginalCommand = new AsyncDelegateCommand(
             () => ExecuteOperationAsync(InstallerOperation.Repair, originalRestore: true),
@@ -120,7 +121,7 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
     public DelegateCommand DeclineOwnerTransferCommand { get; }
 
     /// <summary>Gets whether this trusted composition supplies an idle dedicated transfer action.</summary>
-    public bool IsOwnerTransferActionVisible => !IsBusy && _runtime is IInstallerOwnerTransferRuntime { SupportsOwnerTransfer: true };
+    public bool IsOwnerTransferActionVisible => CanStartOperation && _runtime is IInstallerOwnerTransferRuntime { SupportsOwnerTransfer: true };
 
     /// <summary>Gets whether the current operation is waiting for explicit user consent.</summary>
     public bool IsOwnerTransferConfirmationVisible
@@ -131,6 +132,7 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
             if (SetProperty(ref _isOwnerTransferConfirmationVisible, value))
             {
                 OnPropertyChanged(nameof(IsCancelActionVisible));
+                OnPropertyChanged(nameof(IsOperationSummaryVisible));
                 ConfirmOwnerTransferCommand.NotifyCanExecuteChanged();
                 DeclineOwnerTransferCommand.NotifyCanExecuteChanged();
             }
@@ -159,17 +161,20 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
     }
 
     /// <summary>Gets whether the trusted idle state exposes its one primary mutation.</summary>
-    public bool IsPrimaryActionVisible => !IsBusy && CanExecuteMutations;
+    public bool IsPrimaryActionVisible => CanStartOperation && CanExecuteMutations;
 
     /// <summary>Gets whether the trusted installed state exposes its secondary mutation.</summary>
     public bool IsSecondaryActionVisible => IsPrimaryActionVisible && HasSecondaryAction;
 
     /// <summary>Gets whether this exact pending repair can attempt original preservation.</summary>
-    public bool IsOriginalRestoreActionVisible => !IsBusy && CanExecuteMutations && _canRestoreOriginal
+    public bool IsOriginalRestoreActionVisible => CanStartOperation && CanExecuteMutations && _canRestoreOriginal
         && _runtime is IInstallerOriginalRestorationRuntime { SupportsOriginalRestoration: true };
 
     /// <summary>Gets whether the single active generation exposes cancellation as its only action.</summary>
     public bool IsCancelActionVisible => IsBusy && !IsOwnerTransferConfirmationVisible && !IsRetiredUninstallConfirmationVisible;
+
+    /// <summary>Gets whether the ordinary status and diagnostics are shown instead of an explicit confirmation.</summary>
+    public bool IsOperationSummaryVisible => !IsOwnerTransferConfirmationVisible && !IsRetiredUninstallConfirmationVisible;
 
     /// <summary>Gets whether this generation is waiting for a requested cancellation to finish.</summary>
     public bool IsCancellationRequested
@@ -290,11 +295,34 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
     }
 
     /// <summary>Performs the initial readiness inspection.</summary>
-    public Task InitializeAsync() => RefreshAsync();
+    public Task InitializeAsync() => RefreshCommand.ExecuteAsync();
 
     /// <summary>
-    /// Requests cooperative cancellation for window shutdown. A privileged operation may continue
-    /// until its authenticated helper reaches a terminal result.
+    /// Permanently stops admitting work for this window and requests cancellation of its active operation.
+    /// The window must still wait for <see cref="IsBusy"/> to clear before disposing the runtime.
+    /// </summary>
+    public void RequestShutdown()
+    {
+        lock (_operationSync)
+        {
+            if (_disposed || _shutdownRequested)
+            {
+                return;
+            }
+
+            // Closing is a one-way admission boundary, unlike cancelling a retryable operation.
+            // Latch it before notifications can re-enter a command or an operation finishes.
+            _shutdownRequested = true;
+        }
+
+        NotifyActionVisibility();
+        NotifyCommandAvailability();
+        RequestCancellation();
+    }
+
+    /// <summary>
+    /// Requests cooperative cancellation while allowing an explicit retry after the operation drains.
+    /// A closing window must use <see cref="RequestShutdown"/> to also prevent new work.
     /// </summary>
     public void RequestCancellation()
     {
@@ -571,11 +599,13 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
         }
     }
 
+    private bool CanStartOperation => !_disposed && !_shutdownRequested && !IsBusy;
+
     private OperationGeneration? TryBeginOperation()
     {
         lock (_operationSync)
         {
-            if (_disposed || _activeCancellation is not null)
+            if (_disposed || _shutdownRequested || _activeCancellation is not null)
             {
                 return null;
             }

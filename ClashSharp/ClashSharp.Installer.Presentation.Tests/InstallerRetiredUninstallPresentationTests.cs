@@ -37,6 +37,7 @@ public sealed class InstallerRetiredUninstallPresentationTests
         Assert.Equal(accepted ? 1 : 0, runtime.Calls);
         Assert.False(viewModel.IsBusy);
         Assert.False(viewModel.IsRetiredUninstallConfirmationVisible);
+        Assert.True(viewModel.IsOperationSummaryVisible);
         Assert.False(viewModel.ConfirmRetiredUninstallCommand.CanExecute(null));
         Assert.Equal(accepted ? "已卸载此账户副本" : "操作已取消", viewModel.StatusTitle);
         Assert.Contains(accepted ? "共享服务保持原状" : "尚未开始", viewModel.StatusDetail, StringComparison.Ordinal);
@@ -149,6 +150,7 @@ public sealed class InstallerRetiredUninstallPresentationTests
         {
             if (e.PropertyName == nameof(viewModel.IsRetiredUninstallConfirmationVisible) && viewModel.IsRetiredUninstallConfirmationVisible)
             {
+                Assert.False(viewModel.IsOperationSummaryVisible);
                 displayed.TrySetResult();
             }
         };

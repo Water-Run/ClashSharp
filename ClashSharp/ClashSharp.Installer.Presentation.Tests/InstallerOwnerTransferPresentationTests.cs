@@ -44,6 +44,7 @@ public sealed class InstallerOwnerTransferPresentationTests
 
         Assert.Equal(accepted, runtime.Decision);
         Assert.False(viewModel.IsOwnerTransferConfirmationVisible);
+        Assert.True(viewModel.IsOperationSummaryVisible);
         Assert.False(viewModel.IsBusy);
         Assert.False(viewModel.CanExecuteMutations);
         Assert.Equal(accepted ? "已完成" : "已取消", viewModel.StatusBadge);
@@ -148,6 +149,7 @@ public sealed class InstallerOwnerTransferPresentationTests
             if (args.PropertyName == nameof(InstallerShellViewModel.IsOwnerTransferConfirmationVisible)
                 && viewModel.IsOwnerTransferConfirmationVisible)
             {
+                Assert.False(viewModel.IsOperationSummaryVisible);
                 displayed.TrySetResult();
             }
         };

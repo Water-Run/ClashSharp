@@ -89,7 +89,10 @@
     <Setter Property="Padding" Value="20" />
   </Style>
 
-  <Style x:Key="InstallerConfirmationStyle" TargetType="Border" BasedOn="{StaticResource InstallerContentCardStyle}" />
+  <Style x:Key="InstallerConfirmationStyle" TargetType="Border">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Padding" Value="0" />
+  </Style>
 
   <Style x:Key="InstallerPrimaryButtonStyle" TargetType="Button"
          BasedOn="{StaticResource AccentButtonStyle}">
