@@ -514,7 +514,7 @@ public sealed class TriggerSchedulerTests
     }
 
     [Fact]
-    public async Task CancelledQuiesce_WhenPublicationRestoreFails_PreservesBothFailures()
+    public async Task CancelledQuiesce_WhenPublicationRestoreFails_PreservesRecoveryStateAndBothFailures()
     {
         TaskCompletionSource<object?> releaseEvaluation = Signal();
         RecordingEvaluator evaluator = new()
@@ -538,17 +538,20 @@ public sealed class TriggerSchedulerTests
         using CancellationTokenSource cancellation = new();
 
         Task<QuiescedState> quiescing = scheduler.QuiesceAsync(cancellation.Token);
-        cancellation.Cancel();
-        AggregateException actual = await Assert.ThrowsAsync<AggregateException>(
-            () => quiescing);
-
-        Assert.Contains(
-            actual.InnerExceptions,
-            exception => exception is OperationCanceledException);
-        Assert.Contains(restoreFailure, actual.InnerExceptions);
-
-        releaseEvaluation.TrySetResult(null);
-        await scheduler.StopAsync(CancellationToken.None);
+        try
+        {
+            cancellation.Cancel();
+            RuntimeQuiescenceException interrupted = await Assert.ThrowsAsync<RuntimeQuiescenceException>(() => quiescing);
+            Assert.True(interrupted.PriorState.WasRunning);
+            AggregateException actual = Assert.IsType<AggregateException>(interrupted.Failure);
+            Assert.Contains(actual.InnerExceptions, exception => exception is OperationCanceledException);
+            Assert.Contains(restoreFailure, actual.InnerExceptions);
+        }
+        finally
+        {
+            releaseEvaluation.TrySetResult(null);
+            await scheduler.StopAsync(CancellationToken.None);
+        }
     }
 
     [Fact]

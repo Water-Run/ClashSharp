@@ -296,9 +296,9 @@ public sealed class TriggerScheduler : IRuntimeParticipant
             }
 
             Task stoppingTask = _runTask!;
-            PauseCore();
             try
             {
+                PauseCore();
                 await stoppingTask.WaitAsync(cancellationToken).ConfigureAwait(false);
             }
             catch (Exception failure)
@@ -309,7 +309,9 @@ public sealed class TriggerScheduler : IRuntimeParticipant
                 }
                 catch (Exception restoreFailure)
                 {
-                    throw new AggregateException(failure, restoreFailure);
+                    AggregateException combined = new(failure, restoreFailure);
+                    if (ExceptionGraphClassifier.IsProcessFatal(combined)) { throw combined; }
+                    throw new RuntimeQuiescenceException(new QuiescedState(true), combined);
                 }
 
                 ExceptionDispatchInfo.Capture(failure).Throw();

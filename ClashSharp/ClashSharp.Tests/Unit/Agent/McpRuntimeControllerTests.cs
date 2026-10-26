@@ -1,7 +1,10 @@
 using System.Text.Json;
 using ClashSharp.Agent;
 using ClashSharp.ApplicationModel.Agent;
+using ClashSharp.ApplicationModel.Data;
+using ClashSharp.ApplicationModel.Lifecycle;
 using ClashSharp.ApplicationModel.Mutations;
+using ClashSharp.Settings;
 
 namespace ClashSharp.Tests.Unit.Agent;
 
@@ -198,6 +201,47 @@ public sealed class McpRuntimeControllerTests
         Assert.Equal(Enabled(), fixture.Controller.CaptureConfiguration());
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task LifecyclePauseFailureRestoresTheExistingEndpointCredentialAndGrants(bool callerCancels)
+    {
+        await using Fixture fixture = new();
+        await fixture.ApplyAsync(Enabled());
+        string credential = fixture.Store.Secret!;
+        Uri endpoint = fixture.Host.BoundEndpoint!;
+        int writes = fixture.Store.Writes;
+        using var cancellation = new CancellationTokenSource();
+        if (callerCancels)
+        {
+            fixture.Host.StopOverride = token =>
+            {
+                fixture.Host.StopOverride = null;
+                cancellation.Cancel();
+                return Task.FromCanceled(token);
+            };
+        }
+        else { fixture.Host.StopFailures = 1; }
+        var generation = new DataGenerationDescriptor(Guid.NewGuid(), 1, Path.GetTempPath());
+        var participant = new McpSettingsParticipant(generation, fixture.Admission, SettingsRegistry.Default, fixture.Controller);
+        var registry = new RuntimeLifetimeRegistry();
+        registry.RegisterParticipant(participant);
+        var lifecycle = new RuntimeLifecycleCoordinator(fixture.Admission, registry,
+            networkPolicy: RuntimeShutdownNetworkPolicy.PreserveCurrentState);
+
+        RuntimeShutdownResult result = await lifecycle.ShutdownAsync(cancellation.Token);
+
+        Assert.Equal(RuntimeShutdownOutcome.Aborted, result.Outcome);
+        Assert.Equal(callerCancels ? "shutdown-cancelled" : "quiescence-failed", result.ErrorCode);
+        Assert.Empty(result.DegradedParticipants);
+        Assert.Equal(MutationAdmissionState.Open, fixture.Admission.State);
+        Assert.True(fixture.Access.TryAuthenticate(credential, out _));
+        Assert.Equal(endpoint, fixture.Host.BoundEndpoint);
+        Assert.Equal(writes, fixture.Store.Writes);
+        Assert.Equal(credential, fixture.Store.Secret);
+        Assert.Equal(Enabled(), fixture.Controller.CaptureConfiguration());
+    }
+
     private static McpServerConfiguration Enabled(McpAccessScope scopes = McpAccessScope.ReadStatus) =>
         new(McpServerConfiguration.DefaultPort, new(true, scopes));
 
@@ -236,6 +280,7 @@ public sealed class McpRuntimeControllerTests
         public int Starts { get; private set; }
         public int? RejectedPort { get; set; }
         public int StopFailures { get; set; }
+        public Func<CancellationToken, Task>? StopOverride { get; set; }
         public Action? OnStart { get; set; }
         public Task StartAsync(McpServerConfiguration configuration, CancellationToken cancellationToken)
         {
@@ -247,6 +292,7 @@ public sealed class McpRuntimeControllerTests
         }
         public Task StopAsync(CancellationToken cancellationToken)
         {
+            if (StopOverride is { } stop) { return stop(cancellationToken); }
             if (StopFailures > 0) { StopFailures--; throw new IOException("stop unavailable"); }
             BoundEndpoint = null;
             return Task.CompletedTask;

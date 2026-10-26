@@ -1,5 +1,6 @@
 using ClashSharp.Agent;
 using ClashSharp.ApplicationModel.Data;
+using ClashSharp.ApplicationModel.Diagnostics;
 using ClashSharp.ApplicationModel.Lifecycle;
 using ClashSharp.ApplicationModel.Mutations;
 using ClashSharp.ApplicationModel.Settings;
@@ -66,8 +67,18 @@ public sealed class McpSettingsParticipant : ISettingsApplicationParticipant, IR
     public async Task<QuiescedState> QuiesceAsync(CancellationToken cancellationToken)
     {
         bool wasRunning = _runtime.CaptureSnapshot().BoundEndpoint is not null;
-        await _runtime.SuspendAsync(cancellationToken).ConfigureAwait(false);
-        return new(wasRunning);
+        QuiescedState priorState = new(wasRunning);
+        try
+        {
+            await _runtime.SuspendAsync(cancellationToken).ConfigureAwait(false);
+            return priorState;
+        }
+        catch (Exception failure) when (!ExceptionGraphClassifier.IsProcessFatal(failure))
+        {
+            // Suspension withdraws access before waiting for the listener. A failed wait still
+            // needs compensation using the previously applied configuration and credential.
+            throw new RuntimeQuiescenceException(priorState, failure);
+        }
     }
     /// <inheritdoc />
     public Task ResumeAsync(QuiescedState priorState, CancellationToken cancellationToken) => priorState.WasRunning

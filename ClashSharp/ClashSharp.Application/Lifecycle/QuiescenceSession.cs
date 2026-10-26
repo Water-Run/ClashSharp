@@ -1,8 +1,9 @@
+using System.Runtime.ExceptionServices;
 using ClashSharp.ApplicationModel.Diagnostics;
 
 namespace ClashSharp.ApplicationModel.Lifecycle;
 
-/// <summary>Records successful pauses so a failed destructive transition can restore them in reverse order.</summary>
+/// <summary>Records completed and interrupted pauses so a failed transition can restore them in reverse order.</summary>
 internal sealed class QuiescenceSession
 {
     private readonly List<PausedParticipant> _paused = [];
@@ -13,10 +14,20 @@ internal sealed class QuiescenceSession
     {
         foreach (IRuntimeParticipant participant in participants)
         {
-            QuiescedState priorState = await participant
-                .QuiesceAsync(cancellationToken)
-                .ConfigureAwait(false);
-            _paused.Add(new PausedParticipant(participant, priorState));
+            try
+            {
+                QuiescedState priorState = await participant
+                    .QuiesceAsync(cancellationToken)
+                    .ConfigureAwait(false);
+                _paused.Add(new PausedParticipant(participant, priorState));
+            }
+            catch (RuntimeQuiescenceException failure)
+            {
+                _paused.Add(new PausedParticipant(participant, failure.PriorState));
+                // The caller still distinguishes its own cancellation, a deadline and other
+                // failures from the original exception, after retaining the compensation state.
+                ExceptionDispatchInfo.Capture(failure.Failure).Throw();
+            }
         }
     }
 

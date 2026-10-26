@@ -21,10 +21,16 @@ internal class GenerationRuntimeParticipant(
     public Task<QuiescedState> QuiesceAsync(CancellationToken cancellationToken) =>
         Generations.ExecuteAsync<AppDataGenerationRuntime, QuiescedState>(async (runtime, generation, token) =>
         {
-            QuiescedState prior = await select(runtime).QuiesceAsync(token).ConfigureAwait(false);
-            QuiescedState result = new(prior.WasRunning);
-            _resumes.Add(result, new(generation, prior));
-            return result;
+            try
+            {
+                QuiescedState prior = await select(runtime).QuiesceAsync(token).ConfigureAwait(false);
+                return RetainResumeState(generation, prior);
+            }
+            catch (RuntimeQuiescenceException failure)
+            {
+                // Partial pauses require the same generation-bound authority as completed ones.
+                throw new RuntimeQuiescenceException(RetainResumeState(generation, failure.PriorState), failure.Failure);
+            }
         }, cancellationToken);
     public Task ResumeAsync(QuiescedState priorState, CancellationToken cancellationToken) =>
         Generations.ExecuteAsync<AppDataGenerationRuntime>(async (runtime, generation, token) =>
@@ -36,6 +42,13 @@ internal class GenerationRuntimeParticipant(
             await select(runtime).ResumeAsync(resume.State, token).ConfigureAwait(false);
             _resumes.Remove(priorState);
         }, cancellationToken);
+
+    private QuiescedState RetainResumeState(DataGenerationDescriptor generation, QuiescedState prior)
+    {
+        QuiescedState result = new(prior.WasRunning);
+        _resumes.Add(result, new(generation, prior));
+        return result;
+    }
 
     private sealed record ResumeToken(DataGenerationDescriptor Generation, QuiescedState State);
 }

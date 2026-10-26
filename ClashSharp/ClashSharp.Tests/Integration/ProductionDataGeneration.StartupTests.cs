@@ -12,6 +12,7 @@ using ClashSharp.Settings;
 using Composer = ClashSharpUi::ClashSharp.Hosting.Data.AppDataGenerationRuntimeComposer;
 using Connections = ClashSharpUi::ClashSharp.Service.MihomoConnectionService;
 using EventHub = ClashSharpUi::ClashSharp.Service.TriggerRuntimeEventHub;
+using GenerationParticipant = ClashSharpUi::ClashSharp.Hosting.Data.GenerationRuntimeParticipant;
 using NetworkConfiguration = ClashSharpUi::ClashSharp.Hosting.Settings.NetworkSettingsConfiguration;
 using NetworkRuntime = ClashSharpUi::ClashSharp.Hosting.Settings.INetworkSettingsRuntime;
 using Notifications = ClashSharpUi::ClashSharp.Service.NotificationService;
@@ -148,6 +149,57 @@ public sealed partial class ProductionDataGenerationTests
 
         RuntimeServices current = Assert.IsType<RuntimeServices>(fixture.Containers[^1].GetService(typeof(RuntimeServices)));
         Assert.False(current.Sampling.IsRunning);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task GenerationLifecycleFacade_BindsInterruptedPauseRecoveryToItsOriginalGeneration(bool replaceGeneration)
+    {
+        await using DataGenerationTestDirectory directory = new();
+        await using Fixture fixture = new(directory);
+        ConfigureRealRuntime(fixture, new StartupPlatform(), new AppearanceSurface(), new NetworkSurface());
+        Assert.Equal(StartupStepOutcome.Succeeded, (await fixture.CreateStartupStep(new RuntimeLifetimeRegistry(),
+            new SamplingFacade(fixture.Manager), new SettingsService(new Dictionary<string, object>()))
+            .ExecuteAsync(new AppLaunchRequest(""), CancellationToken.None)).Outcome);
+        var producer = new InterruptedGenerationProducer();
+        var participant = new GenerationParticipant(producer.Name, fixture.Manager, _ => producer);
+
+        RuntimeQuiescenceException failure = await Assert.ThrowsAsync<RuntimeQuiescenceException>(
+            () => participant.QuiesceAsync(CancellationToken.None));
+
+        Assert.Same(producer.Failure, failure.Failure);
+        Assert.NotSame(producer.PriorState, failure.PriorState);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => participant.ResumeAsync(producer.PriorState, CancellationToken.None));
+        if (replaceGeneration)
+        {
+            await fixture.ReplaceWithEmptyGenerationAsync();
+            await Assert.ThrowsAsync<InvalidOperationException>(() => participant.ResumeAsync(failure.PriorState, CancellationToken.None));
+            Assert.Null(producer.ResumedState);
+        }
+        else
+        {
+            await participant.ResumeAsync(failure.PriorState, CancellationToken.None);
+            Assert.Same(producer.PriorState, producer.ResumedState);
+            await Assert.ThrowsAsync<InvalidOperationException>(() => participant.ResumeAsync(failure.PriorState, CancellationToken.None));
+        }
+    }
+
+    private sealed class InterruptedGenerationProducer : IRuntimeParticipant
+    {
+        internal QuiescedState PriorState { get; } = new(true);
+        internal IOException Failure { get; } = new("Interrupted pause fixture.");
+        internal QuiescedState? ResumedState { get; private set; }
+        public string Name => "interrupted-generation-producer";
+        public Task StartAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task<QuiescedState> QuiesceAsync(CancellationToken cancellationToken) =>
+            Task.FromException<QuiescedState>(new RuntimeQuiescenceException(PriorState, Failure));
+        public Task ResumeAsync(QuiescedState priorState, CancellationToken cancellationToken)
+        {
+            ResumedState = priorState;
+            return Task.CompletedTask;
+        }
     }
 
     private static void ConfigureRealRuntime(Fixture fixture, StartupPlatform platform, IAppearanceNativeSettings appearance,

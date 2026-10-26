@@ -96,12 +96,23 @@ public sealed class SupervisedLoop : IRuntimeParticipant
             }
 
             Task stoppingTask = _loopTask!;
-            _loopCancellation!.Cancel();
-            PublishStopped();
-            await stoppingTask.WaitAsync(cancellationToken).ConfigureAwait(false);
+            QuiescedState priorState = new(true);
+            try
+            {
+                _loopCancellation!.Cancel();
+                PublishStopped();
+                await stoppingTask.WaitAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception failure) when (!ExceptionGraphClassifier.IsProcessFatal(failure))
+            {
+                // Cancellation is irreversible even when the caller stops waiting. Preserve the
+                // restart obligation so the owner cannot report a successful rollback without us.
+                PublishStopped();
+                throw new RuntimeQuiescenceException(priorState, failure);
+            }
             PublishStopped();
             CleanupCompletedLoop();
-            return new QuiescedState(true);
+            return priorState;
         }
         finally
         {

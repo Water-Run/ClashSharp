@@ -10,6 +10,10 @@ public interface IRuntimeParticipant
     Task StartAsync(CancellationToken cancellationToken);
 
     /// <summary>Stops new work and awaits work already in flight.</summary>
+    /// <remarks>
+    /// A failed call must restore its prior state or throw <see cref="RuntimeQuiescenceException"/>
+    /// with the resume state for any scheduling changes it has already made.
+    /// </remarks>
     Task<QuiescedState> QuiesceAsync(CancellationToken cancellationToken);
 
     /// <summary>Restores the state observed before a failed quiescence operation.</summary>
