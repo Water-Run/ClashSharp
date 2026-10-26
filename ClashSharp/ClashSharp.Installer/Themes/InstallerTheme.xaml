@@ -81,14 +81,6 @@
     <Setter Property="FontSize" Value="14" />
   </Style>
 
-  <Style x:Key="InstallerContentCardStyle" TargetType="Border">
-    <Setter Property="Background" Value="{DynamicResource ButtonBackground}" />
-    <Setter Property="BorderBrush" Value="{DynamicResource ControlElevationBorderBrush}" />
-    <Setter Property="BorderThickness" Value="1" />
-    <Setter Property="CornerRadius" Value="8" />
-    <Setter Property="Padding" Value="20" />
-  </Style>
-
   <Style x:Key="InstallerConfirmationStyle" TargetType="Border">
     <Setter Property="Background" Value="Transparent" />
     <Setter Property="Padding" Value="0" />
