@@ -74,9 +74,65 @@ public sealed class DisplayFormatter
         string pattern = culture.DateTimeFormat.LongTimePattern;
         if (time.Ticks % TimeSpan.TicksPerSecond != 0)
         {
-            pattern = pattern.Replace("ss", "ss.FFFFFFF", StringComparison.Ordinal);
+            pattern = WithFractionalSeconds(pattern);
         }
         return time.ToString(pattern, culture);
+    }
+
+    // Custom time patterns contain quoted literals, escaped characters and percent-prefixed
+    // single tokens. Edit format tokens only; literal words such as 'class' are user content.
+    private static string WithFractionalSeconds(string pattern)
+    {
+        int secondsEnd = -1;
+        int minutesEnd = -1;
+        int hoursEnd = -1;
+        int designatorStart = -1;
+        int fractionStart = -1;
+        int fractionLength = 0;
+        char fractionKind = 'F';
+        char quote = '\0';
+        for (int index = 0; index < pattern.Length; index++)
+        {
+            char token = pattern[index];
+            if (token == '\\') { index++; continue; }
+            if (quote != '\0')
+            {
+                if (token == quote) { quote = '\0'; }
+                continue;
+            }
+            if (token is '\'' or '"') { quote = token; continue; }
+            int start = index;
+            if (token == '%' && index + 1 < pattern.Length) { token = pattern[++index]; }
+            else { while (index + 1 < pattern.Length && pattern[index + 1] == token) { index++; } }
+            int end = index + 1;
+            switch (token)
+            {
+                case 's' when secondsEnd < 0: secondsEnd = end; break;
+                case 'm': minutesEnd = end; break;
+                case 'h' or 'H': hoursEnd = end; break;
+                case 't': designatorStart = start; break;
+                case 'f' or 'F' when fractionStart < 0:
+                    fractionStart = start;
+                    fractionLength = end - start;
+                    fractionKind = token;
+                    break;
+            }
+        }
+
+        if (fractionStart >= 0)
+        {
+            return pattern[..fractionStart] + new string(fractionKind, 7) + pattern[(fractionStart + fractionLength)..];
+        }
+        if (secondsEnd >= 0) { return pattern.Insert(secondsEnd, ".FFFFFFF"); }
+
+        // A system override can hide seconds. A fractional wall-clock condition must still
+        // disclose its precision; retain the regional prefix/suffix and insert clock fields.
+        int lastClockEnd = Math.Max(minutesEnd, hoursEnd);
+        if (lastClockEnd < 0) { return "HH:mm:ss.FFFFFFF"; }
+        string seconds = minutesEnd >= 0 ? ":ss.FFFFFFF" : ":mm:ss.FFFFFFF";
+        return designatorStart >= lastClockEnd
+            ? pattern[..designatorStart].TrimEnd() + seconds + " " + pattern[designatorStart..]
+            : pattern + seconds;
     }
 
     private string FormatQuantity(decimal quantity, DataUnitStyle style, bool bits, string numberFormat)

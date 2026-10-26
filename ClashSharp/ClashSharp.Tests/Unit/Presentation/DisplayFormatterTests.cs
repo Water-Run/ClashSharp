@@ -6,6 +6,39 @@ namespace ClashSharp.Tests.Unit.Presentation;
 
 public sealed class DisplayFormatterTests
 {
+    [Theory]
+    [InlineData("HH:mm:s", "16:05:6.1234567")]
+    [InlineData("HH:mm:ss 'ss'", "16:05:06.1234567 ss")]
+    [InlineData("HH:mm:ss \"class\"", "16:05:06.1234567 class")]
+    [InlineData("HH:mm:ss.fff", "16:05:06.1234567")]
+    [InlineData("HH:mm:ss,FFF", "16:05:06,1234567")]
+    [InlineData("tt h:mm:%s", "PM 4:05:6.1234567")]
+    [InlineData("h:mm tt", "4:05:06.1234567 PM")]
+    [InlineData("tt h:mm", "PM 4:05:06.1234567")]
+    public void FractionalTimeHonorsActualSystemTokensWithoutRewritingLiterals(string pattern, string expected)
+    {
+        CultureInfo regional = (CultureInfo)CultureInfo.GetCultureInfo("en-US").Clone();
+        regional.DateTimeFormat.LongTimePattern = pattern;
+        DisplayFormatter formatter = new(readCulture: () => regional);
+        TimeOnly value = new TimeOnly(16, 5, 6).Add(TimeSpan.FromTicks(1234567));
+
+        Assert.Equal(expected, formatter.Time(value));
+        Assert.Equal(pattern, regional.DateTimeFormat.LongTimePattern);
+    }
+
+    [Theory]
+    [InlineData("HH:mm:ss.fff", "16:05:06.1230000")]
+    [InlineData("HH:mm:ss.FFF", "16:05:06.123")]
+    [InlineData("HH:mm:ss \\s\\s", "16:05:06.123 ss")]
+    public void FractionalTimeKeepsFixedAndOptionalDigitsAndEscapedText(string pattern, string expected)
+    {
+        CultureInfo regional = (CultureInfo)CultureInfo.GetCultureInfo("en-US").Clone();
+        regional.DateTimeFormat.LongTimePattern = pattern;
+        DisplayFormatter formatter = new(readCulture: () => regional);
+
+        Assert.Equal(expected, formatter.Time(new TimeOnly(16, 5, 6).Add(TimeSpan.FromTicks(1230000))));
+    }
+
     [Fact]
     public void CapturedOptionsKeepQuantityMeaningAndStillUseRegionalFormatting()
     {
