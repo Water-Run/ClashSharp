@@ -6,7 +6,7 @@ namespace ClashSharp.ApplicationModel.Lifecycle;
 /// <summary>Observes completed producer failures before their owner can discard or replace the task.</summary>
 internal static class RuntimeTaskFailurePolicy
 {
-    internal static void ThrowIfProcessFatal(Task? task)
+    internal static async Task ThrowIfProcessFatalAsync(Task? task)
     {
         if (task is null) { return; }
         if (!task.IsCompleted) { throw new InvalidOperationException("The owned runtime task has not completed."); }
@@ -15,7 +15,7 @@ internal static class RuntimeTaskFailurePolicy
         {
             // Async methods mark an OperationCanceledException as cancellation even when its
             // inner graph is fatal. Task.Exception is null in that case; observe the await result.
-            try { task.GetAwaiter().GetResult(); }
+            try { await task.ConfigureAwait(false); }
             catch (OperationCanceledException failure) when (!ExceptionGraphClassifier.IsProcessFatal(failure)) { }
         }
         else if (task.Exception is { } failure && ExceptionGraphClassifier.IsProcessFatal(failure))

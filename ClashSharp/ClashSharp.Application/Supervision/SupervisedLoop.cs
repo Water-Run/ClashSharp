@@ -72,7 +72,7 @@ public sealed class SupervisedLoop : IRuntimeParticipant
                 return;
             }
 
-            CleanupCompletedLoop();
+            await CleanupCompletedLoopAsync().ConfigureAwait(false);
             StartCore();
         }
         finally
@@ -91,7 +91,7 @@ public sealed class SupervisedLoop : IRuntimeParticipant
             if (!wasRunning)
             {
                 PublishStopped();
-                CleanupCompletedLoop();
+                await CleanupCompletedLoopAsync().ConfigureAwait(false);
                 return new QuiescedState(false);
             }
 
@@ -111,7 +111,7 @@ public sealed class SupervisedLoop : IRuntimeParticipant
                 throw new RuntimeQuiescenceException(priorState, failure);
             }
             PublishStopped();
-            CleanupCompletedLoop();
+            await CleanupCompletedLoopAsync().ConfigureAwait(false);
             return priorState;
         }
         finally
@@ -142,7 +142,7 @@ public sealed class SupervisedLoop : IRuntimeParticipant
                 await stoppingTask.WaitAsync(cancellationToken).ConfigureAwait(false);
             }
 
-            CleanupCompletedLoop();
+            await CleanupCompletedLoopAsync().ConfigureAwait(false);
             StartCore();
         }
         finally
@@ -167,7 +167,7 @@ public sealed class SupervisedLoop : IRuntimeParticipant
             }
 
             PublishStopped();
-            CleanupCompletedLoop();
+            await CleanupCompletedLoopAsync().ConfigureAwait(false);
         }
         finally
         {
@@ -361,7 +361,7 @@ public sealed class SupervisedLoop : IRuntimeParticipant
         }
     }
 
-    private void CleanupCompletedLoop()
+    private async Task CleanupCompletedLoopAsync()
     {
         if (_loopTask is not null && !_loopTask.IsCompleted)
         {
@@ -369,7 +369,7 @@ public sealed class SupervisedLoop : IRuntimeParticipant
         }
 
         // A fatal completion remains owned and observable; it is not an idle producer.
-        RuntimeTaskFailurePolicy.ThrowIfProcessFatal(_loopTask);
+        await RuntimeTaskFailurePolicy.ThrowIfProcessFatalAsync(_loopTask).ConfigureAwait(false);
         _loopTask = null;
         _loopCancellation?.Dispose();
         _loopCancellation = null;

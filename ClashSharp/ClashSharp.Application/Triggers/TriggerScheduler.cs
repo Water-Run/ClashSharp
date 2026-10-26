@@ -272,7 +272,7 @@ public sealed class TriggerScheduler : IRuntimeParticipant
                 return;
             }
 
-            CleanupCompletedRun();
+            await CleanupCompletedRunAsync().ConfigureAwait(false);
             StartCore();
         }
         finally
@@ -290,7 +290,7 @@ public sealed class TriggerScheduler : IRuntimeParticipant
             bool wasRunning = _runTask is { IsCompleted: false } && IsAcceptingEvents;
             if (!wasRunning)
             {
-                CleanupCompletedRun();
+                await CleanupCompletedRunAsync().ConfigureAwait(false);
                 PublishStopped();
                 return new QuiescedState(false);
             }
@@ -318,7 +318,7 @@ public sealed class TriggerScheduler : IRuntimeParticipant
                 throw;
             }
 
-            CleanupCompletedRun();
+            await CleanupCompletedRunAsync().ConfigureAwait(false);
             PublishStopped();
             return new QuiescedState(true);
         }
@@ -340,7 +340,7 @@ public sealed class TriggerScheduler : IRuntimeParticipant
                 return;
             }
 
-            CleanupCompletedRun();
+            await CleanupCompletedRunAsync().ConfigureAwait(false);
             StartCore();
         }
         finally
@@ -376,12 +376,12 @@ public sealed class TriggerScheduler : IRuntimeParticipant
                 }
                 catch
                 {
-                    CleanupCompletedRun();
+                    await CleanupCompletedRunAsync().ConfigureAwait(false);
                     throw;
                 }
             }
 
-            CleanupCompletedRun();
+            await CleanupCompletedRunAsync().ConfigureAwait(false);
             while (_pendingEvents.TryDequeue(out _))
             {
             }
@@ -453,7 +453,7 @@ public sealed class TriggerScheduler : IRuntimeParticipant
         if (restartRequired)
         {
             await stoppingTask.ConfigureAwait(false);
-            CleanupCompletedRun();
+            await CleanupCompletedRunAsync().ConfigureAwait(false);
             StartCore();
             Publish(healthBeforeRestart);
             return;
@@ -717,14 +717,14 @@ public sealed class TriggerScheduler : IRuntimeParticipant
         previous?.Dispose();
     }
 
-    private void CleanupCompletedRun()
+    private async Task CleanupCompletedRunAsync()
     {
         if (_runTask is not null && !_runTask.IsCompleted)
         {
             return;
         }
 
-        RuntimeTaskFailurePolicy.ThrowIfProcessFatal(_runTask);
+        await RuntimeTaskFailurePolicy.ThrowIfProcessFatalAsync(_runTask).ConfigureAwait(false);
         _runTask = null;
         _workCancellation?.Dispose();
         _workCancellation = null;
