@@ -220,6 +220,39 @@ public sealed class TriggerSchedulerTests
             && health.ErrorCode == "supervisor.io");
     }
 
+    [Theory]
+    [InlineData("start")]
+    [InlineData("quiesce")]
+    [InlineData("resume")]
+    public async Task CompletedFatalClockFailureCannotBeDiscardedByLaterLifecycleCalls(string operation)
+    {
+        OperationCanceledException failure = new("Synthetic clock wrapper.", CreateProcessFatalException<OutOfMemoryException>());
+        FakeSchedulerClock clock = new() { FailuresRemaining = 1, Failure = failure };
+        TriggerScheduler scheduler = CreateScheduler(new FakeSchedulerSettings(), new FakeSchedulerEventSource(), clock, new RecordingEvaluator());
+        try
+        {
+            await scheduler.StartAsync(CancellationToken.None);
+            await clock.WaitUntilWaitingAsync(1);
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            while (scheduler.IsRunning) { await Task.Delay(10, timeout.Token); }
+
+            Exception? actual = await Record.ExceptionAsync(() => operation switch
+            {
+                "start" => scheduler.StartAsync(CancellationToken.None),
+                "quiesce" => scheduler.QuiesceAsync(CancellationToken.None),
+                _ => scheduler.ResumeAsync(new QuiescedState(true), CancellationToken.None),
+            });
+
+            Assert.Same(failure, actual);
+            Assert.False(scheduler.IsRunning);
+            Assert.Same(failure, await Record.ExceptionAsync(() => scheduler.StopAsync(CancellationToken.None)));
+        }
+        finally
+        {
+            _ = await Record.ExceptionAsync(() => scheduler.StopAsync(CancellationToken.None));
+        }
+    }
+
     [Fact]
     public async Task ClockCancellationWrapsFatalFailure_FaultsOwnedLoopWithoutRetry()
     {

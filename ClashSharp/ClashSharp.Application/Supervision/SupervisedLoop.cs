@@ -5,8 +5,8 @@ namespace ClashSharp.ApplicationModel.Supervision;
 
 /// <summary>Runs one retrying background operation under awaited lifecycle control.</summary>
 /// <remarks>
-/// The supervisor owns exactly one loop task and cancellation source. Iteration failures are
-/// converted to health transitions and never escape through the owned loop task.
+/// The supervisor owns exactly one loop task and cancellation source. Recoverable iteration
+/// failures become health transitions; process-fatal failures remain owned for lifecycle observation.
 /// </remarks>
 public sealed class SupervisedLoop : IRuntimeParticipant
 {
@@ -368,6 +368,8 @@ public sealed class SupervisedLoop : IRuntimeParticipant
             return;
         }
 
+        // A fatal completion remains owned and observable; it is not an idle producer.
+        RuntimeTaskFailurePolicy.ThrowIfProcessFatal(_loopTask);
         _loopTask = null;
         _loopCancellation?.Dispose();
         _loopCancellation = null;

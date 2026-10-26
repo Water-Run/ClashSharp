@@ -724,6 +724,7 @@ public sealed class TriggerScheduler : IRuntimeParticipant
             return;
         }
 
+        RuntimeTaskFailurePolicy.ThrowIfProcessFatal(_runTask);
         _runTask = null;
         _workCancellation?.Dispose();
         _workCancellation = null;
