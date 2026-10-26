@@ -5,7 +5,6 @@ using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -120,8 +119,57 @@ internal sealed partial class AppMcpAgentBackend(AppDataGenerationRepositories r
         finally { _writes.Release(); }
     }
 
-    private static string GetWriteHash(McpToolId tool, JsonElement arguments) =>
-        Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(tool + ":" + arguments.GetRawText())));
+    private static string GetWriteHash(McpToolId tool, JsonElement arguments)
+    {
+        // A receipt identifies an accepted command, not a client's JSON formatting. Preserve
+        // array order and scalar values; object order, escaping and UUID spelling carry no
+        // extra authority. The parsed operation UUID remains the receipt dictionary key.
+        using MemoryStream canonical = new();
+        using (Utf8JsonWriter writer = new(canonical))
+        {
+            writer.WriteStartArray();
+            writer.WriteNumberValue((int)tool);
+            JsonElement properties = McpToolCatalog.All.Single(definition => definition.Id == tool)
+                .InputSchema.GetProperty("properties");
+            WriteReplayValue(writer, arguments, properties);
+            writer.WriteEndArray();
+        }
+        Span<byte> bytes = canonical.GetBuffer().AsSpan(0, checked((int)canonical.Length));
+        try { return Convert.ToHexStringLower(SHA256.HashData(bytes)); }
+        finally { CryptographicOperations.ZeroMemory(bytes); }
+    }
+
+    private static void WriteReplayValue(Utf8JsonWriter writer, JsonElement value, JsonElement? rootProperties = null)
+    {
+        switch (value.ValueKind)
+        {
+            case JsonValueKind.Object:
+                writer.WriteStartObject();
+                foreach (JsonProperty property in value.EnumerateObject().OrderBy(item => item.Name, StringComparer.Ordinal))
+                {
+                    writer.WritePropertyName(property.Name);
+                    if (rootProperties is { } properties && properties.TryGetProperty(property.Name, out JsonElement schema)
+                        && schema.TryGetProperty("format", out JsonElement format) && format.GetString() == "uuid")
+                    {
+                        writer.WriteStringValue(Guid.Parse(property.Value.GetString()!).ToString("D"));
+                    }
+                    else { WriteReplayValue(writer, property.Value); }
+                }
+                writer.WriteEndObject();
+                break;
+            case JsonValueKind.Array:
+                writer.WriteStartArray();
+                foreach (JsonElement item in value.EnumerateArray()) { WriteReplayValue(writer, item); }
+                writer.WriteEndArray();
+                break;
+            case JsonValueKind.String:
+                writer.WriteStringValue(value.GetString());
+                break;
+            default:
+                value.WriteTo(writer);
+                break;
+        }
+    }
 
     private async Task<McpToolResponse> ExecuteReadAsync(McpToolId tool, JsonElement args, CancellationToken token)
     {

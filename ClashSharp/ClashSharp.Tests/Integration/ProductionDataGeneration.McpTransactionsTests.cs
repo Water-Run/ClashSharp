@@ -397,10 +397,13 @@ public sealed partial class ProductionDataGenerationTests
     }
 
     private sealed class AgentSession(Fixture fixture, McpRuntimeController controller,
-        HttpClient http, McpClient client, int port, AgentErrors errors) : IAsyncDisposable
+        HttpClient http, McpClient client, int port, AgentErrors errors, Backend backend,
+        McpClientIdentity identity) : IAsyncDisposable
     {
         public McpClient Client { get; } = client;
         public AgentErrors Errors { get; } = errors;
+        public Backend Backend { get; } = backend;
+        public McpClientIdentity Identity { get; } = identity;
 
         public Task<CallToolResult> CallAsync(McpToolId tool, object arguments) => Client.CallToolAsync(
             McpToolCatalog.All.Single(definition => definition.Id == tool).Name,
@@ -430,7 +433,8 @@ public sealed partial class ProductionDataGenerationTests
                 }
                 http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", store.Secret);
                 McpClient client = await McpClient.CreateAsync(new HttpClientTransport(new() { Endpoint = new($"http://127.0.0.1:{port}/mcp") }, http));
-                return new(fixture, controller, http, client, port, errors);
+                Assert.True(access.TryAuthenticate(store.Secret!, out McpClientIdentity? identity));
+                return new(fixture, controller, http, client, port, errors, backend, identity!);
             }
             catch { http.Dispose(); await controller.DisposeAsync(); throw; }
         }
