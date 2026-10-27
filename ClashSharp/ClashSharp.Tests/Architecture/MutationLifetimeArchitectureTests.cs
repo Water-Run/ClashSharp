@@ -99,8 +99,22 @@ public sealed class MutationLifetimeArchitectureTests
     {
         Assert.DoesNotContain(
             ReadProductionSources(),
-            source => source.Text.Contains("Environment.Exit", StringComparison.Ordinal));
+            source => UsesForcedEnvironmentExit(source.Text));
     }
+
+    /// <summary>Retains forced-exit detection without rejecting ordinary process exit-code reporting.</summary>
+    [Theory]
+    [InlineData("Environment.Exit(0);", true)]
+    [InlineData("System.Environment . Exit ( 3 );", true)]
+    [InlineData("Environment\n.\nExit\n(1);", true)]
+    [InlineData("Environment.ExitCode = 3;", false)]
+    [InlineData("int result = Environment.ExitCode;", false)]
+    [InlineData("Exit();", false)]
+    public void ForcedExitGuardRecognizesInvocationsAndAllowsNormalExitCodes(string source, bool expected) =>
+        Assert.Equal(expected, UsesForcedEnvironmentExit(source));
+
+    private static bool UsesForcedEnvironmentExit(string source) =>
+        Regex.IsMatch(source, @"\bEnvironment\s*\.\s*Exit\s*\(");
 
     private static IReadOnlyList<ProductionSource> ReadProductionSources()
     {
