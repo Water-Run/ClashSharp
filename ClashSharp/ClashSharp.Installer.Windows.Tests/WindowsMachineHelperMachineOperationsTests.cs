@@ -25,6 +25,44 @@ public sealed class WindowsMachineHelperMachineOperationsTests
         FinalVerification,
     }
 
+    [Theory]
+    [InlineData(InstallerOperation.Install)]
+    [InlineData(InstallerOperation.Repair)]
+    [InlineData(InstallerOperation.Uninstall)]
+    public async Task UserOnlyProfileDoesNotReadOrChangeAnotherAccountsServiceOrMachineFiles(InstallerOperation operation)
+    {
+        using var fixture = Fixture();
+        InstallerRequest request = fixture.Request(operation, targetSid: TargetSid) with { InstallTransparentProxyService = false };
+        InstallerMachineAssociation foreign = InstallerMachineAssociation.Create(OtherSid, ForeignToken);
+        var backend = new FakeBackend(InstallerMachineAssociationObservation.Valid(foreign), rootsAbsent: false)
+        {
+            ServiceAssociation = foreign,
+            ServiceInstalled = true,
+            PayloadPresent = true,
+            PayloadInstalled = true,
+        };
+        var operations = new WindowsMachineHelperMachineOperations(backend);
+        await using var release = new FakeReleaseLease(request, fixture.Manifest);
+        foreach (InstallerMachineHelperSessionDisposition disposition in Enum.GetValues<InstallerMachineHelperSessionDisposition>())
+        {
+            await operations.PrepareAsync(request, release, disposition, CancellationToken.None);
+            if (operation == InstallerOperation.Uninstall)
+            {
+                await operations.RemoveAsync(request, release, disposition, CancellationToken.None);
+            }
+            else
+            {
+                await operations.ApplyAsync(request, release, disposition, CancellationToken.None);
+            }
+            await operations.VerifyAsync(request, release, CancellationToken.None);
+        }
+        Assert.Empty(backend.Calls);
+        Assert.True(backend.ServiceInstalled);
+        Assert.True(backend.PayloadInstalled);
+        Assert.Equal(foreign, backend.Association.Association);
+        Assert.Equal(foreign, backend.ServiceAssociation);
+    }
+
     [Fact]
     public async Task InstallPrepareReservesFreshAssociationAfterServiceFence()
     {

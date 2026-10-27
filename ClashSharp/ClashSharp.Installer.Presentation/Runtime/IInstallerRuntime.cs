@@ -69,4 +69,7 @@ public sealed record InstallerRuntimeReadiness(
 
     /// <summary>Whether this exact pending repair permits an independently checked preservation attempt.</summary>
     public bool CanRestoreOriginal { get; init; }
+
+    /// <summary>Whether user-only setup can be completed for the exact installed release.</summary>
+    public bool PendingUserPreferences { get; init; }
 }

@@ -124,6 +124,7 @@ internal sealed class WindowsMaintenanceRecoveryCoordinator : IDisposable
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         InstallerTransactionSnapshot requested = command.ToDurableState();
+        if (!requested.Journal.InstallTransparentProxyService) { throw Failure("service_profile_not_restorable"); }
         if (command.Verb is not (InstallerMachineHelperVerb.RestoreOriginal or InstallerMachineHelperVerb.ClearOriginal)) { throw Failure("phase_invalid"); }
         WindowsMaintenanceRecoveryRecord record = await _store.ReadAsync(cancellationToken).ConfigureAwait(false)
             ?? throw Failure("original_baseline_missing");
@@ -175,10 +176,14 @@ internal sealed class WindowsMaintenanceRecoveryCoordinator : IDisposable
         actual?.Validate();
         if (actual != expected) { throw Failure("transaction_changed"); }
     }
-    private static bool IsOrdinaryRepair(InstallerTransactionJournal journal) => journal.Operation == InstallerOperation.Repair && !journal.AllowReassociation;
+    private static bool IsOrdinaryRepair(InstallerTransactionJournal journal) => journal.InstallTransparentProxyService
+        && journal.Operation == InstallerOperation.Repair && !journal.AllowReassociation;
     private static InstallerTransactionJournal Initial(InstallerTransactionSnapshot state) => state.Journal with { Phase = InstallerTransactionPhase.Prepared, Generation = 1 };
     private static InstallerRequest Request(InstallerTransactionSnapshot state) => new(state.Journal.Operation, state.Journal.TargetSid,
-        state.Journal.AllowReassociation, state.Journal.ExpectedPackageVersion, state.Journal.InstallerPayloadSha256);
+        state.Journal.AllowReassociation, state.Journal.ExpectedPackageVersion, state.Journal.InstallerPayloadSha256)
+    {
+        InstallTransparentProxyService = state.Journal.InstallTransparentProxyService,
+    };
     private void ReleaseHeld() { IWindowsMaintenanceOriginalSession? held = _held; _held = null; held?.Dispose(); }
     public void Dispose()
     {

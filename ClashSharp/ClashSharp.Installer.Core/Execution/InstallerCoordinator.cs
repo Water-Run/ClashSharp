@@ -301,7 +301,7 @@ public sealed partial class InstallerCoordinator : IDisposable
         {
             ReportSafely(progress, durable.Journal.Phase, 30, "installer.progress.certificate");
             await ReverifyReleaseAsync(request, release, cancellationToken).ConfigureAwait(false);
-            if (request.Operation == InstallerOperation.Repair && !request.AllowReassociation
+            if (request.InstallTransparentProxyService && request.Operation == InstallerOperation.Repair && !request.AllowReassociation
                 && _machineMutation is IInstallerOriginalRestorationMutation continuation)
             {
                 InstallerTransactionSnapshot continued = await continuation.ContinueCandidateAsync(request, release, durable, cancellationToken).ConfigureAwait(false);

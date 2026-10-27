@@ -26,6 +26,9 @@ public sealed record InstallerRuntimeInspection(
     InstallerTransactionSnapshot? DurableTransaction,
     string ReleaseVersion)
 {
+    /// <summary>Whether this exact release has user-only setup remaining after verified installation.</summary>
+    public bool PendingUserPreferences { get; init; }
+
     /// <summary>Validates the complete inspection snapshot without changing machine state.</summary>
     public void Validate()
     {

@@ -38,6 +38,7 @@ internal sealed class WindowsMachineHelperMachineOperations
         CancellationToken cancellationToken)
     {
         ValidateBoundary(request, release, disposition, cancellationToken);
+        if (!request.InstallTransparentProxyService) { return; }
         if (request.Operation is InstallerOperation.Install or InstallerOperation.Repair)
         {
             if (disposition == InstallerMachineHelperSessionDisposition.VerifyCommittedReplay)
@@ -134,6 +135,7 @@ internal sealed class WindowsMachineHelperMachineOperations
             throw new InstallerProtocolException(
                 "installer.machine.apply_operation_invalid");
         }
+        if (!request.InstallTransparentProxyService) { return; }
 
         if (disposition == InstallerMachineHelperSessionDisposition.VerifyCommittedReplay)
         {
@@ -171,6 +173,7 @@ internal sealed class WindowsMachineHelperMachineOperations
             throw new InstallerProtocolException(
                 "installer.machine.remove_operation_invalid");
         }
+        if (!request.InstallTransparentProxyService) { return; }
 
         if (disposition == InstallerMachineHelperSessionDisposition.VerifyCommittedReplay)
         {
@@ -224,6 +227,7 @@ internal sealed class WindowsMachineHelperMachineOperations
         CancellationToken cancellationToken)
     {
         ValidateBoundary(request, release, disposition: null, cancellationToken);
+        if (!request.InstallTransparentProxyService) { return; }
         if (request.Operation is InstallerOperation.Install or InstallerOperation.Repair)
         {
             await VerifyInstalledAsync(request, release, cancellationToken)

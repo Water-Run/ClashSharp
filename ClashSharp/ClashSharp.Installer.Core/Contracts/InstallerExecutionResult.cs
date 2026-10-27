@@ -1,5 +1,23 @@
 namespace ClashSharp.Installer.Contracts;
 
+/// <summary>Verified limits or follow-up work for current-user installation choices.</summary>
+[Flags]
+public enum InstallerPreferencesWarnings
+{
+    /// <summary>No follow-up is needed.</summary>
+    None = 0,
+    /// <summary>Windows did not enable the requested application startup task.</summary>
+    StartupDenied = 1,
+    /// <summary>Windows did not enable the requested proxy recovery task.</summary>
+    ProxyRecoveryDenied = 2,
+    /// <summary>Existing application settings were preserved instead of reseeded.</summary>
+    ExistingSettingsPreserved = 4,
+    /// <summary>Native taskbar confirmation remains for the foreground application.</summary>
+    NativePinConfirmationPending = 8,
+    /// <summary>The core installation is verified and user-only setup remains retryable.</summary>
+    UserSetupPending = 16,
+}
+
 /// <summary>Describes the externally observable outcome of an installer invocation.</summary>
 public enum InstallerExecutionOutcome
 {
@@ -34,4 +52,7 @@ public sealed record InstallerExecutionResult(
 {
     /// <summary>Gets verified ordinary-uninstall cleanup observations, when available.</summary>
     public InstallerDirectoryCleanupReport? DirectoryCleanupReport { get; init; }
+
+    /// <summary>Gets observed user-setup warnings without raw platform errors.</summary>
+    public InstallerPreferencesWarnings PreferencesWarnings { get; init; }
 }

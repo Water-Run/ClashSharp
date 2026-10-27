@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Text.Json.Serialization;
 using ClashSharp.Installer.Contracts;
 
 namespace ClashSharp.Installer.Transactions;
@@ -15,6 +16,19 @@ public sealed record InstallerTransactionJournal(
     InstallerTransactionPhase Phase,
     int Generation)
 {
+    /// <summary>Whether the immutable operation includes the system service; omitted legacy documents mean true.</summary>
+    [JsonIgnore]
+    public bool InstallTransparentProxyService { get; init; } = true;
+
+    /// <summary>Optional private-document projection preserving legacy true-profile byte identities.</summary>
+    [JsonPropertyName("installTransparentProxyService")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? SerializedServiceProfile
+    {
+        get => InstallTransparentProxyService ? null : false;
+        init => InstallTransparentProxyService = value ?? true;
+    }
+
     /// <summary>Gets the current C# installer transaction schema.</summary>
     public const int CurrentSchema = 2;
 
@@ -34,7 +48,10 @@ public sealed record InstallerTransactionJournal(
             request.ExpectedPackageVersion,
             request.InstallerPayloadSha256,
             InstallerTransactionPhase.Prepared,
-            1);
+            1)
+        {
+            InstallTransparentProxyService = request.InstallTransparentProxyService,
+        };
         journal.Validate();
         return journal;
     }
@@ -55,7 +72,10 @@ public sealed record InstallerTransactionJournal(
             TargetSid,
             AllowReassociation,
             ExpectedPackageVersion,
-            InstallerPayloadSha256).Validate();
+            InstallerPayloadSha256)
+        {
+            InstallTransparentProxyService = InstallTransparentProxyService,
+        }.Validate();
         if (!Enum.IsDefined(Phase))
         {
             throw new InstallerProtocolException("installer.transaction.phase_invalid");
@@ -78,7 +98,7 @@ public sealed record InstallerTransactionJournal(
                 InstallerTransactionPhase.Verified) => 5,
             (InstallerOperation.Uninstall, InstallerTransactionPhase.Verified) => 5,
             (InstallerOperation.Repair, InstallerTransactionPhase.OriginalRestored)
-                when !AllowReassociation && Generation is 2 or 3 => Generation,
+                when InstallTransparentProxyService && !AllowReassociation && Generation is 2 or 3 => Generation,
             _ => 0,
         };
         if (expectedGeneration < 1 || Generation != expectedGeneration)
@@ -96,6 +116,7 @@ public sealed record InstallerTransactionJournal(
         request.Validate();
         Validate();
         return Operation == request.Operation
+            && InstallTransparentProxyService == request.InstallTransparentProxyService
             && string.Equals(TargetSid, request.TargetSid, StringComparison.Ordinal)
             && AllowReassociation == request.AllowReassociation
             && string.Equals(ExpectedPackageVersion, request.ExpectedPackageVersion, StringComparison.Ordinal)
@@ -113,7 +134,7 @@ public sealed record InstallerTransactionJournal(
             return this;
         }
 
-        bool restoringOriginal = Operation == InstallerOperation.Repair && !AllowReassociation
+        bool restoringOriginal = InstallTransparentProxyService && Operation == InstallerOperation.Repair && !AllowReassociation
             && Phase is InstallerTransactionPhase.Prepared or InstallerTransactionPhase.MachineReserved
             && next == InstallerTransactionPhase.OriginalRestored;
         bool allowed = restoringOriginal || Operation switch

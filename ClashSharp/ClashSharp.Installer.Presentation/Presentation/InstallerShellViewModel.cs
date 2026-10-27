@@ -63,6 +63,8 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
     {
         ArgumentNullException.ThrowIfNull(runtime);
         _runtime = runtime;
+        CompletePreferencesCommand = new AsyncDelegateCommand(
+            () => ExecuteOperationAsync(null, completePreferences: true), () => IsCompletePreferencesVisible, SetUnhandledCommandFailure);
         RefreshCommand = new AsyncDelegateCommand(
             RefreshAsync,
             () => CanStartOperation,
@@ -396,6 +398,7 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
 
             ValidateReadiness(readiness);
             _canRestoreOriginal = readiness.CanRestoreOriginal;
+            _hasPendingUserPreferences = readiness.PendingUserPreferences && readiness.CanExecute && readiness.ProductState == InstallerProductState.Installed;
             CanExecuteMutations = readiness.CanExecute;
             DiagnosticCode = readiness.DiagnosticCode;
             StatusTitle = readiness.StatusTitle;
@@ -442,12 +445,12 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
     private Task ExecuteSecondaryOperationAsync() => ExecuteOperationAsync(_secondaryOperation);
 
     private async Task ExecuteOperationAsync(InstallerOperation? requestedOperation, bool ownerTransfer = false,
-        bool retiredUninstall = false, bool originalRestore = false)
+        bool retiredUninstall = false, bool originalRestore = false, bool completePreferences = false)
     {
         IInstallerOwnerTransferRuntime? transfer = ownerTransfer ? _runtime as IInstallerOwnerTransferRuntime : null;
         IInstallerRetiredUninstallRuntime? retired = retiredUninstall ? _runtime as IInstallerRetiredUninstallRuntime : null;
         IInstallerOriginalRestorationRuntime? restoration = originalRestore ? _runtime as IInstallerOriginalRestorationRuntime : null;
-        if (originalRestore ? !IsOriginalRestoreActionVisible : ownerTransfer ? transfer?.SupportsOwnerTransfer != true
+        if (completePreferences ? !IsCompletePreferencesVisible : originalRestore ? !IsOriginalRestoreActionVisible : ownerTransfer ? transfer?.SupportsOwnerTransfer != true
             : retiredUninstall ? retired?.SupportsRetiredUninstall != true : !CanExecuteMutations || requestedOperation is null)
         {
             StatusBadge = "已阻止";
@@ -465,9 +468,12 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
             return;
         }
 
+        InstallerPreferences? installPreferences = requestedOperation == InstallerOperation.Install && !_isUpgrade
+            && _offersInstallPreferences ? _installPreferences : null;
+
         IsCancellationRequested = false;
         IsBusy = true;
-        string operationLabel = originalRestore ? "恢复原安装"
+        string operationLabel = completePreferences ? "安装选项" : originalRestore ? "恢复原安装"
             : requestedOperation is { } selected ? GetOperationLabel(selected, _isUpgrade) : string.Empty;
         InvalidateReadiness();
         IsProgressIndeterminate = ownerTransfer || retiredUninstall;
@@ -508,7 +514,9 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
                 generation.Cancellation.Token.ThrowIfCancellationRequested();
                 retiredStarted = true;
             }
-            InstallerExecutionResult result = ownerTransfer
+            InstallerExecutionResult result = completePreferences
+                ? await ((IInstallerPreferencesRuntime)_runtime).CompletePreferencesAsync(progress, generation.Cancellation.Token)
+                : ownerTransfer
                 ? await transfer!.TransferAndExecuteAsync((confirmation, token) =>
                     Task.Factory.StartNew(() => ConfirmOwnerTransferAsync(confirmation, generation, token),
                         CancellationToken.None, TaskCreationOptions.DenyChildAttach, confirmationScheduler).Unwrap(),
@@ -517,20 +525,23 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
                     ? await retired!.UninstallRetiredAccountAsync(progress, generation.Cancellation.Token)
                     : originalRestore
                         ? await restoration!.RestoreOriginalAsync(progress, generation.Cancellation.Token)
-                        : await _runtime.ExecuteAsync(requestedOperation!.Value, progress, generation.Cancellation.Token);
+                        : installPreferences is not null && _runtime is IInstallerPreferencesRuntime preferencesRuntime
+                            ? await preferencesRuntime.InstallWithPreferencesAsync(installPreferences, progress, generation.Cancellation.Token)
+                            : await _runtime.ExecuteAsync(requestedOperation!.Value, progress, generation.Cancellation.Token);
             Interlocked.Exchange(ref acceptProgress, 0);
             if (!IsCurrent(generation))
             {
                 return;
             }
 
-            ValidateExecutionResult(result, ownerTransfer || retiredUninstall ? null : requestedOperation);
+            ValidateExecutionResult(result, ownerTransfer || retiredUninstall || completePreferences ? null : requestedOperation);
             if (originalRestore && result.Outcome == InstallerExecutionOutcome.Succeeded
                 && result.LastDurablePhase != InstallerTransactionPhase.OriginalRestored)
             {
                 throw new InstallerProtocolException("installer.runtime.result_invalid");
             }
             ApplyExecutionResult(result);
+            ApplyPreferencesWarnings(result, requestedOperation);
             if (retiredUninstall)
             {
                 ApplyRetiredUninstallResult(result);
@@ -870,6 +881,7 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
         CancelCommand.NotifyCanExecuteChanged();
         OwnerTransferCommand.NotifyCanExecuteChanged();
         RetiredUninstallCommand.NotifyCanExecuteChanged();
+        CompletePreferencesCommand.NotifyCanExecuteChanged();
     }
 
     private void NotifyActionVisibility()
@@ -880,11 +892,16 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
         OnPropertyChanged(nameof(IsCancelActionVisible));
         OnPropertyChanged(nameof(IsOwnerTransferActionVisible));
         OnPropertyChanged(nameof(IsRetiredUninstallActionVisible));
+        OnPropertyChanged(nameof(IsInstallPreferencesVisible));
+        OnPropertyChanged(nameof(CanEditInstallPreferences));
+        OnPropertyChanged(nameof(IsCompletePreferencesVisible));
     }
 
     private void ApplyProductState(InstallerRuntimeReadiness readiness)
     {
         _isUpgrade = readiness.IsUpgrade;
+        _offersInstallPreferences = readiness.ProductState == InstallerProductState.Available
+            && _runtime is IInstallerPreferencesRuntime { SupportsInstallPreferences: true };
         InstallerOperation fallbackOperation = readiness.ProductState switch
         {
             InstallerProductState.Available => InstallerOperation.Install,
@@ -997,6 +1014,9 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
             && ordinaryOperation == InstallerOperation.Repair;
         if (result is null
             || !Enum.IsDefined(result.Outcome)
+            || (result.PreferencesWarnings & ~(InstallerPreferencesWarnings.StartupDenied | InstallerPreferencesWarnings.ProxyRecoveryDenied
+                | InstallerPreferencesWarnings.ExistingSettingsPreserved | InstallerPreferencesWarnings.NativePinConfirmationPending
+                | InstallerPreferencesWarnings.UserSetupPending)) != 0
             || !IsValidDiagnosticCode(result.DiagnosticCode)
             || (result.LastDurablePhase is { } phase && !Enum.IsDefined(phase))
             || (result.Outcome == InstallerExecutionOutcome.Succeeded

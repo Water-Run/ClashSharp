@@ -81,6 +81,13 @@ public partial class App : Microsoft.UI.Xaml.Application
     {
         try
         {
+            int? installerSetup = await InstallerSetupBootstrap.TryRunAsync(Environment.GetCommandLineArgs()[1..], CancellationToken.None);
+            if (installerSetup is { } setupExitCode)
+            {
+                Environment.ExitCode = setupExitCode;
+                Exit();
+                return;
+            }
             DispatcherQueue dispatcherQueue = DispatcherQueue.GetForCurrentThread()
                 ?? throw new InvalidOperationException("The WinUI dispatcher is unavailable during launch.");
             _primaryInstanceBootstrap = new WindowsPrimaryInstanceBootstrap(dispatcherQueue, BringPrimaryWindowToFront);

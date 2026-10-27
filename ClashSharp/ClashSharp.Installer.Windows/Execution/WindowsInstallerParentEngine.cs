@@ -64,7 +64,7 @@ internal interface IWindowsInstallerParentInspector
 /// coordinator/helper session per operation.
 /// </summary>
 public sealed class WindowsInstallerParentEngine : IInstallerRuntimeBackend, IInstallerOwnerTransferRuntimeBackend,
-    IInstallerRetiredUninstallRuntimeBackend, IInstallerOriginalRestorationRuntimeBackend
+    IInstallerRetiredUninstallRuntimeBackend, IInstallerOriginalRestorationRuntimeBackend, IInstallerPreferencesRuntimeBackend
 {
     private readonly object _lifetimeSync = new();
     private readonly InstallerReleaseManifest _manifest;
@@ -72,6 +72,8 @@ public sealed class WindowsInstallerParentEngine : IInstallerRuntimeBackend, IIn
     private readonly IWindowsInstallerExecutionSessionFactory _sessionFactory;
     private readonly IWindowsInstallerParentInspector _inspector;
     private readonly IWindowsInstallerApplicationLock _applicationLock;
+    private readonly WindowsInstallerPreferencesCoordinator? _preferences;
+    private bool _usesServiceProfile = true;
     private bool _active;
     private bool _disposed;
 
@@ -80,7 +82,8 @@ public sealed class WindowsInstallerParentEngine : IInstallerRuntimeBackend, IIn
         string targetSid,
         IWindowsInstallerExecutionSessionFactory sessionFactory,
         IWindowsInstallerParentInspector inspector,
-        IWindowsInstallerApplicationLock applicationLock)
+        IWindowsInstallerApplicationLock applicationLock,
+        WindowsInstallerPreferencesCoordinator? preferences = null)
     {
         ArgumentNullException.ThrowIfNull(manifest);
         ArgumentNullException.ThrowIfNull(sessionFactory);
@@ -93,6 +96,7 @@ public sealed class WindowsInstallerParentEngine : IInstallerRuntimeBackend, IIn
         _sessionFactory = sessionFactory;
         _inspector = inspector;
         _applicationLock = applicationLock;
+        _preferences = preferences;
     }
 
     /// <summary>
@@ -130,20 +134,24 @@ public sealed class WindowsInstallerParentEngine : IInstallerRuntimeBackend, IIn
             targetSid,
             sessionFactory,
             inspector,
-            WindowsInstallerApplicationLock.CreateCurrentUser());
+            WindowsInstallerApplicationLock.CreateCurrentUser(),
+            new WindowsInstallerPreferencesCoordinator(manifest, targetSid));
     }
 
     /// <summary>Gets the release version derived from the embedded manifest.</summary>
     public string ReleaseVersion => _manifest.ExpectedPackageVersion;
 
     /// <inheritdoc />
-    public bool SupportsOwnerTransfer => _sessionFactory is IWindowsInstallerOwnerTransferSessionFactory;
+    public bool SupportsOwnerTransfer => _usesServiceProfile && _sessionFactory is IWindowsInstallerOwnerTransferSessionFactory;
 
     /// <inheritdoc />
     public bool SupportsRetiredUninstall => _sessionFactory is IWindowsInstallerRetiredUninstallSessionFactory;
 
     /// <inheritdoc />
     public bool SupportsOriginalRestoration => _sessionFactory is IWindowsInstallerOriginalRestorationSessionFactory;
+
+    /// <inheritdoc />
+    public bool SupportsInstallPreferences => _preferences is not null;
 
     /// <inheritdoc />
     public async Task<InstallerExecutionResult> RestoreOriginalAsync(IProgress<InstallerProgress>? progress, CancellationToken cancellationToken)
@@ -186,7 +194,17 @@ public sealed class WindowsInstallerParentEngine : IInstallerRuntimeBackend, IIn
             cancellationToken.ThrowIfCancellationRequested();
             using IDisposable applicationLease = _applicationLock.Acquire(_targetSid, cancellationToken)
                 ?? throw new InstallerProtocolException("installer.application_lock.lease_missing");
-            return await retired.UninstallRetiredAccountAsync(progress, cancellationToken).ConfigureAwait(false);
+            WindowsInstallerPreferencesPlan? preferences = _preferences?.Prepare(InstallerOperation.Uninstall, null, null);
+            InstallerExecutionResult result = await retired.UninstallRetiredAccountAsync(progress, cancellationToken).ConfigureAwait(false);
+            if (result.Outcome == InstallerExecutionOutcome.Succeeded && _preferences is not null && preferences is not null)
+            {
+                try { await _preferences.RemoveAsync(preferences, cancellationToken).ConfigureAwait(false); }
+                catch (Exception exception) when (!InstallerExceptionPolicy.IsProcessFatal(exception))
+                {
+                    result = result with { PreferencesWarnings = InstallerPreferencesWarnings.UserSetupPending };
+                }
+            }
+            return result;
         }
         catch (InstallerUserCancelledException exception)
         {
@@ -214,6 +232,10 @@ public sealed class WindowsInstallerParentEngine : IInstallerRuntimeBackend, IIn
             cancellationToken.ThrowIfCancellationRequested();
             using IDisposable applicationLease = _applicationLock.Acquire(_targetSid, cancellationToken)
                 ?? throw new InstallerProtocolException("installer.application_lock.lease_missing");
+            if (_preferences is not null && !_preferences.UsesService)
+            {
+                return new(InstallerExecutionOutcome.Blocked, "installer.preferences.service_not_selected", null, false);
+            }
             return await transfer.TransferAndExecuteAsync(confirm, progress, cancellationToken).ConfigureAwait(false);
         }
         catch (InstallerUserCancelledException exception)
@@ -253,6 +275,11 @@ public sealed class WindowsInstallerParentEngine : IInstallerRuntimeBackend, IIn
                 ?? throw new InstallerProtocolException(
                     "installer.runtime.inspection_result_missing");
             ValidateInspection(inspection);
+            if (_preferences is not null)
+            {
+                _usesServiceProfile = _preferences.UsesService;
+                inspection = inspection with { PendingUserPreferences = inspection.DurableTransaction is null && _preferences.HasPending };
+            }
             return inspection;
         }
         finally
@@ -268,10 +295,23 @@ public sealed class WindowsInstallerParentEngine : IInstallerRuntimeBackend, IIn
     /// <param name="operation">Install, Repair, or Uninstall.</param>
     /// <param name="progress">Optional best-effort progress observer.</param>
     /// <param name="cancellationToken">Cancels before durable intent or requests safe recovery.</param>
-    public async Task<InstallerExecutionResult> ExecuteAsync(
+    public Task<InstallerExecutionResult> ExecuteAsync(
         InstallerOperation operation,
         IProgress<InstallerProgress>? progress,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken) => ExecuteCoreAsync(operation, null, progress, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<InstallerExecutionResult> InstallWithPreferencesAsync(InstallerPreferences preferences,
+        IProgress<InstallerProgress>? progress, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(preferences);
+        preferences.Validate();
+        if (_preferences is null) { throw new InstallerProtocolException("installer.preferences.unavailable"); }
+        return ExecuteCoreAsync(InstallerOperation.Install, preferences, progress, cancellationToken);
+    }
+
+    private async Task<InstallerExecutionResult> ExecuteCoreAsync(InstallerOperation operation, InstallerPreferences? selected,
+        IProgress<InstallerProgress>? progress, CancellationToken cancellationToken)
     {
         if (!Enum.IsDefined(operation))
         {
@@ -300,20 +340,95 @@ public sealed class WindowsInstallerParentEngine : IInstallerRuntimeBackend, IIn
             request.Validate();
             using IDisposable applicationLease = _applicationLock.Acquire(_targetSid, cancellationToken)
                 ?? throw new InstallerProtocolException("installer.application_lock.lease_missing");
-            await using IWindowsInstallerExecutionSession session =
+            WindowsInstallerPreferencesPlan? preferencePlan = null;
+            if (_preferences is not null)
+            {
+                InstallerRuntimeInspection inspection = await _inspector.InspectAsync(request, cancellationToken).ConfigureAwait(false);
+                ValidateInspection(inspection);
+                if (inspection.Environment.IsApplicationRunning)
+                {
+                    return new(InstallerExecutionOutcome.Blocked, "installer.application_running", null, false);
+                }
+                preferencePlan = _preferences.Prepare(operation, selected, inspection.DurableTransaction?.Journal);
+                request = request with { InstallTransparentProxyService = preferencePlan.IncludeService };
+            }
+            InstallerExecutionResult result;
+            await using (IWindowsInstallerExecutionSession session =
                 await _sessionFactory
                     .CreateAsync(cancellationToken)
                     .ConfigureAwait(false)
                 ?? throw new InstallerProtocolException(
-                    "installer.runtime.execution_session_missing");
-            return await session
-                .ExecuteAsync(request, progress, cancellationToken)
-                .ConfigureAwait(false);
+                    "installer.runtime.execution_session_missing"))
+            {
+                result = await session.ExecuteAsync(request, progress, cancellationToken).ConfigureAwait(false);
+            }
+            if (result.Outcome == InstallerExecutionOutcome.Succeeded && _preferences is not null && preferencePlan is not null)
+            {
+                try
+                {
+                    if (operation == InstallerOperation.Uninstall)
+                    {
+                        await _preferences.RemoveAsync(preferencePlan, cancellationToken).ConfigureAwait(false);
+                    }
+                    else if (preferencePlan.Document is { } document)
+                    {
+                        WindowsInstallerPreferencesDocument verified = _preferences.ConfirmCore(document);
+                        InstallerPreferencesWarnings warnings = await _preferences.ApplyAsync(verified, cancellationToken).ConfigureAwait(false);
+                        result = result with { PreferencesWarnings = warnings };
+                    }
+                }
+                catch (Exception exception) when (!InstallerExceptionPolicy.IsProcessFatal(exception))
+                {
+                    // Core state is already verified. Keep the user-only intent and offer a
+                    // separate retry instead of rolling back or rerunning privileged mutation.
+                    result = result with
+                    {
+                        DiagnosticCode = exception is InstallerProtocolException protocol ? protocol.DiagnosticCode : "installer.preferences.pending",
+                        PreferencesWarnings = InstallerPreferencesWarnings.UserSetupPending,
+                    };
+                }
+            }
+            return result;
         }
         finally
         {
             Exit();
         }
+    }
+
+    /// <inheritdoc />
+    public async Task<InstallerExecutionResult> CompletePreferencesAsync(IProgress<InstallerProgress>? progress, CancellationToken cancellationToken)
+    {
+        if (_preferences is null) { throw new InstallerProtocolException("installer.preferences.unavailable"); }
+        if (!TryEnter()) { return new(InstallerExecutionOutcome.Blocked, "installer.concurrent_action_rejected", null, false); }
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            using IDisposable applicationLease = _applicationLock.Acquire(_targetSid, cancellationToken)
+                ?? throw new InstallerProtocolException("installer.application_lock.lease_missing");
+            var request = new InstallerRequest(InstallerOperation.Install, _targetSid, false,
+                _manifest.ExpectedPackageVersion, _manifest.InstallerPayloadSha256);
+            InstallerRuntimeInspection inspection = await _inspector.InspectAsync(request, cancellationToken).ConfigureAwait(false);
+            ValidateInspection(inspection);
+            if (inspection.DurableTransaction is not null || inspection.Environment.IsApplicationRunning
+                || inspection.Environment.InstalledPackageVersion != _manifest.ExpectedPackageVersion)
+            {
+                return new(InstallerExecutionOutcome.Blocked, "installer.preferences.core_verification_required", null, false);
+            }
+            WindowsInstallerPreferencesDocument document = _preferences.RequirePending();
+            try
+            {
+                InstallerPreferencesWarnings warnings = await _preferences.ApplyAsync(document, cancellationToken).ConfigureAwait(false);
+                return new(InstallerExecutionOutcome.Succeeded, "installer.completed", InstallerTransactionPhase.Verified, false)
+                { PreferencesWarnings = warnings };
+            }
+            catch (Exception exception) when (!InstallerExceptionPolicy.IsProcessFatal(exception))
+            {
+                return new(InstallerExecutionOutcome.Succeeded, "installer.preferences.pending", InstallerTransactionPhase.Verified, false)
+                { PreferencesWarnings = InstallerPreferencesWarnings.UserSetupPending };
+            }
+        }
+        finally { Exit(); }
     }
 
     private bool TryEnter()

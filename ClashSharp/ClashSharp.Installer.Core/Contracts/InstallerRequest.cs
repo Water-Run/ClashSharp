@@ -8,6 +8,9 @@ public sealed record InstallerRequest(
     string ExpectedPackageVersion,
     string InstallerPayloadSha256)
 {
+    /// <summary>Whether this exact operation owns transparent-proxy service installation or maintenance.</summary>
+    public bool InstallTransparentProxyService { get; init; } = true;
+
     /// <summary>Validates every request field using the canonical transaction rules.</summary>
     public void Validate()
     {
@@ -25,6 +28,10 @@ public sealed record InstallerRequest(
         if (Operation != InstallerOperation.Repair && AllowReassociation)
         {
             throw new InstallerProtocolException("installer.request.reassociation_invalid");
+        }
+        if (!InstallTransparentProxyService && AllowReassociation)
+        {
+            throw new InstallerProtocolException("installer.request.service_profile_conflict");
         }
     }
 }

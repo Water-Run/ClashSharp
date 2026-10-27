@@ -93,7 +93,7 @@ public sealed class InstallerExecutableContractTests
             shell.Descendants(presentation + "StackPanel"),
             static element =>
                 (string?)element.Attribute("AutomationProperties.Name") ==
-                    "ClashSharp 安装状态");
+                    "Clash# 安装状态");
         XElement confirmation = Assert.Single(shell.Descendants(presentation + "Border"),
             static element => (string?)element.Attribute("AutomationProperties.Name") == "切换账户确认");
         Assert.DoesNotContain(confirmation, status.Descendants());
@@ -123,7 +123,11 @@ public sealed class InstallerExecutableContractTests
             static element => (string?)element.Attribute("AutomationProperties.Name") == "安装操作");
         Assert.DoesNotContain(actions.Ancestors(), element => element.Name == presentation + "ScrollViewer");
         XElement[] buttons = actions.Descendants(presentation + "Button").ToArray();
-        Assert.Equal(4, buttons.Length);
+        Assert.Equal(5, buttons.Length);
+        XElement userSetup = Assert.Single(buttons,
+            static button => (string?)button.Attribute("Command") == "{Binding CompletePreferencesCommand}");
+        Assert.Equal("{Binding IsCompletePreferencesVisible, Converter={StaticResource BooleanToVisibilityConverter}}",
+            (string?)userSetup.Attribute("Visibility"));
         XElement close = Assert.Single(shell.Descendants(presentation + "Button"),
             static button => (string?)button.Attribute("Click") == "OnCloseClicked");
         Assert.DoesNotContain(close.Ancestors(), element => element.Name == presentation + "ScrollViewer");

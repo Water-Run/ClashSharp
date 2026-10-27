@@ -1133,7 +1133,7 @@ public sealed class AppResourcePackagingTests
         Assert.DoesNotContain("ResetAll", lifecycle, StringComparison.Ordinal);
         Assert.DoesNotContain("RuntimeShutdownService", application, StringComparison.Ordinal);
         Assert.DoesNotContain("RuntimeShutdownService", mainWindow, StringComparison.Ordinal);
-        Assert.DoesNotContain("Environment.Exit", application, StringComparison.Ordinal);
+        Assert.DoesNotMatch(@"\bEnvironment\s*\.\s*Exit\s*\(", application);
         Assert.DoesNotContain("Close();", mainWindow, StringComparison.Ordinal);
         Assert.Contains("_applicationLifecycle.RequestExit", mainWindow, StringComparison.Ordinal);
         Assert.Contains("IApplicationShutdownCoordinator", hostFactory, StringComparison.Ordinal);

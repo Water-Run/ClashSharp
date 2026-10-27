@@ -379,7 +379,10 @@ internal sealed class WindowsMachineHelperOperationExecutor
             journal.TargetSid,
             journal.AllowReassociation,
             journal.ExpectedPackageVersion,
-            journal.InstallerPayloadSha256);
+            journal.InstallerPayloadSha256)
+        {
+            InstallTransparentProxyService = journal.InstallTransparentProxyService,
+        };
         request.Validate();
         return request;
     }

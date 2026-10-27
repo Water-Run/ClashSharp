@@ -123,6 +123,7 @@ internal sealed class MainWindowComposition
         private readonly IStartupGuidePresenter _startupGuide;
         private readonly ShellNavigationService _navigation;
         private readonly IWindowPlacementStore _windowPlacementStore;
+        private readonly InstallationPinningService _installationPins = new();
         private int _disposed;
 
         public Runtime(
@@ -168,6 +169,8 @@ internal sealed class MainWindowComposition
 
         /// <summary>Bindable shell state and navigation resolution.</summary>
         public MainWindowViewModel ViewModel { get; }
+        public Task CompleteInstallationPinsAsync(Microsoft.UI.Xaml.Window owner, CancellationToken cancellationToken) =>
+            _installationPins.CompleteAsync(owner, cancellationToken);
         public bool HasFailedSettingsApplications => _settings.HasFailedSettingsApplications;
         public IDisposable SubscribeToSettingsApplicationChanges(Action changed) => new SettingsApplicationSubscription(_settings, changed);
 

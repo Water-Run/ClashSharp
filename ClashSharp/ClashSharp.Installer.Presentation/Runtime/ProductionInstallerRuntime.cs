@@ -7,7 +7,7 @@ namespace ClashSharp.Installer.Runtime;
 /// constructing a target SID, release hash, package identity, or privileged command.
 /// </summary>
 public sealed class ProductionInstallerRuntime : IInstallerRuntime, IInstallerOwnerTransferRuntime, IInstallerRetiredUninstallRuntime,
-    IInstallerOriginalRestorationRuntime, IDisposable
+    IInstallerOriginalRestorationRuntime, IInstallerPreferencesRuntime, IDisposable
 {
     private readonly IInstallerRuntimeBackend _backend;
     private bool _disposed;
@@ -70,11 +70,13 @@ public sealed class ProductionInstallerRuntime : IInstallerRuntime, IInstallerOw
                 platformAllowsVisibleAction,
                 removalPathAvailable))
         {
+            PendingUserPreferences = inspection.PendingUserPreferences,
             IsUpgrade = canExecute && product.ProductState == InstallerProductState.Installed
                 && allowedOperations.Contains(InstallerOperation.Repair) && IsNewerRelease(inspection),
             CanRestoreOriginal = canExecute && SupportsOriginalRestoration
                 && inspection.DurableTransaction?.Journal is
                 {
+                    InstallTransparentProxyService: true,
                     Operation: InstallerOperation.Repair, AllowReassociation: false,
                     Phase: InstallerTransactionPhase.Prepared or InstallerTransactionPhase.MachineReserved
                 },
@@ -109,6 +111,38 @@ public sealed class ProductionInstallerRuntime : IInstallerRuntime, IInstallerOw
 
     /// <inheritdoc />
     public bool SupportsOriginalRestoration => _backend is IInstallerOriginalRestorationRuntimeBackend { SupportsOriginalRestoration: true };
+
+    /// <inheritdoc />
+    public bool SupportsInstallPreferences => _backend is IInstallerPreferencesRuntimeBackend { SupportsInstallPreferences: true };
+
+    /// <inheritdoc />
+    public Task<InstallerExecutionResult> InstallWithPreferencesAsync(InstallerPreferences preferences,
+        IProgress<InstallerProgress> progress, CancellationToken cancellationToken)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        ArgumentNullException.ThrowIfNull(preferences);
+        ArgumentNullException.ThrowIfNull(progress);
+        preferences.Validate();
+        cancellationToken.ThrowIfCancellationRequested();
+        if (_backend is not IInstallerPreferencesRuntimeBackend { SupportsInstallPreferences: true } backend)
+        {
+            throw new InstallerProtocolException("installer.preferences.unavailable");
+        }
+        return Task.Run(() => backend.InstallWithPreferencesAsync(preferences, progress, cancellationToken), cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public Task<InstallerExecutionResult> CompletePreferencesAsync(IProgress<InstallerProgress> progress, CancellationToken cancellationToken)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        ArgumentNullException.ThrowIfNull(progress);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (_backend is not IInstallerPreferencesRuntimeBackend { SupportsInstallPreferences: true } backend)
+        {
+            throw new InstallerProtocolException("installer.preferences.unavailable");
+        }
+        return Task.Run(() => backend.CompletePreferencesAsync(progress, cancellationToken), cancellationToken);
+    }
 
     /// <inheritdoc />
     public Task<InstallerExecutionResult> RestoreOriginalAsync(IProgress<InstallerProgress> progress, CancellationToken cancellationToken)
@@ -194,6 +228,10 @@ public sealed class ProductionInstallerRuntime : IInstallerRuntime, IInstallerOw
             return (
                 "仅安全卸载可用",
                 "此电脑不满足安装要求，仍可移除已安装的 ClashSharp。");
+        }
+        if (inspection.PendingUserPreferences && product.ProductState == InstallerProductState.Installed)
+        {
+            return ("安装选项待完成", "应用已经安装。可选择“完成安装选项”继续设置快捷入口和启动选项。");
         }
 
         return product.ProductState switch

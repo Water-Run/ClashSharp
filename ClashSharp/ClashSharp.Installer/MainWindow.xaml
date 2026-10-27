@@ -2,9 +2,9 @@
   x:Class="ClashSharp.Installer.MainWindow"
   xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
   xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-  Title="ClashSharp 安装程序"
+  Title="Clash# 安装程序"
   Width="760"
-  Height="520"
+  Height="680"
   MinWidth="640"
   MinHeight="420"
   WindowStartupLocation="CenterScreen"
@@ -12,7 +12,7 @@
   TextOptions.TextFormattingMode="Display"
   UseLayoutRounding="True"
   SnapsToDevicePixels="True"
-  AutomationProperties.Name="ClashSharp 安装程序"
+  AutomationProperties.Name="Clash# 安装程序"
   Loaded="OnLoaded"
   Closing="OnClosing"
   Closed="OnClosed">
@@ -39,7 +39,7 @@
         Width="48"
         Height="48"
         Source="{StaticResource ClashSharpBrandMark}"
-        AutomationProperties.Name="ClashSharp 标志" />
+        AutomationProperties.Name="Clash# 标志" />
       <StackPanel
         Grid.Column="1"
         Margin="12,0,0,0"
@@ -91,7 +91,7 @@
         x:Name="ContentBody"
         Margin="0,0,24,0">
         <StackPanel
-          AutomationProperties.Name="ClashSharp 安装状态"
+          AutomationProperties.Name="Clash# 安装状态"
           Visibility="{Binding IsOperationSummaryVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
           <TextBlock
             Text="{Binding StatusTitle, Mode=OneWay}"
@@ -121,6 +121,45 @@
               AutomationProperties.LiveSetting="Polite" />
           </StackPanel>
         </StackPanel>
+        <Grid
+          Margin="0,24,0,0"
+          Visibility="{Binding IsInstallPreferencesVisible, Converter={StaticResource BooleanToVisibilityConverter}}"
+          IsEnabled="{Binding CanEditInstallPreferences}">
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="*" />
+          </Grid.ColumnDefinitions>
+          <StackPanel Margin="0,0,24,0">
+            <TextBlock Text="快捷访问" FontWeight="SemiBold" Margin="0,0,0,8" />
+            <CheckBox Content="添加桌面快捷方式" IsChecked="{Binding CreateDesktopShortcut}" Margin="0,0,0,6" />
+            <TextBlock Text="开始菜单入口由 Windows 自动管理。" Style="{StaticResource MutedTextStyle}" FontSize="12" Margin="24,0,0,6" />
+            <CheckBox Content="添加到任务栏" IsChecked="{Binding RequestTaskbarPin}" />
+            <TextBlock Text="首次打开应用时由 Windows 确认固定。" Style="{StaticResource MutedTextStyle}" FontSize="12" Margin="24,4,0,0" />
+            <TextBlock Text="启动与恢复" FontWeight="SemiBold" Margin="0,20,0,8" />
+            <CheckBox Content="开机自动启动" IsChecked="{Binding LaunchAtStartup}" Margin="0,0,0,6" />
+            <CheckBox Content="注册登录时代理恢复" IsChecked="{Binding RegisterProxyRecovery}" />
+            <TextBlock Text="登录时清理本程序留下的代理设置。" Style="{StaticResource MutedTextStyle}" FontSize="12" Margin="24,4,0,0" />
+          </StackPanel>
+          <StackPanel Grid.Column="1">
+            <TextBlock Text="网络组件" FontWeight="SemiBold" Margin="0,0,0,8" />
+            <CheckBox IsChecked="{Binding InstallTransparentProxyService}">
+              <TextBlock Text="安装透明代理服务" TextWrapping="Wrap" />
+            </CheckBox>
+            <TextBlock Text="缺省值预设" FontWeight="SemiBold" Margin="0,20,0,8" />
+            <CheckBox IsChecked="{Binding FollowSystemDefaults}">
+              <TextBlock Text="跟随系统环境" TextWrapping="Wrap" />
+            </CheckBox>
+            <TextBlock Text="初始化语言、12/24 小时制、单位及中国大陆功能；已有设置保留。" Style="{StaticResource MutedTextStyle}" FontSize="12" Margin="24,4,0,0" />
+            <TextBlock Text="系统通知级别" Margin="0,12,0,6" />
+            <ComboBox ItemsSource="{Binding NotificationPresetOptions}" SelectedIndex="{Binding NotificationPresetIndex}"
+                      HorizontalAlignment="Stretch" AutomationProperties.Name="系统通知级别" />
+            <TextBlock Text="Agent 集成" FontWeight="SemiBold" Margin="0,20,0,8" />
+            <CheckBox IsChecked="{Binding EnableMcpServer}">
+              <TextBlock Text="启用 MCP 服务器" TextWrapping="Wrap" />
+            </CheckBox>
+            <TextBlock Text="应用运行期间供 Agent 使用。初始仅允许读取状态，代理控制须单独授权。" Style="{StaticResource MutedTextStyle}" FontSize="12" Margin="24,4,0,0" />
+          </StackPanel>
+        </Grid>
         <Border
           Style="{StaticResource InstallerConfirmationStyle}"
           AutomationProperties.Name="切换账户确认"
@@ -137,7 +176,7 @@
             <TextBlock
               Margin="0,10,0,16"
               Style="{StaticResource MutedTextStyle}"
-              Text="ClashSharp 的系统服务将改为供当前 Windows 账户使用。以前账户的应用和配置会保留，但该账户将无法继续连接此服务。" />
+              Text="Clash# 的系统服务将改为供当前 Windows 账户使用。以前账户的应用和配置会保留，但该账户将无法继续连接此服务。" />
             <WrapPanel
               HorizontalAlignment="Right">
               <Button
@@ -171,7 +210,7 @@
             <TextBlock
               Margin="0,10,0,16"
               Style="{StaticResource MutedTextStyle}"
-              Text="将移除此 Windows 账户的 ClashSharp 应用包，并清理安装器为此账户保留的证书。其他账户使用的共享服务保持原状。已有卸载进度会继续完成。" />
+              Text="将移除此 Windows 账户的 Clash# 应用包，并清理安装器为此账户保留的证书。其他账户使用的共享服务保持原状。已有卸载进度会继续完成。" />
             <WrapPanel
               HorizontalAlignment="Right">
               <Button
@@ -185,7 +224,7 @@
                 Content="确认卸载此账户副本"
                 Command="{Binding ConfirmRetiredUninstallCommand}"
                 Style="{StaticResource InstallerPrimaryButtonStyle}"
-                AutomationProperties.Name="确认卸载此账户的 ClashSharp 副本" />
+                AutomationProperties.Name="确认卸载此账户的 Clash# 副本" />
             </WrapPanel>
           </StackPanel>
         </Border>
@@ -218,12 +257,12 @@
                 <TextBlock
                   Margin="0,6,0,10"
                   Style="{StaticResource MutedTextStyle}"
-                  Text="此电脑曾由其他 Windows 账户安装 ClashSharp 时，可将服务切换到当前账户，或继续上次未完成的切换。" />
+                  Text="此电脑曾由其他 Windows 账户安装 Clash# 时，可将服务切换到当前账户，或继续上次未完成的切换。" />
                 <Button
                   Content="切换使用账户…"
                   Command="{Binding OwnerTransferCommand}"
                   HorizontalAlignment="Left"
-                  AutomationProperties.Name="检查并切换 ClashSharp 的使用账户" />
+                  AutomationProperties.Name="检查并切换 Clash# 的使用账户" />
               </StackPanel>
               <StackPanel
                 Margin="0,0,0,18"
@@ -239,7 +278,7 @@
                   Content="卸载此账户副本…"
                   Command="{Binding RetiredUninstallCommand}"
                   HorizontalAlignment="Left"
-                  AutomationProperties.Name="卸载此账户的 ClashSharp 副本或继续卸载" />
+                  AutomationProperties.Name="卸载此账户的 Clash# 副本或继续卸载" />
               </StackPanel>
               <TextBlock
                 Text="安装内容"
@@ -340,6 +379,10 @@
           HorizontalAlignment="Right"
           AutomationProperties.Name="安装操作"
           Grid.Column="1">
+          <Button Margin="0,0,8,0" Content="完成安装选项"
+                  Command="{Binding CompletePreferencesCommand}"
+                  Visibility="{Binding IsCompletePreferencesVisible, Converter={StaticResource BooleanToVisibilityConverter}}"
+                  AutomationProperties.Name="完成当前账户的安装选项" />
           <Button
             Margin="0,0,8,0"
             Content="保留原安装(_K)"

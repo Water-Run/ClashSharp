@@ -44,6 +44,9 @@ public static class InstallerTransactionCodec
             writer.WriteString("installerPayloadSha256", journal.InstallerPayloadSha256);
             writer.WriteString("phase", PhaseText(journal.Phase));
             writer.WriteNumber("generation", journal.Generation);
+            // Preserve all legacy v2 byte identities. Only the explicitly opted-out profile
+            // adds this final property; true is represented by its canonical absence.
+            if (!journal.InstallTransparentProxyService) { writer.WriteBoolean("installTransparentProxyService", false); }
             writer.WriteEndObject();
         }
 
@@ -76,11 +79,10 @@ public static class InstallerTransactionCodec
             int propertyIndex = 0;
             foreach (JsonProperty property in root.EnumerateObject())
             {
-                if (propertyIndex >= RequiredProperties.Length
-                    || !string.Equals(
-                        property.Name,
-                        RequiredProperties[propertyIndex],
-                        StringComparison.Ordinal)
+                bool optionalServiceProfile = propertyIndex == RequiredProperties.Length
+                    && property.NameEquals("installTransparentProxyService") && property.Value.ValueKind == JsonValueKind.False;
+                if ((!optionalServiceProfile && (propertyIndex >= RequiredProperties.Length
+                    || !string.Equals(property.Name, RequiredProperties[propertyIndex], StringComparison.Ordinal)))
                     || !observed.Add(property.Name))
                 {
                     throw new JsonException(
@@ -93,6 +95,7 @@ public static class InstallerTransactionCodec
                         && property.Value.TryGetInt32(out _),
                     "allowReassociation" =>
                         property.Value.ValueKind is JsonValueKind.True or JsonValueKind.False,
+                    "installTransparentProxyService" => property.Value.ValueKind == JsonValueKind.False,
                     "transactionId" or "operation" or "targetSid" or "expectedPackageVersion"
                         or "installerPayloadSha256" or "phase" =>
                         property.Value.ValueKind == JsonValueKind.String,
@@ -107,8 +110,9 @@ public static class InstallerTransactionCodec
                 propertyIndex++;
             }
 
-            if (propertyIndex != RequiredProperties.Length
-                || !observed.SetEquals(RequiredProperties))
+            bool hasServiceProfile = observed.Contains("installTransparentProxyService");
+            if (propertyIndex != RequiredProperties.Length + (hasServiceProfile ? 1 : 0)
+                || RequiredProperties.Any(property => !observed.Contains(property)))
             {
                 throw new JsonException("The installer transaction property set is incomplete.");
             }
@@ -122,7 +126,10 @@ public static class InstallerTransactionCodec
                 RequiredString(root, "expectedPackageVersion"),
                 RequiredString(root, "installerPayloadSha256"),
                 ParsePhase(RequiredString(root, "phase")),
-                root.GetProperty("generation").GetInt32());
+                root.GetProperty("generation").GetInt32())
+            {
+                InstallTransparentProxyService = !hasServiceProfile,
+            };
             journal.Validate();
 
             byte[] canonical = Serialize(journal);

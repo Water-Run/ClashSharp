@@ -329,6 +329,7 @@ public sealed class InstallerMachineHelperSessionGuard
         && first.Operation == second.Operation
         && string.Equals(first.TargetSid, second.TargetSid, StringComparison.Ordinal)
         && first.AllowReassociation == second.AllowReassociation
+        && first.InstallTransparentProxyService == second.InstallTransparentProxyService
         && string.Equals(
             first.ExpectedPackageVersion,
             second.ExpectedPackageVersion,

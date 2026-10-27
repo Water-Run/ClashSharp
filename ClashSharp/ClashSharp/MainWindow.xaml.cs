@@ -121,6 +121,8 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
     private XamlRoot? _dialogXamlRoot;
     internal CancellationToken WindowLifetime => _windowLifetime.Token;
     private Task? _mihomoServiceStatusMonitorTask;
+    private Task? _installationPinsTask;
+    private bool _startupDialogsComplete;
     private int _trayRefreshQueued;
 
     /// <summary>Keeps window FlowDirection aligned with the active display language.</summary>
@@ -141,6 +143,7 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
         _pageLocalization = _composition.BindCurrentPageLocalization(() => ContentFrame.Content as ILocalizedPresentation
             ?? (ContentFrame.Content as FrameworkElement)?.DataContext as ILocalizedPresentation);
         Closed += OnWindowClosed;
+        Activated += OnInstallationWindowActivated;
         StartupShellSetupPolicy.TryRun(InitializeStartupStatus);
         InitializeWindowNativeCapabilities();
         _nativeCapabilities.TryRunWindowHandleFeature(InitializeTitleBar);
@@ -517,9 +520,12 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
     /// <param name="args">Window close event arguments. Not null.</param>
     private async void OnWindowClosed(object sender, WindowEventArgs args)
     {
+        Activated -= OnInstallationWindowActivated;
         WindowDialogCoordinator.MarkWindowClosing(_dialogXamlRoot);
         _dialogXamlRoot = null;
         Task? statusMonitorTask = _mihomoServiceStatusMonitorTask;
+        Task? installationPinsTask = _installationPinsTask;
+        _installationPinsTask = null;
         _mihomoServiceStatusMonitorTask = null;
         MainWindowComposition.ITray? trayService = _trayService;
         _trayService = null;
@@ -545,6 +551,15 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
             try
             {
                 _ = StartupShellSetupPolicy.TryRun(_windowLifetime.Cancel);
+                if (installationPinsTask is not null)
+                {
+                    try { await installationPinsTask; }
+                    catch (OperationCanceledException) when (_windowLifetime.IsCancellationRequested) { }
+                    catch (Exception exception) when (StartupCompletionFailurePolicy.IsRecoverable(exception))
+                    {
+                        Debug.WriteLine($"Clash# installation pin handoff closed ({exception.GetType().FullName}).");
+                    }
+                }
             }
             finally
             {
@@ -702,7 +717,29 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
         {
             await ShowStartupPromptDialogAsync();
         }
+        _startupDialogsComplete = true;
+        await CompleteInstallationPinsAsync();
+    }
 
+    private Task CompleteInstallationPinsAsync()
+    {
+        if (!_runtimeReady || !_startupDialogsComplete || _windowLifetime.IsCancellationRequested) { return Task.CompletedTask; }
+        if (_installationPinsTask is { IsCompleted: false } active) { return active; }
+        return _installationPinsTask = Runtime.CompleteInstallationPinsAsync(this, _windowLifetime.Token);
+    }
+
+    private async void OnInstallationWindowActivated(object sender, Microsoft.UI.Xaml.WindowActivatedEventArgs args)
+    {
+        if (args.WindowActivationState == Microsoft.UI.Xaml.WindowActivationState.Deactivated) { return; }
+        try { await CompleteInstallationPinsAsync(); }
+        catch (OperationCanceledException) when (_windowLifetime.IsCancellationRequested) { }
+        catch (Exception exception) when (StartupCompletionFailurePolicy.IsRecoverable(exception))
+        {
+            if (_runtime is { } runtime && !_windowLifetime.IsCancellationRequested)
+            {
+                await runtime.ErrorSink.ReportAsync(new ApplicationError("installation-native-pin", exception), CancellationToken.None);
+            }
+        }
     }
 
     private static bool ShouldSkipStartupDialogs()

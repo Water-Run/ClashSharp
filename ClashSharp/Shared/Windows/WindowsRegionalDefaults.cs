@@ -30,6 +30,37 @@ internal static class WindowsRegionalDefaults
         data.LocalSettings.Values.Add(SeedKey, seed);
     }
 
+    /// <summary>Initializes selected defaults only before any application settings generation exists.</summary>
+    internal static bool InitializeSelected(ApplicationData data, IReadOnlyDictionary<string, object> selected)
+    {
+        if (Directory.Exists(Path.Combine(data.LocalFolder.Path, "Data"))
+            || data.LocalSettings.Values.Keys.Any(key => key != SeedKey
+                && key != InstallationSetupProtocol.RequestKey && key != InstallationSetupProtocol.ReceiptKey
+                && key != InstallationSetupProtocol.TaskbarRequestKey && key != InstallationSetupProtocol.TaskbarReceiptKey)) { return false; }
+        ApplicationDataCompositeValue seed = new();
+        foreach ((string key, object value) in selected)
+        {
+            if (!AllowedSeedKeys.Contains(key, StringComparer.Ordinal)) { throw new ArgumentException("Unsupported initial preference.", nameof(selected)); }
+            SettingDefinition definition = SettingsRegistry.Default.Get(key);
+            object normalized = definition.ValueType.IsEnum && value is int number ? Enum.ToObject(definition.ValueType, number) : value;
+            if (!definition.NormalizeValue(normalized).IsSuccess) { throw new ArgumentException("Invalid initial preference.", nameof(selected)); }
+            if (key == SettingsRegistry.Keys.McpAllowedScopes.Value && value is not 1)
+            {
+                throw new ArgumentException("Installation may grant read-status access only.", nameof(selected));
+            }
+            seed.Add(key, value);
+        }
+        data.LocalSettings.Values[SeedKey] = seed;
+        return true;
+    }
+
+    private static readonly string[] AllowedSeedKeys =
+    [
+        "DisplayLanguage", "DataUnitStyle", "RateUnit", "ClockFormat", "MainlandChinaFeatureMode", "MainlandChinaUrlBlockingEnabled",
+        "LaunchAtStartupEnabled", "NotificationEnabled", "NotificationLevel", "TransparentProxyEnabled", "TrayUseMonochromeInactiveIcon",
+        "McpServerEnabled", "McpAllowedScopes",
+    ];
+
     internal static IReadOnlyDictionary<string, object> ReadSeed(ApplicationData data)
     {
         IReadOnlyDictionary<string, object> defaults = Capture();
@@ -38,9 +69,10 @@ internal static class WindowsRegionalDefaults
             return defaults;
         }
         Dictionary<string, object> result = new(defaults, StringComparer.Ordinal);
-        foreach (string key in defaults.Keys)
+        foreach (string key in AllowedSeedKeys)
         {
             if (!seed.TryGetValue(key, out object? candidate)) { continue; }
+            if (key == SettingsRegistry.Keys.McpAllowedScopes.Value && candidate is not 1) { continue; }
             SettingDefinition definition = SettingsRegistry.Default.Get(key);
             object? normalized = definition.ValueType.IsEnum && candidate is int number
                 ? Enum.ToObject(definition.ValueType, number) : candidate;

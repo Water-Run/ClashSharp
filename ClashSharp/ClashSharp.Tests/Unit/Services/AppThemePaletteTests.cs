@@ -124,10 +124,10 @@ public sealed class AppThemePaletteTests
         runtime.Apply(custom);
 
         Assert.Equal(custom, runtime.CaptureConfiguration());
-        Assert.Equal(55, resources.Local.Count);
-        Assert.Equal(55, resources.WriteCount);
+        Assert.Equal(57, resources.Local.Count);
+        Assert.Equal(57, resources.WriteCount);
         Assert.Equal(7, resources.Local.Count(pair => !pair.Value.IsBrush));
-        Assert.Equal(48, resources.Local.Count(pair => pair.Value.IsBrush));
+        Assert.Equal(50, resources.Local.Count(pair => pair.Value.IsBrush));
         Assert.Equal(new(0x804477AA, false), resources.Local["SystemAccentColor"]);
         Assert.Equal(new(0x807CA0C4, false), resources.Local["SystemAccentColorLight1"]);
         Assert.Equal(new(0x80A2BBD4, false), resources.Local["SystemAccentColorLight2"]);
@@ -136,6 +136,8 @@ public sealed class AppThemePaletteTests
         Assert.Equal(new(0x8025415E, false), resources.Local["SystemAccentColorDark2"]);
         Assert.Equal(new(0x80182A3C, false), resources.Local["SystemAccentColorDark3"]);
         Assert.Equal(new(0x804477AA, true), resources.Local["AccentButtonBackground"]);
+        Assert.Equal(new(0x804477AA, true), resources.Local["ComboBoxItemPillFillBrush"]);
+        Assert.Equal(new(0x804477AA, true), resources.Local["ListViewItemSelectionIndicatorBrush"]);
         Assert.Equal(new(0x805A87B4, true, 0x803C6996), resources.Local["AccentButtonBackgroundPointerOver"]);
         Assert.Equal(new(0x807198BE, true, 0x80345A81), resources.Local["AccentButtonBackgroundPressed"]);
         Assert.Equal(new(0x5C4477AA, true), resources.Local["AccentButtonBackgroundDisabled"]);
@@ -163,8 +165,8 @@ public sealed class AppThemePaletteTests
         Assert.Equal(followSystem, runtime.CaptureConfiguration());
         Assert.Equal(new KeyValuePair<string, AccentResourceValue>("UnrelatedResource", unrelated), Assert.Single(resources.Local));
         Assert.Equal(new KeyValuePair<string, AccentResourceValue>("SystemAccentColor", systemAccent), Assert.Single(resources.Merged));
-        Assert.Equal(55, resources.Removed.Count);
-        Assert.Equal(55, resources.Removed.Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(57, resources.Removed.Count);
+        Assert.Equal(57, resources.Removed.Distinct(StringComparer.Ordinal).Count());
         Assert.DoesNotContain("UnrelatedResource", resources.Removed);
     }
 
