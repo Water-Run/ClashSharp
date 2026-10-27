@@ -62,7 +62,7 @@ public sealed class InstallerDirectoryCleanupPresentationTests
         await ExecuteAsync(viewModel, InstallerOperation.Uninstall);
 
         Assert.Equal("卸载已完成", viewModel.StatusTitle);
-        Assert.Contains("ClashSharp 已从此电脑移除", viewModel.StatusDetail, StringComparison.Ordinal);
+        Assert.Contains("Clash# 已从此电脑移除", viewModel.StatusDetail, StringComparison.Ordinal);
         Assert.DoesNotContain("已保留", viewModel.StatusDetail, StringComparison.Ordinal);
         Assert.Equal("已完成", viewModel.StatusBadge);
         Assert.Equal("卸载完成。", viewModel.ProgressStatus);

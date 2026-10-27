@@ -57,6 +57,10 @@ internal sealed class WindowsInstallerUserSetup(InstallerReleaseManifest manifes
                     ["recovery"] = document.Preferences.RegisterProxyRecovery,
                     ["applyDefaults"] = true,
                 };
+            }
+            object? stagedRequest = data.LocalSettings.Values.TryGetValue(InstallationSetupProtocol.RequestKey, out object? request) ? request : null;
+            if (!priorCompletion && ShouldRunBootstrap(initialized, stagedRequest, document))
+            {
                 await _launcher.RunAsync(applicationId, executable, document.Id, cancellationToken).ConfigureAwait(false);
                 warnings |= ReadReceipt(data, document.Id);
             }
@@ -67,6 +71,22 @@ internal sealed class WindowsInstallerUserSetup(InstallerReleaseManifest manifes
             }
         }
         return warnings;
+    }
+
+    // A user may open the installed application before retrying unfinished login-task
+    // setup. Defaults have then been consumed, but the correlated native work remains owned.
+    internal static bool ShouldRunBootstrap(bool initialized, object? raw, WindowsInstallerPreferencesDocument document)
+    {
+        if (initialized) { return true; }
+        if (raw is null) { return false; }
+        if (raw is not ApplicationDataCompositeValue request || request.Count != 5
+            || !request.TryGetValue("schema", out object? schema) || schema is not 1
+            || !request.TryGetValue("id", out object? id) || !Equals(id, document.Id)
+            || !request.TryGetValue("startup", out object? startup) || !Equals(startup, document.Preferences.LaunchAtStartup)
+            || !request.TryGetValue("recovery", out object? recovery) || !Equals(recovery, document.Preferences.RegisterProxyRecovery)
+            || !request.TryGetValue("applyDefaults", out object? apply) || apply is not true)
+        { throw Failure("bootstrap_request_conflict"); }
+        return true;
     }
 
     private static void StagePin(ApplicationData data, string requestKey, string receiptKey, string id)

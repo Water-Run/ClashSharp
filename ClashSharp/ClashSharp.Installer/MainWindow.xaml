@@ -5,6 +5,7 @@
   Title="Clash# 安装程序"
   Width="760"
   Height="680"
+  MaxHeight="{Binding Source={x:Static SystemParameters.WorkArea}, Path=Height}"
   MinWidth="640"
   MinHeight="420"
   WindowStartupLocation="CenterScreen"

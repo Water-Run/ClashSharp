@@ -212,7 +212,7 @@ public sealed class ProductionInstallerRuntime : IInstallerRuntime, IInstallerOw
         if (inspection.Environment.IsApplicationRunning)
         {
             return (
-                "请先关闭 ClashSharp",
+                "请先关闭 Clash#",
                 "关闭正在运行的应用后，选择“重新检查”继续。");
         }
 
@@ -227,7 +227,7 @@ public sealed class ProductionInstallerRuntime : IInstallerRuntime, IInstallerOw
         {
             return (
                 "仅安全卸载可用",
-                "此电脑不满足安装要求，仍可移除已安装的 ClashSharp。");
+                "此电脑不满足安装要求，仍可移除已安装的 Clash#。");
         }
         if (inspection.PendingUserPreferences && product.ProductState == InstallerProductState.Installed)
         {
@@ -238,13 +238,13 @@ public sealed class ProductionInstallerRuntime : IInstallerRuntime, IInstallerOw
         {
             InstallerProductState.Available => (
                 "可以安装",
-                "为当前账户安装 ClashSharp，并配置所需的系统组件。"),
+                "为当前账户安装 Clash#，并配置所需的系统组件。"),
             InstallerProductState.Installed when IsNewerRelease(inspection) => (
                 "可以更新",
-                $"将 ClashSharp 从 {inspection.Environment.InstalledPackageVersion} 更新到 {inspection.ReleaseVersion}。现有设置和数据将保留。"),
+                $"将 Clash# 从 {inspection.Environment.InstalledPackageVersion} 更新到 {inspection.ReleaseVersion}。现有设置和数据将保留。"),
             InstallerProductState.Installed => (
                 "已安装",
-                "可修复当前安装，或从此电脑移除 ClashSharp。"),
+                "可修复当前安装，或从此电脑移除 Clash#。"),
             InstallerProductState.RecoveryRequired when inspection.DurableTransaction?.Journal.Phase == InstallerTransactionPhase.OriginalRestored => (
                 "原安装恢复待收尾", "原安装已经恢复。请选择“继续”核验结果并完成收尾。"),
             InstallerProductState.RecoveryRequired => (
@@ -269,7 +269,7 @@ public sealed class ProductionInstallerRuntime : IInstallerRuntime, IInstallerOw
             inspection.Environment.IsSupported
                 ? "当前 Windows 桌面环境和 x64 系统符合安装要求。"
                 : removalPathAvailable
-                    ? "当前系统不符合安装要求，仍可卸载已安装的 ClashSharp。"
+                    ? "当前系统不符合安装要求，仍可卸载已安装的 Clash#。"
                     : "安装与修复需要 Windows 11+ 或 Windows Server 2025+ 桌面体验，且系统与进程均为 x64。",
             platformAllowsVisibleAction),
         new(
@@ -279,10 +279,10 @@ public sealed class ProductionInstallerRuntime : IInstallerRuntime, IInstallerOw
         new(
             "安装状态",
             inspection.Environment.InstalledPackageVersion is null
-                ? "当前账户尚未安装 ClashSharp。"
+                ? "当前账户尚未安装 Clash#。"
                 : inspection.Environment.IsApplicationRunning
-                    ? "ClashSharp 正在运行，请关闭应用后继续。"
-                    : "当前账户已安装 ClashSharp，应用已关闭。",
+                    ? "Clash# 正在运行，请关闭应用后继续。"
+                    : "当前账户已安装 Clash#，应用已关闭。",
             !inspection.Environment.IsApplicationRunning),
         new(
             "未完成的操作",

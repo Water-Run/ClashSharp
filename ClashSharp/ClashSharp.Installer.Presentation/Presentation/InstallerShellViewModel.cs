@@ -481,7 +481,7 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
         ProgressStatus = ownerTransfer ? "正在检查使用账户…" : retiredUninstall ? "等待确认。" : $"正在开始{operationLabel}…";
         StatusTitle = ownerTransfer ? "正在准备切换账户" : retiredUninstall ? "卸载此账户副本" : $"正在{operationLabel}";
         StatusDetail = ownerTransfer ? "完成身份检查后，将在此处请你确认切换。"
-            : retiredUninstall ? "移除当前账户已不再使用的 ClashSharp 副本。" : "正在处理应用及所需组件。";
+            : retiredUninstall ? "移除当前账户已不再使用的 Clash# 副本。" : "正在处理应用及所需组件。";
         StatusBadge = "执行中";
         int acceptProgress = 1;
         TaskScheduler confirmationScheduler = SynchronizationContext.Current is null
@@ -820,7 +820,7 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
         if (!cleanup.HasRetained)
         {
             StatusTitle = "卸载已完成";
-            StatusDetail = "ClashSharp 已从此电脑移除。可以关闭安装器，或重新检查以再次安装。";
+            StatusDetail = "Clash# 已从此电脑移除。可以关闭安装器，或重新检查以再次安装。";
             return;
         }
 
