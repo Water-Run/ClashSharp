@@ -71,7 +71,7 @@ function Get-ClashSharpPayloadAuditDocument {
         if ($Audit.$name -isnot [int] -and $Audit.$name -isnot [long]) { throw 'acceptance.payload-number' }
     }
     if ($Audit.schemaVersion -ne 1 -or $Audit.status -cne 'passed' -or
-        $Audit.publishedExecutable -cne 'ClashSharp-Installer.exe' -or $Audit.packageVersion -cne '1.0.0.0' -or
+        $Audit.publishedExecutable -cne 'Setup.exe' -or $Audit.packageVersion -cne '1.0.0.0' -or
         $Audit.payloadSha256 -cnotmatch '^[0-9a-f]{64}\z' -or $Audit.payloadSha256 -ceq ('0'*64) -or
         $Audit.fileCount -le 0 -or $Audit.fileCount -gt 10000 -or $Audit.totalBytes -le 0 -or $Audit.totalBytes -gt 4294967296 -or
         $Audit.machineFileCount -le 0 -or $Audit.machineFileCount -gt 10000) { throw 'acceptance.payload-result' }

@@ -70,7 +70,7 @@ try{
         param($identity)
         if($identity.signatures.installer.thumbprint -cne $AuthenticodeThumbprint -or $identity.signatures.primary.thumbprint -cne $MsixThumbprint -or
             $identity.signatures.installer.subject -cnotmatch '^CN=ClashSharp Internal Candidate [0-9a-f]{32}\z'){throw 'internal-audit.internal-signer-mismatch'}
-        $actual=Get-AuthenticodeSignature -LiteralPath "$output/candidate/release/ClashSharp-Installer.exe"
+        $actual=Get-AuthenticodeSignature -LiteralPath "$output/candidate/release/Setup.exe"
         if([string]$actual.Status -cnotin @('Valid','NotTrusted','UnknownError') -or $null -eq $actual.SignerCertificate -or
             $actual.SignerCertificate.Thumbprint -cne $AuthenticodeThumbprint -or $null -eq $actual.TimeStamperCertificate){throw 'internal-audit.installer-signature-metadata'}
         [pscustomobject]@{installerSignatureMetadataMatched=$true;observedWindowsStatus=[string]$actual.Status;signatureTrustRechecked=$false}

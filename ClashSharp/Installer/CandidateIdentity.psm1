@@ -11,7 +11,7 @@ function Get-ClashSharpCandidatePaths {
     #>
     [CmdletBinding()]
     param()
-    @('ClashSharp-Installer.exe','ClashSharp-Installer.exe.sha256','MIHOMO-SOURCE-MATERIALS.zip',
+    @('Setup.exe','Setup.exe.sha256','MIHOMO-SOURCE-MATERIALS.zip',
         'THIRD-PARTY-NOTICES.zip','payload/ClashSharp_1.0.0.0_x64.msix',
         'payload/ClashSharp_TemporaryKey.cer','payload/payload-provenance.json',
         'payload/Dependencies/x64/Microsoft.WindowsAppRuntime.1.8.msix')

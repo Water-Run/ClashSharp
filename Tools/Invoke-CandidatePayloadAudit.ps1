@@ -47,7 +47,7 @@ $null=Get-ClashSharpWindowsAcceptancePlatform -Observation $platform
 $receipt=Invoke-ClashSharpCandidateIdentity -IdentityPath $IdentityPath -ExpectedIdentitySha256 $ExpectedIdentitySha256 -ReleaseDirectory $release -Consume {
     param($identity)
     $info=[Diagnostics.ProcessStartInfo]::new()
-    $info.FileName=Join-Path $release 'ClashSharp-Installer.exe'
+    $info.FileName=Join-Path $release 'Setup.exe'
     $info.WorkingDirectory=$release
     $info.ArgumentList.Add('--verify-payload')
     $info.UseShellExecute=$false; $info.CreateNoWindow=$true

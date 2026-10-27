@@ -81,7 +81,7 @@ try{
   if($runtimeFile.sha256 -cne $pins.windowsAppRuntime.sha256 -or $runtimeFile.length -ne $pins.windowsAppRuntime.length){throw 'candidate.runtime-pin'}
   $dependencyIdentity=Get-ClashSharpMsixIdentity -LiteralPath $runtime
   $signatures=[pscustomobject]@{
-   installer=Get-ClashSharpPackageSignature -LiteralPath (Join-Path $release 'ClashSharp-Installer.exe') -ExpectedSubject $AuthenticodeSubject -ExpectedThumbprint $AuthenticodeThumbprint -RequireTrusted -RequireTimestamp
+   installer=Get-ClashSharpPackageSignature -LiteralPath (Join-Path $release 'Setup.exe') -ExpectedSubject $AuthenticodeSubject -ExpectedThumbprint $AuthenticodeThumbprint -RequireTrusted -RequireTimestamp
    primary=Get-ClashSharpPackageSignature -LiteralPath $primary -ExpectedSubject $identity.Publisher -ExpectedThumbprint $MsixThumbprint -RequireTrusted
    dependency=Get-ClashSharpPackageSignature -LiteralPath $runtime -ExpectedSubject $dependencyIdentity.Publisher -ExpectedThumbprint $pins.windowsAppRuntime.signerThumbprint -RequireTrusted -RequireTimestamp
   }

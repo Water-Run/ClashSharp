@@ -24,7 +24,7 @@ $signingDir = Join-Path $installerRoot "signing"
 $installerTargetRoot = Join-Path $repoRoot "artifacts\installer"
 $packagingStagingRoot = Join-Path $installerTargetRoot "packaging-staging"
 $releaseDir = Join-Path $installerTargetRoot "release"
-$publishedExecutableName = 'ClashSharp-Installer.exe'
+$publishedExecutableName = 'Setup.exe'
 $packagingContractModule = Join-Path $installerRoot "PackagingContract.psm1"
 
 $packagingContractModuleItem = Get-Item -LiteralPath $packagingContractModule -Force

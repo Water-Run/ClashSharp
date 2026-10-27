@@ -100,7 +100,13 @@ try{
  Assert-Condition (-not (Test-Path $untrusted) -and -not (Test-Path ($untrusted+'.partial'))) 'Wrong producer identity must not create an archive attempt.'
  foreach($leaf in @('bad.zip:stream','bad.zip.','bad.zip ','NUL.zip')){Assert-Rejected {New-Archive $fixture (Join-Path $root $leaf)} 'transport.output-name'}
  $zip=[IO.Compression.ZipFile]::OpenRead($archive);try{$names=@($zip.Entries.FullName);$identityLength=$zip.Entries[0].Length}finally{$zip.Dispose()}
- foreach($name in @('../escape.txt','release/../escape.txt','/escape.txt','C:/escape.txt','release\ClashSharp-Installer.exe','release/CLASHSHARP-Installer.exe',$names[0])){
+ Assert-Condition ($names -ccontains 'Setup.exe' -and $names -ccontains 'Setup.exe.sha256') 'The install entry and its checksum must be directly at the ZIP root.'
+ Assert-Condition (@($names|Where-Object{$_ -like 'release/*'}).Count -eq 0) 'The downloaded ZIP must not introduce a release directory.'
+ $ordinary=New-Path '-ordinary-unzip';[IO.Compression.ZipFile]::ExtractToDirectory($archive,$ordinary)
+ Assert-Condition (Test-Path -LiteralPath (Join-Path $ordinary 'Setup.exe') -PathType Leaf) 'A standard ZIP extraction must expose Setup.exe immediately.'
+ Assert-Condition ((Get-Digest (Join-Path $ordinary 'Setup.exe')) -ceq (Get-Digest (Join-Path $fixture.release 'Setup.exe'))) 'Root placement must preserve the exact signed executable bytes.'
+ Assert-Condition (Test-Path -LiteralPath (Join-Path $ordinary 'payload/ClashSharp_1.0.0.0_x64.msix') -PathType Leaf) 'The payload must remain next to Setup.exe after standard extraction.'
+ foreach($name in @('../escape.txt','payload/../escape.txt','/escape.txt','C:/escape.txt','release/Setup.exe','payload\Setup.exe','SETUP.exe','ClashSharp-Installer.exe',$names[0])){
   $changed=[string[]]$names.Clone();$changed[1]=$name;$bad=New-ChangedArchive $archive $changed
   $out=New-Path '-refused';Assert-Rejected {Receive-Archive $bad (Get-Digest $bad) $fixture.hash $out} 'transport.entry-identity'
   Assert-Condition (-not (Test-Path $out)) 'Invalid names must be rejected before extraction.'

@@ -508,7 +508,7 @@ public sealed partial class WindowsMachineHelperHostTests
         TimeSpan.FromSeconds(2));
 
     private static string ExecutablePath() =>
-        Path.Combine(Path.GetTempPath(), "ClashSharp-Installer.exe");
+        Path.Combine(Path.GetTempPath(), "Setup.exe");
 
     private static InstallerTransactionSnapshot VerifiedSnapshot(
         string targetSid = "S-1-5-21-100-200-300-1001")

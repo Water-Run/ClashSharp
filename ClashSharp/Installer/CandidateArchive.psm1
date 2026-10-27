@@ -8,12 +8,13 @@ function Get-ClashSharpCandidateArchiveEntries {
     .SYNOPSIS
         Returns the fixed transport inventory in its canonical order.
     .DESCRIPTION
-        Only the identity and eight formal candidate files can cross this transport boundary.
+        Keeps Setup.exe and its sibling payload directly at the ZIP root. Only the identity
+        and eight formal candidate files can cross this transport boundary.
     #>
     [CmdletBinding()]
     param()
     'candidate-identity.json'
-    foreach ($path in Get-ClashSharpCandidatePaths) { 'release/' + $path }
+    Get-ClashSharpCandidatePaths
 }
 
 function Get-ClashSharpNewTransportPath {
@@ -109,7 +110,7 @@ function New-ClashSharpCandidateArchive {
             $zip = [IO.Compression.ZipArchive]::new($transportState.stream,[IO.Compression.ZipArchiveMode]::Create,$true)
             try {
                 foreach ($name in Get-ClashSharpCandidateArchiveEntries) {
-                    $path = if ($name -ceq 'candidate-identity.json') { $identityPath } else { Join-Path $release $name.Substring(8) }
+                    $path = if ($name -ceq 'candidate-identity.json') { $identityPath } else { Join-Path $release $name }
                     $inputLease = [IO.File]::Open($path,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read)
                     try {
                         $entry = $zip.CreateEntry($name,[IO.Compression.CompressionLevel]::NoCompression)
@@ -152,7 +153,8 @@ function Expand-ClashSharpCandidateArchive {
         Holds the ZIP against replacement through bounded extraction and final candidate recheck.
         Only nine exact ordered ordinary file entries are accepted. Does not execute files,
         recheck signing trust, import certificates, install, or authorize promotion. A failed
-        destination is preserved and never overwritten or automatically replayed.
+        destination is preserved and never overwritten or automatically replayed. The private
+        audit workspace separates the identity from release files; this is not the ZIP layout.
     .PARAMETER ArchivePath
         Ordinary transport ZIP supplied by the trusted producer.
     .PARAMETER ExpectedArchiveSha256
@@ -191,7 +193,8 @@ function Expand-ClashSharpCandidateArchive {
             $null = [IO.Directory]::CreateDirectory($output)
             foreach ($entry in $zip.Entries) {
                 # Entry names were matched ordinally to fixed repository literals before any write.
-                $path = Join-Path $output $entry.FullName
+                $relative = if ($entry.FullName -ceq 'candidate-identity.json') { $entry.FullName } else { 'release/' + $entry.FullName }
+                $path = Join-Path $output $relative
                 $parent = Split-Path -Parent $path
                 $null = [IO.Directory]::CreateDirectory($parent)
                 $null = Assert-ClashSharpOrdinaryPath -LiteralPath $parent -RequireDirectory

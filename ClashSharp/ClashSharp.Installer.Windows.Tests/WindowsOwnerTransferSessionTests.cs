@@ -215,9 +215,9 @@ public sealed partial class WindowsOwnerTransferAuthorityTests
             Helper = new(toHelper.Reader, toParent.Writer);
             var limits = new WindowsMachineHelperBrokerLimits(TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5),
                 TimeSpan.FromSeconds(15), TimeSpan.FromSeconds(5));
-            _broker = new(@"C:\fixture\ClashSharp-Installer.exe", fixture.Inner.State.Machine.Release.Manifest,
+            _broker = new(@"C:\fixture\Setup.exe", fixture.Inner.State.Machine.Release.Manifest,
                 WindowsOwnerTransferAccessFixture.NextSid, new PairTrust(this, "parent"), this, this,
-                () => new WindowsMachineHelperBroker(@"C:\fixture\ClashSharp-Installer.exe", new PairTrust(this, "unused"),
+                () => new WindowsMachineHelperBroker(@"C:\fixture\Setup.exe", new PairTrust(this, "unused"),
                     this, this, limits, () => 4242), () => 4242, limits);
         }
 
@@ -337,7 +337,7 @@ public sealed partial class WindowsOwnerTransferAuthorityTests
             {
                 pair.Hit("parent-acquire");
                 Assert.Equal(4242, expectedParentProcessId);
-                Assert.Equal(@"C:\fixture\ClashSharp-Installer.exe", expectedExecutablePath);
+                Assert.Equal(@"C:\fixture\Setup.exe", expectedExecutablePath);
                 return new PairParentLease(pair);
             }
         }

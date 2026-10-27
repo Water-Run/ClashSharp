@@ -61,7 +61,7 @@ try{
  $mutated=$first.canonicalJson.Replace('"promotionAuthorized":false','"promotionAuthorized":true');[IO.File]::WriteAllText($manifest,$mutated,[Text.UTF8Encoding]::new($false))
  Assert-Rejected {& $consumer -IdentityPath $manifest -ExpectedIdentitySha256 (Get-FileHash $manifest).Hash.ToLowerInvariant() -ReleaseDirectory $fixture.directory} 'manifest-state'
  [IO.File]::WriteAllText($manifest,$first.canonicalJson,[Text.UTF8Encoding]::new($false))
- $file=Join-Path $fixture.directory 'ClashSharp-Installer.exe';[IO.File]::AppendAllText($file,'tampered')
+ $file=Join-Path $fixture.directory 'Setup.exe';[IO.File]::AppendAllText($file,'tampered')
  Assert-Rejected {& $consumer -IdentityPath $manifest -ExpectedIdentitySha256 $first.identitySha256 -ReleaseDirectory $fixture.directory} 'file-changed'
  $script:callbackReached=$false
  Assert-Rejected {Invoke-ClashSharpCandidateIdentity -IdentityPath $manifest -ExpectedIdentitySha256 $first.identitySha256 -ReleaseDirectory $fixture.directory -Consume {$script:callbackReached=$true}} 'file-changed'
@@ -80,7 +80,7 @@ try{
  $fresh=New-Fixture
  Get-ClashSharpCandidateFileSnapshot -ReleaseDirectory $fresh.directory -Consume {
   param($files)
-  Assert-Rejected {$s=[IO.File]::Open((Join-Path $fresh.directory 'ClashSharp-Installer.exe'),[IO.FileMode]::Open,[IO.FileAccess]::Write,[IO.FileShare]::ReadWrite);$s.Dispose()} ''
+  Assert-Rejected {$s=[IO.File]::Open((Join-Path $fresh.directory 'Setup.exe'),[IO.FileMode]::Open,[IO.FileAccess]::Write,[IO.FileShare]::ReadWrite);$s.Dispose()} ''
  }|Out-Null
  Assert-Condition $true 'All candidate files must stay read-locked for trusted consumption.'
  Assert-Rejected {Get-ClashSharpCandidateFileSnapshot -ReleaseDirectory $fresh.directory -Consume {param($files)[IO.File]::WriteAllText((Join-Path $fresh.directory 'extra.txt'),'unexpected')}} 'file count changed'

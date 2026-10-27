@@ -4,5 +4,5 @@ namespace ClashSharp.Installer.Contracts;
 public static class InstallerArtifactNames
 {
     /// <summary>Gets the final installer filename assigned only after release signing succeeds.</summary>
-    public const string PublishedExecutable = "ClashSharp-Installer.exe";
+    public const string PublishedExecutable = "Setup.exe";
 }

@@ -22,7 +22,7 @@ function New-Fixture(){
   identity=('a'*64);commit=('b'*40);runId='12345678-1234-4567-8901-123456789abc'
   start='2026-10-24T01:00:00.0000000+00:00';finish='2026-10-24T01:00:02.0000000+00:00'
   platform=[pscustomobject]@{version='10.0.26100';build=26100;productType=3;architecture='X64'}
-  audit=[pscustomobject]@{schemaVersion=1;status='passed';publishedExecutable='ClashSharp-Installer.exe';packageVersion='1.0.0.0';payloadSha256=('c'*64);fileCount=4;totalBytes=123456L;machineFileCount=7}
+  audit=[pscustomobject]@{schemaVersion=1;status='passed';publishedExecutable='Setup.exe';packageVersion='1.0.0.0';payloadSha256=('c'*64);fileCount=4;totalBytes=123456L;machineFileCount=7}
   files=@(
    [ordered]@{path='payload/ClashSharp_1.0.0.0_x64.msix';length=123000L;sha256=('c'*64)},
    [ordered]@{path='payload/ClashSharp_TemporaryKey.cer';length=100L;sha256=('d'*64)},

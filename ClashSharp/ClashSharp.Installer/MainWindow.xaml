@@ -88,7 +88,8 @@
       Focusable="False"
       Margin="32,0,32,20">
       <StackPanel
-        Margin="0">
+        x:Name="ContentBody"
+        Margin="0,0,24,0">
         <StackPanel
           AutomationProperties.Name="ClashSharp 安装状态"
           Visibility="{Binding IsOperationSummaryVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
@@ -189,6 +190,7 @@
           </StackPanel>
         </Border>
         <Expander
+          x:Name="DetailsExpander"
           Margin="0,24,0,0"
           Header="详细信息"
           Visibility="{Binding IsOperationSummaryVisible, Converter={StaticResource BooleanToVisibilityConverter}}"
@@ -247,6 +249,7 @@
                 Text="桌面应用安装到 Windows 管理的应用目录；代理服务使用固定的系统目录。"
                 Style="{StaticResource MutedTextStyle}" />
               <ItemsControl
+                x:Name="CapabilityChecks"
                 ItemsSource="{Binding Capabilities, Mode=OneWay}"
                 AutomationProperties.Name="安装检查结果">
                 <ItemsControl.ItemTemplate>
@@ -272,7 +275,22 @@
                       <TextBlock
                         Grid.Column="1"
                         Text="{Binding StateText}"
-                        VerticalAlignment="Top" />
+                        VerticalAlignment="Top">
+                        <TextBlock.Style>
+                          <Style
+                            TargetType="TextBlock">
+                            <Style.Triggers>
+                              <DataTrigger
+                                Binding="{Binding IsReady}"
+                                Value="True">
+                                <Setter
+                                  Property="Visibility"
+                                  Value="Collapsed" />
+                              </DataTrigger>
+                            </Style.Triggers>
+                          </Style>
+                        </TextBlock.Style>
+                      </TextBlock>
                     </Grid>
                   </DataTemplate>
                 </ItemsControl.ItemTemplate>

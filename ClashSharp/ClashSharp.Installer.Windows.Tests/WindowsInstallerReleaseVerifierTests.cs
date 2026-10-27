@@ -64,6 +64,7 @@ public sealed class WindowsInstallerReleaseVerifierTests
     [InlineData("ClashSharp.Installer.dll")]
     [InlineData("installer.exe")]
     [InlineData("ClashSharp.Installer.exe")]
+    [InlineData("ClashSharp-Installer.exe")]
     [InlineData("ClashSharp-Installer-Development-Unsigned.exe")]
     public void ExecutableNameMustMatchThePublishedInstaller(string executableName)
     {
@@ -92,9 +93,9 @@ public sealed class WindowsInstallerReleaseVerifierTests
     }
 
     [Theory]
-    [InlineData("ClashSharp-Installer.exe")]
-    [InlineData(@"\\server\release\ClashSharp-Installer.exe")]
-    [InlineData(@"\\?\C:\release\ClashSharp-Installer.exe")]
+    [InlineData("Setup.exe")]
+    [InlineData(@"\\server\release\Setup.exe")]
+    [InlineData(@"\\?\C:\release\Setup.exe")]
     public void RelativeNetworkAndDevicePathsAreRejectedBeforePayloadAccess(string executablePath)
     {
         WindowsPayloadFixture.AssertWindows11X64();
