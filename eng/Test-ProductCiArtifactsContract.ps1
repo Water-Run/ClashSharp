@@ -32,7 +32,7 @@ function New-Fixture(){
  $scope=[ordered]@{schemaVersion=1;product=$true;reason='product-or-other-path';complete=$true;changedPaths=@('ClashSharp/App.xaml');productTestsExecuted=$false;baseCommit=('a'*40);headCommit=('b'*40)}
  $scopeText=$scope|ConvertTo-Json -Depth 4
  $reports=@('tests.trx','installer-core-tests.trx','installer-presentation-tests.trx','installer-windows-tests.trx')
- $dev=@('ClashSharp-Installer-Development-Unsigned.exe','ClashSharp-Installer-Development-Unsigned.exe.sha256','DEVELOPMENT-UNSIGNED.txt','MIHOMO-SOURCE-MATERIALS.zip','THIRD-PARTY-NOTICES.zip','payload/ClashSharp_1.0.0.0_x64.msix','payload/ClashSharp_TemporaryKey.cer','payload/payload-provenance.json','payload/Dependencies/x64/Microsoft.WindowsAppRuntime.1.8.msix')
+ $dev=@('ClashSharp-Installer-Development-Unsigned.exe','LICENSE','README.md','metadata/ClashSharp-Installer-Development-Unsigned.exe.sha256','metadata/DEVELOPMENT-UNSIGNED.txt','licenses/MIHOMO-SOURCE-MATERIALS.zip','licenses/THIRD-PARTY-NOTICES.zip','payload/ClashSharp_1.0.0.0_x64.msix','payload/ClashSharp_TemporaryKey.cer','payload/payload-provenance.json','payload/Dependencies/x64/Microsoft.WindowsAppRuntime.1.8.msix')
  $roles=@('ci-scope-dotnet','ci-scope-installer','dotnet-test-results','ClashSharp-1.0.0-development-package')
  $contents=@();for($role=0;$role -lt 4;$role++){$contents+=,([Collections.Generic.Dictionary[string,string]]::new([StringComparer]::Ordinal))};$contents[0].Add('ci-scope.json',$scopeText);$contents[1].Add('ci-scope.json',$scopeText)
  foreach($name in $reports){$contents[2][$name]=New-Trx};foreach($name in $dev){$contents[3][$name]='SYNTHETIC-NOT-EXECUTABLE'}
@@ -87,8 +87,8 @@ try{
  Assert-Rejected {param($f)$f.contents[2]['tests.trx']=$f.contents[2]['tests.trx'].Replace('outcome="Passed"','outcome="Failed"')} 'test-evidence.result_not_passed'
  Assert-Rejected {param($f)$f.contents[2]['installer-core-tests.trx']=$f.contents[2]['tests.trx']} 'test-evidence.report_duplicate'
  Assert-Rejected {param($f)$f.contents[3]['secret.pfx']='private-key'} 'development-inventory'
- Assert-Rejected {param($f)$f.contents[3].Remove('DEVELOPMENT-UNSIGNED.txt')} 'development-inventory'
- Assert-Rejected {param($f)$f.contents[3]['THIRD-PARTY-NOTICES.zip']=''} 'development-inventory'
+ Assert-Rejected {param($f)$f.contents[3].Remove('metadata/DEVELOPMENT-UNSIGNED.txt')} 'development-inventory'
+ Assert-Rejected {param($f)$f.contents[3]['licenses/THIRD-PARTY-NOTICES.zip']=''} 'development-inventory'
  $fixture=New-Fixture;Save-Fixture $fixture;$link=Join-Path $root 'linked-inputs';$null=New-Item -ItemType Junction -Path $link -Target $fixture.directory
  try{$refused=$false;try{$null=Get-ClashSharpProductCiArtifactEvidence -Metadata $fixture.metadata -ArtifactDirectory $link}catch{if(-not $_.Exception.Message.Contains('reparse-path')){throw};$refused=$true};Assert-Condition $refused 'Reparse input roots must fail.'}
  finally{$item=Get-Item -LiteralPath $link -Force;if(-not($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -or [IO.Path]::GetFullPath($link) -cne (Join-Path $root 'linked-inputs')){throw 'Owned junction changed'};Remove-Item -LiteralPath $link -Force}

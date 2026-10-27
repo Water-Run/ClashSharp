@@ -87,9 +87,10 @@ machine 文件，然后释放全部文件句柄。成功时退出码为 0，重�
 安装、信任证书或修改服务；它不代表 EXE 签名、目标平台和安装事务已经验收。
 正式提权入口只接受 Setup.exe，开发标识文件名不能获得安装权限。
 
-下载 ZIP 后直接解压，第一层即为 `Setup.exe`、`Setup.exe.sha256` 和相邻 `payload`，
-不再套一层 `release`。保留这些文件的相对位置并双击 `Setup.exe`。
-身份、第三方说明及源码材料随包保留；内部审计工具的私有目录结构不影响用户解压布局。
+下载 `Clash#.zip` 后完整解压，第一层的文件只有 `Setup.exe`、`LICENSE` 和 `README.md`，
+不再套一层 `release`。保留相邻 `payload`、`licenses` 和 `metadata` 子目录并双击 `Setup.exe`。
+随包 README 是六语言简明安装说明，并链接各语言完整文档；不是仓库开发说明的副本。
+身份、校验和、第三方说明及源码材料位于子目录；内部审计工作目录不影响用户解压布局。
 
 CI 的 Offline Installer package 在干净 Windows runner 上执行以上完整打包，
 产物保留五天供检查。此检查验证构建和载荷，不代表 GUI 安装或故障恢复已经验收。

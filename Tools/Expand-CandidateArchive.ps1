@@ -3,7 +3,7 @@
 .SYNOPSIS
     Receives an independently pinned candidate archive and verifies its original file identity.
 .DESCRIPTION
-    Keeps the archive against replacement, accepts only its fixed nine-entry layout and bounded
+    Keeps the archive against replacement, accepts only its fixed eleven-entry layout and bounded
     bytes, and preserves failed destinations. References must come from the trusted producer,
     not from an adjacent untrusted receipt. Never executes or installs extracted files.
 .PARAMETER ArchivePath

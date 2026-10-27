@@ -719,7 +719,7 @@ $provenance = [ordered]@{
     schemaVersion = 1
     dotNetRuntime = $dotNetRuntimeContract
     thirdPartyNotices = [ordered]@{
-        path = 'THIRD-PARTY-NOTICES.zip'
+        path = 'licenses/THIRD-PARTY-NOTICES.zip'
         msixPath = 'ThirdParty/THIRD-PARTY-NOTICES.zip'
         length = $thirdPartyNotices.Length
         sha256 = $thirdPartyNotices.Sha256
@@ -731,7 +731,7 @@ $provenance = [ordered]@{
         bomComponentCount = $thirdPartyNotices.BomComponentCount
     }
     mihomoSourceMaterials = [ordered]@{
-        path = 'MIHOMO-SOURCE-MATERIALS.zip'
+        path = 'licenses/MIHOMO-SOURCE-MATERIALS.zip'
         length = $sourceMaterials.Length
         sha256 = $sourceMaterials.Sha256
         sourceCommit = $sourceMaterials.SourceCommit
@@ -815,8 +815,14 @@ Write-Host 'WPF Installer passed its isolated single-file build contract.'
         -LiteralPath $stagedInstallerExecutable `
         -Description "staged WPF Installer executable"
     $null = New-Item -ItemType Directory -Path $promotionStagingRoot
+    $promotionMetadataDir = Join-Path $promotionStagingRoot 'metadata'
+    $promotionLicensesDir = Join-Path $promotionStagingRoot 'licenses'
+    $null = New-Item -ItemType Directory -Path $promotionMetadataDir
+    $null = New-Item -ItemType Directory -Path $promotionLicensesDir
+    Copy-Item -LiteralPath (Join-Path $repoRoot 'LICENSE') -Destination (Join-Path $promotionStagingRoot 'LICENSE')
+    Copy-Item -LiteralPath (Join-Path $installerRoot 'ReleaseREADME.md') -Destination (Join-Path $promotionStagingRoot 'README.md')
     $developmentExecutable = Join-Path $promotionStagingRoot "ClashSharp-Installer-Development-Unsigned.exe"
-    $developmentMarker = Join-Path $promotionStagingRoot "DEVELOPMENT-UNSIGNED.txt"
+    $developmentMarker = Join-Path $promotionMetadataDir "DEVELOPMENT-UNSIGNED.txt"
 
     if ($Development) {
         Move-Item `
@@ -903,20 +909,20 @@ Write-Host 'WPF Installer passed its isolated single-file build contract.'
     }
 
     $installerSha256 = (Get-FileHash -LiteralPath $installerExecutable -Algorithm SHA256).Hash.ToLowerInvariant()
-    $installerHashPath = "$installerExecutable.sha256"
+    $installerHashPath = Join-Path $promotionMetadataDir ((Split-Path -Leaf $installerExecutable) + '.sha256')
     Set-Content `
         -LiteralPath $installerHashPath `
         -Encoding ascii `
         -Value "$installerSha256 *$(Split-Path -Leaf $installerExecutable)"
     Write-Host "Installer artifact SHA-256: $installerSha256"
 
-    $promotedNoticesPath = Join-Path $promotionStagingRoot 'THIRD-PARTY-NOTICES.zip'
+    $promotedNoticesPath = Join-Path $promotionLicensesDir 'THIRD-PARTY-NOTICES.zip'
     Copy-Item -LiteralPath $thirdPartyNoticesPath -Destination $promotedNoticesPath
     $promotedNotices = Get-ClashSharpThirdPartyNoticesContract -LiteralPath $promotedNoticesPath
     if ($promotedNotices.Sha256 -cne $thirdPartyNotices.Sha256) {
         throw 'Promoted third-party notices differ from the verified MSIX input.'
     }
-    $promotedSourcePath = Join-Path $promotionStagingRoot 'MIHOMO-SOURCE-MATERIALS.zip'
+    $promotedSourcePath = Join-Path $promotionLicensesDir 'MIHOMO-SOURCE-MATERIALS.zip'
     Copy-Item -LiteralPath $sourceMaterialsPath -Destination $promotedSourcePath
     $promotedSource = Get-ClashSharpMihomoSourceMaterialsContract -RepositoryRoot $repoRoot -LiteralPath $promotedSourcePath
     if ($promotedSource.Sha256 -cne $sourceMaterials.Sha256 -or $promotedSource.BinarySha256 -cne $sourceMaterials.BinarySha256) {

@@ -5,7 +5,7 @@
 .DESCRIPTION
     Runs inside a controlled signing context while its trust is already available. Never imports
     certificates, signs or executes a package, changes source, or grants acceptance/publication.
-    The output belongs outside the eight-file release directory and is always a new file.
+    The output belongs outside the ten-file release directory and is always a new file.
 .PARAMETER RepositoryRoot
     Clean Git checkout actually used by the controlled build.
 .PARAMETER ReleaseDirectory

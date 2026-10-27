@@ -4,7 +4,7 @@
     Runs the pinned Installer's read-only payload audit and records its actual Windows platform.
 .DESCRIPTION
     Only executes the fixed --verify-payload route of an independently trusted candidate. Holds
-    its canonical manifest and all eight output files against changes through process termination.
+    its canonical manifest and all ten output files against changes through process termination.
     No trust import, elevation, installation, service change or UI launch is performed. Retains
     the owned process journal and diagnostics on failure; an existing output is never replayed.
 .PARAMETER IdentityPath
@@ -12,7 +12,7 @@
 .PARAMETER ExpectedIdentitySha256
     Independent candidate reference from that operation, never selected from an untrusted document.
 .PARAMETER ReleaseDirectory
-    Exact eight-file signed output belonging to that identity.
+    Exact ten-file signed output belonging to that identity.
 .PARAMETER OutputDirectory
     New evidence directory outside ReleaseDirectory; failures remain for observation.
 #>

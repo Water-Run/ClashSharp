@@ -12,7 +12,7 @@
 .PARAMETER ExpectedIdentitySha256
     Independent identity digest obtained from that producer.
 .PARAMETER ReleaseDirectory
-    Exact eight-file signed candidate output.
+    Exact ten-file signed candidate output.
 .PARAMETER TargetUserSid
     Independent expected installed owner SID; the association cannot select its own owner.
 .PARAMETER OutputDirectory

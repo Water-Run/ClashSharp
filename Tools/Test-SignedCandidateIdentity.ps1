@@ -1,7 +1,7 @@
 #Requires -Version 7.4
 <#
 .SYNOPSIS
-    Rechecks a pinned candidate identity and its eight output bytes without executing them.
+    Rechecks a pinned candidate identity and its ten output bytes without executing them.
 .DESCRIPTION
     Requires an independently obtained manifest SHA256 and canonical manifest bytes. This proves
     that the current file set matches that identity; it does not authenticate a supplied manifest,

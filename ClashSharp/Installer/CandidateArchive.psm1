@@ -9,11 +9,11 @@ function Get-ClashSharpCandidateArchiveEntries {
         Returns the fixed transport inventory in its canonical order.
     .DESCRIPTION
         Keeps Setup.exe and its sibling payload directly at the ZIP root. Only the identity
-        and eight formal candidate files can cross this transport boundary.
+        and ten formal candidate files can cross this transport boundary.
     #>
     [CmdletBinding()]
     param()
-    'candidate-identity.json'
+    'metadata/candidate-identity.json'
     Get-ClashSharpCandidatePaths
 }
 
@@ -72,7 +72,7 @@ function New-ClashSharpCandidateArchive {
     .SYNOPSIS
         Seals a pinned candidate into one transport archive without rebuilding or signing.
     .DESCRIPTION
-        Holds the canonical identity and all eight candidate files through archive construction
+        Holds the canonical identity and all ten candidate files through archive construction
         and final source checks. Fixed names, order, timestamp and stored bytes make transport
         repeatable. A failed operation retains its partial file; no success receipt is returned.
         The caller must trust the independent identity reference, not a self-selected manifest.
@@ -81,7 +81,7 @@ function New-ClashSharpCandidateArchive {
     .PARAMETER ExpectedIdentitySha256
         Independent SHA256 returned by that operation.
     .PARAMETER ReleaseDirectory
-        Exact eight-file candidate directory.
+        Exact ten-file candidate directory.
     .PARAMETER OutputPath
         New absolute ZIP path outside the candidate directory, with an existing ordinary parent.
     #>
@@ -110,7 +110,7 @@ function New-ClashSharpCandidateArchive {
             $zip = [IO.Compression.ZipArchive]::new($transportState.stream,[IO.Compression.ZipArchiveMode]::Create,$true)
             try {
                 foreach ($name in Get-ClashSharpCandidateArchiveEntries) {
-                    $path = if ($name -ceq 'candidate-identity.json') { $identityPath } else { Join-Path $release $name }
+                    $path = if ($name -ceq 'metadata/candidate-identity.json') { $identityPath } else { Join-Path $release $name }
                     $inputLease = [IO.File]::Open($path,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read)
                     try {
                         $entry = $zip.CreateEntry($name,[IO.Compression.CompressionLevel]::NoCompression)
@@ -136,7 +136,7 @@ function New-ClashSharpCandidateArchive {
         [IO.File]::Move($partial,$output,$false)
         [pscustomobject][ordered]@{
             schemaVersion=1;kind='clashsharp-candidate-archive';candidateIdentitySha256=$ExpectedIdentitySha256
-            sourceCommit=$source.sourceCommit;archiveSha256=$hash;archiveLength=$length;archiveEntries=9
+            sourceCommit=$source.sourceCommit;archiveSha256=$hash;archiveLength=$length;archiveEntries=($source.candidateFiles+1)
             candidateFiles=$source.candidateFiles;candidateBytesPreserved=$true
             signatureTrustRechecked=$false;acceptanceBound=$false;promotionAuthorized=$false
         }
@@ -151,7 +151,7 @@ function Expand-ClashSharpCandidateArchive {
         Expands one independently pinned transport and rechecks its candidate identity.
     .DESCRIPTION
         Holds the ZIP against replacement through bounded extraction and final candidate recheck.
-        Only nine exact ordered ordinary file entries are accepted. Does not execute files,
+        Only eleven exact ordered ordinary file entries are accepted. Does not execute files,
         recheck signing trust, import certificates, install, or authorize promotion. A failed
         destination is preserved and never overwritten or automatically replayed. The private
         audit workspace separates the identity from release files; this is not the ZIP layout.
@@ -193,7 +193,7 @@ function Expand-ClashSharpCandidateArchive {
             $null = [IO.Directory]::CreateDirectory($output)
             foreach ($entry in $zip.Entries) {
                 # Entry names were matched ordinally to fixed repository literals before any write.
-                $relative = if ($entry.FullName -ceq 'candidate-identity.json') { $entry.FullName } else { 'release/' + $entry.FullName }
+                $relative = if ($entry.FullName -ceq 'metadata/candidate-identity.json') { 'candidate-identity.json' } else { 'release/' + $entry.FullName }
                 $path = Join-Path $output $relative
                 $parent = Split-Path -Parent $path
                 $null = [IO.Directory]::CreateDirectory($parent)
@@ -217,7 +217,7 @@ function Expand-ClashSharpCandidateArchive {
             Compare-ClashSharpDirectoryContract -Expected @($expectedFiles | Sort-Object RelativePath) -Actual @(Get-ClashSharpDirectoryContract -LiteralPath $output)
             [pscustomobject][ordered]@{
                 schemaVersion=1;kind='clashsharp-candidate-archive-received';candidateIdentitySha256=$ExpectedIdentitySha256
-                sourceCommit=$identity.source.commit;archiveSha256=$ExpectedArchiveSha256;archiveEntries=9
+                sourceCommit=$identity.source.commit;archiveSha256=$ExpectedArchiveSha256;archiveEntries=($identity.files.Count+1)
                 candidateFiles=$identity.files.Count;candidateBytesPreserved=$true
                 signatureTrustRechecked=$false;acceptanceBound=$false;promotionAuthorized=$false
             }

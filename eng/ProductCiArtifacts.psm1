@@ -203,8 +203,8 @@ function Get-ClashSharpProductCiArtifactEvidence {
                         })
                         $summary = Get-ClashSharpTestResultSummary -LiteralPath $paths
                     } else {
-                        $names = @('ClashSharp-Installer-Development-Unsigned.exe','ClashSharp-Installer-Development-Unsigned.exe.sha256',
-                            'DEVELOPMENT-UNSIGNED.txt','MIHOMO-SOURCE-MATERIALS.zip','THIRD-PARTY-NOTICES.zip',
+                        $names = @('ClashSharp-Installer-Development-Unsigned.exe','LICENSE','README.md','metadata/ClashSharp-Installer-Development-Unsigned.exe.sha256',
+                            'metadata/DEVELOPMENT-UNSIGNED.txt','licenses/MIHOMO-SOURCE-MATERIALS.zip','licenses/THIRD-PARTY-NOTICES.zip',
                             'payload/ClashSharp_1.0.0.0_x64.msix','payload/ClashSharp_TemporaryKey.cer','payload/payload-provenance.json',
                             'payload/Dependencies/x64/Microsoft.WindowsAppRuntime.1.8.msix')
                         if ($entries.Count -ne $names.Count -or @($entries | Where-Object { $_.FullName -cnotin $names -or $_.Length -le 0 }).Count) {

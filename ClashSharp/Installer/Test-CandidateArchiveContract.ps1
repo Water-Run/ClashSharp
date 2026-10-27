@@ -73,13 +73,13 @@ function Set-FirstDeclaredLength([string]$Original,[uint32]$Length){
  [IO.File]::WriteAllBytes($path,$bytes);return $path
 }
 try{
- $fixture=New-Fixture;$archive=New-Path '.zip';$first=New-Archive $fixture $archive
- Assert-Condition ($first.archiveSha256 -ceq (Get-Digest $archive) -and $first.candidateIdentitySha256 -ceq $fixture.hash -and $first.archiveEntries -eq 9) 'Producer must return the exact archive and candidate digests.'
+ $fixture=New-Fixture;$archive=Join-Path $root 'Clash#.zip';$first=New-Archive $fixture $archive
+ Assert-Condition ($first.archiveSha256 -ceq (Get-Digest $archive) -and $first.candidateIdentitySha256 -ceq $fixture.hash -and $first.archiveEntries -eq 11) 'Producer must return the exact archive and candidate digests.'
  Assert-Condition ($first.candidateBytesPreserved -and -not $first.signatureTrustRechecked -and -not $first.acceptanceBound -and -not $first.promotionAuthorized) 'Transport is not signing trust or acceptance.'
  $other=New-Path '.zip';$second=New-Archive $fixture $other
  Assert-Condition ($first.archiveSha256 -ceq $second.archiveSha256) 'The same source bytes must produce the same stored archive.'
  $destination=New-Path '-received';$received=Receive-Archive $archive $first.archiveSha256 $fixture.hash $destination
- Assert-Condition ($received.archiveSha256 -ceq $first.archiveSha256 -and $received.candidateIdentitySha256 -ceq $fixture.hash -and $received.candidateFiles -eq 8) 'Receiver must retain both producer references.'
+ Assert-Condition ($received.archiveSha256 -ceq $first.archiveSha256 -and $received.candidateIdentitySha256 -ceq $fixture.hash -and $received.candidateFiles -eq 10) 'Receiver must retain both producer references.'
  Assert-Condition (-not $received.signatureTrustRechecked -and -not $received.acceptanceBound -and -not $received.promotionAuthorized) 'Receiving cannot authorize installation or promotion.'
  Assert-Condition ((Get-Digest (Join-Path $destination 'candidate-identity.json')) -ceq $fixture.hash) 'Identity bytes must survive transport.'
  foreach($file in $fixture.files){Assert-Condition ((Get-Digest (Join-Path "$destination/release" $file.path)) -ceq $file.sha256) ('Original file bytes must survive: '+$file.path)}
@@ -100,11 +100,12 @@ try{
  Assert-Condition (-not (Test-Path $untrusted) -and -not (Test-Path ($untrusted+'.partial'))) 'Wrong producer identity must not create an archive attempt.'
  foreach($leaf in @('bad.zip:stream','bad.zip.','bad.zip ','NUL.zip')){Assert-Rejected {New-Archive $fixture (Join-Path $root $leaf)} 'transport.output-name'}
  $zip=[IO.Compression.ZipFile]::OpenRead($archive);try{$names=@($zip.Entries.FullName);$identityLength=$zip.Entries[0].Length}finally{$zip.Dispose()}
- Assert-Condition ($names -ccontains 'Setup.exe' -and $names -ccontains 'Setup.exe.sha256') 'The install entry and its checksum must be directly at the ZIP root.'
+ Assert-Condition ((@($names|Where-Object{-not $_.Contains('/')}|Sort-Object) -join ',') -ceq 'LICENSE,README.md,Setup.exe') 'Only Setup.exe, LICENSE and README.md may appear as root files.'
  Assert-Condition (@($names|Where-Object{$_ -like 'release/*'}).Count -eq 0) 'The downloaded ZIP must not introduce a release directory.'
  $ordinary=New-Path '-ordinary-unzip';[IO.Compression.ZipFile]::ExtractToDirectory($archive,$ordinary)
  Assert-Condition (Test-Path -LiteralPath (Join-Path $ordinary 'Setup.exe') -PathType Leaf) 'A standard ZIP extraction must expose Setup.exe immediately.'
  Assert-Condition ((Get-Digest (Join-Path $ordinary 'Setup.exe')) -ceq (Get-Digest (Join-Path $fixture.release 'Setup.exe'))) 'Root placement must preserve the exact signed executable bytes.'
+ Assert-Condition ((Get-Digest (Join-Path $ordinary 'LICENSE')) -ceq (Get-Digest (Join-Path $fixture.release 'LICENSE')) -and (Get-Digest (Join-Path $ordinary 'README.md')) -ceq (Get-Digest (Join-Path $fixture.release 'README.md'))) 'The license and concise multilingual guide must survive ordinary extraction unchanged.'
  Assert-Condition (Test-Path -LiteralPath (Join-Path $ordinary 'payload/ClashSharp_1.0.0.0_x64.msix') -PathType Leaf) 'The payload must remain next to Setup.exe after standard extraction.'
  foreach($name in @('../escape.txt','payload/../escape.txt','/escape.txt','C:/escape.txt','release/Setup.exe','payload\Setup.exe','SETUP.exe','ClashSharp-Installer.exe',$names[0])){
   $changed=[string[]]$names.Clone();$changed[1]=$name;$bad=New-ChangedArchive $archive $changed

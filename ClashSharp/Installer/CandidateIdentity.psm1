@@ -11,8 +11,8 @@ function Get-ClashSharpCandidatePaths {
     #>
     [CmdletBinding()]
     param()
-    @('Setup.exe','Setup.exe.sha256','MIHOMO-SOURCE-MATERIALS.zip',
-        'THIRD-PARTY-NOTICES.zip','payload/ClashSharp_1.0.0.0_x64.msix',
+    @('Setup.exe','LICENSE','README.md','metadata/Setup.exe.sha256','licenses/MIHOMO-SOURCE-MATERIALS.zip',
+        'licenses/THIRD-PARTY-NOTICES.zip','payload/ClashSharp_1.0.0.0_x64.msix',
         'payload/ClashSharp_TemporaryKey.cer','payload/payload-provenance.json',
         'payload/Dependencies/x64/Microsoft.WindowsAppRuntime.1.8.msix')
 }
@@ -91,7 +91,7 @@ function Get-ClashSharpCandidateFileSnapshot {
     .SYNOPSIS
         Hashes the exact candidate set and executes its verifier while read leases remain held.
     .DESCRIPTION
-        Holds all eight files against writes and deletion for the full callback. This is a scoped
+        Holds all ten files against writes and deletion for the full callback. This is a scoped
         consumption primitive, not a durable lock on paths after return. The callback is trusted
         producer code, never loaded from the candidate manifest or directory.
     .PARAMETER ReleaseDirectory
@@ -104,7 +104,7 @@ function Get-ClashSharpCandidateFileSnapshot {
     $root = Assert-ClashSharpOrdinaryPath -LiteralPath $ReleaseDirectory -RequireDirectory
     $inventory = @(Get-ClashSharpDirectoryContract -LiteralPath $root)
     $expected = @(Get-ClashSharpCandidatePaths)
-    if ($inventory.Count -ne 8 -or @($inventory | Where-Object { $_.relativePath -cnotin $expected }).Count) {
+    if ($inventory.Count -ne $expected.Count -or @($inventory | Where-Object { $_.relativePath -cnotin $expected }).Count) {
         throw 'candidate.file-inventory'
     }
     $leases = [Collections.Generic.List[IO.FileStream]]::new()
@@ -132,7 +132,7 @@ function Invoke-ClashSharpCandidateIdentity {
     .SYNOPSIS
         Consumes one independently pinned candidate while its manifest and output leases are held.
     .DESCRIPTION
-        Verifies canonical identity bytes and all eight files before calling trusted collector code.
+        Verifies canonical identity bytes and all ten files before calling trusted collector code.
         The callback is supplied by the caller, never by a manifest. No result escapes if the final
         directory recheck fails. This does not authenticate an arbitrary self-selected manifest.
     .PARAMETER IdentityPath
@@ -140,7 +140,7 @@ function Invoke-ClashSharpCandidateIdentity {
     .PARAMETER ExpectedIdentitySha256
         Independent reference digest obtained from that producer.
     .PARAMETER ReleaseDirectory
-        Exact eight-file output belonging to the identity.
+        Exact ten-file output belonging to the identity.
     .PARAMETER Consume
         Trusted operation receiving the verified document while all read leases remain held.
     #>

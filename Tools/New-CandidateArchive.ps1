@@ -3,7 +3,7 @@
 .SYNOPSIS
     Seals an existing trusted signed candidate for transfer without rebuilding or signing.
 .DESCRIPTION
-    Requires its independently pinned identity, preserves all eight original files, and returns
+    Requires its independently pinned identity, preserves all ten original files, and returns
     the exact transport digest. Existing outputs or partial attempts are never overwritten.
     Does not import trust, execute the product, install, or authorize publication.
 .PARAMETER IdentityPath
@@ -11,7 +11,7 @@
 .PARAMETER ExpectedIdentitySha256
     Independent SHA256 returned by that operation.
 .PARAMETER ReleaseDirectory
-    Exact eight-file signed candidate directory.
+    Exact ten-file signed candidate directory.
 .PARAMETER OutputPath
     New absolute ZIP path outside the candidate directory.
 #>
