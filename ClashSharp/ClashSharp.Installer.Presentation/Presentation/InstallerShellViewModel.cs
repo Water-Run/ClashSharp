@@ -123,7 +123,8 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
     public DelegateCommand DeclineOwnerTransferCommand { get; }
 
     /// <summary>Gets whether this trusted composition supplies an idle dedicated transfer action.</summary>
-    public bool IsOwnerTransferActionVisible => CanStartOperation && _runtime is IInstallerOwnerTransferRuntime { SupportsOwnerTransfer: true };
+    public bool IsOwnerTransferActionVisible => CanStartOperation && _runtime is IInstallerOwnerTransferRuntime { SupportsOwnerTransfer: true }
+        && (!_offersInstallPreferences || _installPreferences.InstallTransparentProxyService);
 
     /// <summary>Gets whether the current operation is waiting for explicit user consent.</summary>
     public bool IsOwnerTransferConfirmationVisible
@@ -468,8 +469,8 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
             return;
         }
 
-        InstallerPreferences? installPreferences = requestedOperation == InstallerOperation.Install && !_isUpgrade
-            && _offersInstallPreferences ? _installPreferences : null;
+        InstallerPreferences? installPreferences = _offersInstallPreferences
+            && (ownerTransfer || requestedOperation == InstallerOperation.Install && !_isUpgrade) ? _installPreferences : null;
 
         IsCancellationRequested = false;
         IsBusy = true;
@@ -514,13 +515,15 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
                 generation.Cancellation.Token.ThrowIfCancellationRequested();
                 retiredStarted = true;
             }
+            Func<InstallerOwnerTransferConfirmation, CancellationToken, Task<bool>> confirmTransfer = (confirmation, token) =>
+                Task.Factory.StartNew(() => ConfirmOwnerTransferAsync(confirmation, generation, token),
+                    CancellationToken.None, TaskCreationOptions.DenyChildAttach, confirmationScheduler).Unwrap();
             InstallerExecutionResult result = completePreferences
                 ? await ((IInstallerPreferencesRuntime)_runtime).CompletePreferencesAsync(progress, generation.Cancellation.Token)
                 : ownerTransfer
-                ? await transfer!.TransferAndExecuteAsync((confirmation, token) =>
-                    Task.Factory.StartNew(() => ConfirmOwnerTransferAsync(confirmation, generation, token),
-                        CancellationToken.None, TaskCreationOptions.DenyChildAttach, confirmationScheduler).Unwrap(),
-                    progress, generation.Cancellation.Token)
+                ? installPreferences is not null && _runtime is IInstallerPreferencesRuntime transferPreferences
+                    ? await transferPreferences.TransferWithPreferencesAsync(installPreferences, confirmTransfer, progress, generation.Cancellation.Token)
+                    : await transfer!.TransferAndExecuteAsync(confirmTransfer, progress, generation.Cancellation.Token)
                 : retiredUninstall
                     ? await retired!.UninstallRetiredAccountAsync(progress, generation.Cancellation.Token)
                     : originalRestore

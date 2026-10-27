@@ -132,6 +132,29 @@ public sealed class ProductionInstallerRuntime : IInstallerRuntime, IInstallerOw
     }
 
     /// <inheritdoc />
+    public Task<InstallerExecutionResult> TransferWithPreferencesAsync(InstallerPreferences preferences,
+        Func<InstallerOwnerTransferConfirmation, CancellationToken, Task<bool>> confirm,
+        IProgress<InstallerProgress> progress, CancellationToken cancellationToken)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        ArgumentNullException.ThrowIfNull(preferences);
+        ArgumentNullException.ThrowIfNull(confirm);
+        ArgumentNullException.ThrowIfNull(progress);
+        preferences.Validate();
+        cancellationToken.ThrowIfCancellationRequested();
+        if (_backend is not IInstallerOwnerTransferRuntimeBackend { SupportsOwnerTransfer: true }
+            || _backend is not IInstallerPreferencesRuntimeBackend { SupportsInstallPreferences: true } backend)
+        {
+            throw new InstallerProtocolException("installer.owner_transfer.unavailable");
+        }
+        return Task.Run(() => backend.TransferWithPreferencesAsync(preferences, (offer, token) =>
+        {
+            offer.Validate();
+            return confirm(new(offer.IsRecovery), token);
+        }, progress, cancellationToken), cancellationToken);
+    }
+
+    /// <inheritdoc />
     public Task<InstallerExecutionResult> CompletePreferencesAsync(IProgress<InstallerProgress> progress, CancellationToken cancellationToken)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);

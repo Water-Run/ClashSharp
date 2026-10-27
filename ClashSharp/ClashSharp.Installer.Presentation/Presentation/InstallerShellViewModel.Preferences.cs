@@ -63,6 +63,11 @@ public sealed partial class InstallerShellViewModel
         preferences.Validate();
         _installPreferences = preferences;
         OnPropertyChanged(property);
+        if (property == nameof(InstallTransparentProxyService))
+        {
+            OnPropertyChanged(nameof(IsOwnerTransferActionVisible));
+            OwnerTransferCommand.NotifyCanExecuteChanged();
+        }
     }
 
     private void ApplyPreferencesWarnings(InstallerExecutionResult result, InstallerOperation? operation)

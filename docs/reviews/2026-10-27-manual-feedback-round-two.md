@@ -35,3 +35,5 @@
 真实WPF生产窗口的浅／深主题、默认／最小窗口及异常态共5个场景的布局和绑定检查通过，正文与滚动条保持12DIP间隔，底部操作可见。桌面断开时两次控件图均全黑，没有据此认定视觉通过；通过SSH核对仅有Administrator断开会话、控制台无登录用户后，将现有会话接回控制台，13张实际WPF控件图导出并逐张查看通过。未新增登录会话、未注销用户。138份证据及清单归档双端逐项核验，ZIP摘要`a79ade5f28dcbe280e601b1a788b4a844486669e53b9d7cb037476326eac79d6`；72源码逐文件匹配`a21d201`，专属任务均归档移除。当前用户应用仍在运行、手验数据未改动、C盘141.65GiB可用；尚未形成新的签名交付候选，准确完整CI、签名和原生安装选项执行仍待完成。
 
 Windows 原生约束已核对：[任务栏固定指南](https://learn.microsoft.com/en-us/windows/apps/develop/windows-integration/pin-to-taskbar)要求应用前台与用户确认，并明确不由安装器直接调用；[启动任务](https://learn.microsoft.com/en-us/uwp/api/windows.applicationmodel.startuptask)尊重用户在任务管理器中的禁用选择。[MSIX 开始菜单入口](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-uap-visualelements)由包清单管理，快捷入口选项须与该行为一致，避免无效选项或重复入口。后续实现按这些约束接入并验证。
+
+后续已完成63f准确完整CI7,426项、内部签名及两方案原生安装／卸载和当前34文件恢复；首次安装还复现快速退出进程的句柄问题，并补齐账户转移的选择传递。修正验证和剩余门槛见[原生验收与修正](2026-10-27-installer-options-native.md)。

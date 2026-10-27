@@ -1,3 +1,5 @@
+using ClashSharp.Installer.Ownership;
+
 namespace ClashSharp.Installer.Contracts;
 
 /// <summary>Trusted first-install path that owns applying current-user preferences.</summary>
@@ -8,6 +10,11 @@ public interface IInstallerPreferencesRuntimeBackend
 
     /// <summary>Installs the exact release and applies one immutable preference snapshot.</summary>
     Task<InstallerExecutionResult> InstallWithPreferencesAsync(InstallerPreferences preferences,
+        IProgress<InstallerProgress>? progress, CancellationToken cancellationToken);
+
+    /// <summary>Confirms account transfer and continues with the same immutable installation choices.</summary>
+    Task<InstallerExecutionResult> TransferWithPreferencesAsync(InstallerPreferences preferences,
+        Func<InstallerOwnerTransferOffer, CancellationToken, Task<bool>> confirm,
         IProgress<InstallerProgress>? progress, CancellationToken cancellationToken);
 
     /// <summary>Completes a correlated user-only intent after the core installation has been verified.</summary>

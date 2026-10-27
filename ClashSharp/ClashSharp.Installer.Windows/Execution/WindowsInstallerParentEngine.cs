@@ -214,7 +214,23 @@ public sealed class WindowsInstallerParentEngine : IInstallerRuntimeBackend, IIn
     }
 
     /// <inheritdoc />
-    public async Task<InstallerExecutionResult> TransferAndExecuteAsync(
+    public Task<InstallerExecutionResult> TransferAndExecuteAsync(
+        Func<InstallerOwnerTransferOffer, CancellationToken, Task<bool>> confirm,
+        IProgress<InstallerProgress>? progress, CancellationToken cancellationToken) =>
+        TransferCoreAsync(null, confirm, progress, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<InstallerExecutionResult> TransferWithPreferencesAsync(InstallerPreferences preferences,
+        Func<InstallerOwnerTransferOffer, CancellationToken, Task<bool>> confirm,
+        IProgress<InstallerProgress>? progress, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(preferences);
+        preferences.Validate();
+        if (_preferences is null) { throw new InstallerProtocolException("installer.preferences.unavailable"); }
+        return TransferCoreAsync(preferences, confirm, progress, cancellationToken);
+    }
+
+    private async Task<InstallerExecutionResult> TransferCoreAsync(InstallerPreferences? selected,
         Func<InstallerOwnerTransferOffer, CancellationToken, Task<bool>> confirm,
         IProgress<InstallerProgress>? progress, CancellationToken cancellationToken)
     {
@@ -232,11 +248,27 @@ public sealed class WindowsInstallerParentEngine : IInstallerRuntimeBackend, IIn
             cancellationToken.ThrowIfCancellationRequested();
             using IDisposable applicationLease = _applicationLock.Acquire(_targetSid, cancellationToken)
                 ?? throw new InstallerProtocolException("installer.application_lock.lease_missing");
-            if (_preferences is not null && !_preferences.UsesService)
+            if (selected is { InstallTransparentProxyService: false }
+                || selected is null && _preferences is not null && !_preferences.UsesService)
             {
                 return new(InstallerExecutionOutcome.Blocked, "installer.preferences.service_not_selected", null, false);
             }
-            return await transfer.TransferAndExecuteAsync(confirm, progress, cancellationToken).ConfigureAwait(false);
+            WindowsInstallerPreferencesPlan? plan = null;
+            InstallerOperation operation = InstallerOperation.Install;
+            if (_preferences is not null)
+            {
+                var request = new InstallerRequest(operation, _targetSid, false, _manifest.ExpectedPackageVersion, _manifest.InstallerPayloadSha256);
+                InstallerRuntimeInspection inspection = await _inspector.InspectAsync(request, cancellationToken).ConfigureAwait(false);
+                ValidateInspection(inspection);
+                if (inspection.Environment.IsApplicationRunning)
+                {
+                    return new(InstallerExecutionOutcome.Blocked, "installer.application_running", null, false);
+                }
+                operation = inspection.Environment.InstalledPackageVersion is null ? InstallerOperation.Install : InstallerOperation.Repair;
+                plan = _preferences.Prepare(operation, selected, inspection.DurableTransaction?.Journal);
+            }
+            InstallerExecutionResult result = await transfer.TransferAndExecuteAsync(confirm, progress, cancellationToken).ConfigureAwait(false);
+            return await CompletePreferencesAfterCoreAsync(result, operation, plan, cancellationToken).ConfigureAwait(false);
         }
         catch (InstallerUserCancelledException exception)
         {
@@ -362,38 +394,46 @@ public sealed class WindowsInstallerParentEngine : IInstallerRuntimeBackend, IIn
             {
                 result = await session.ExecuteAsync(request, progress, cancellationToken).ConfigureAwait(false);
             }
-            if (result.Outcome == InstallerExecutionOutcome.Succeeded && _preferences is not null && preferencePlan is not null)
-            {
-                try
-                {
-                    if (operation == InstallerOperation.Uninstall)
-                    {
-                        await _preferences.RemoveAsync(preferencePlan, cancellationToken).ConfigureAwait(false);
-                    }
-                    else if (preferencePlan.Document is { } document)
-                    {
-                        WindowsInstallerPreferencesDocument verified = _preferences.ConfirmCore(document);
-                        InstallerPreferencesWarnings warnings = await _preferences.ApplyAsync(verified, cancellationToken).ConfigureAwait(false);
-                        result = result with { PreferencesWarnings = warnings };
-                    }
-                }
-                catch (Exception exception) when (!InstallerExceptionPolicy.IsProcessFatal(exception))
-                {
-                    // Core state is already verified. Keep the user-only intent and offer a
-                    // separate retry instead of rolling back or rerunning privileged mutation.
-                    result = result with
-                    {
-                        DiagnosticCode = exception is InstallerProtocolException protocol ? protocol.DiagnosticCode : "installer.preferences.pending",
-                        PreferencesWarnings = InstallerPreferencesWarnings.UserSetupPending,
-                    };
-                }
-            }
-            return result;
+            return await CompletePreferencesAfterCoreAsync(result, operation, preferencePlan, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
             Exit();
         }
+    }
+
+    // Privileged execution has ended before this boundary. A user-only failure retains
+    // the verified intent and can never trigger another package or service mutation.
+    private async Task<InstallerExecutionResult> CompletePreferencesAfterCoreAsync(InstallerExecutionResult result,
+        InstallerOperation operation, WindowsInstallerPreferencesPlan? preferencePlan, CancellationToken cancellationToken)
+    {
+        if (result.Outcome == InstallerExecutionOutcome.Succeeded && _preferences is not null && preferencePlan is not null)
+        {
+            try
+            {
+                if (operation == InstallerOperation.Uninstall)
+                {
+                    await _preferences.RemoveAsync(preferencePlan, cancellationToken).ConfigureAwait(false);
+                }
+                else if (preferencePlan.Document is { } document)
+                {
+                    WindowsInstallerPreferencesDocument verified = _preferences.ConfirmCore(document);
+                    InstallerPreferencesWarnings warnings = await _preferences.ApplyAsync(verified, cancellationToken).ConfigureAwait(false);
+                    result = result with { PreferencesWarnings = warnings };
+                }
+            }
+            catch (Exception exception) when (!InstallerExceptionPolicy.IsProcessFatal(exception))
+            {
+                // Core state is already verified. Keep the user-only intent and offer a
+                // separate retry instead of rolling back or rerunning privileged mutation.
+                result = result with
+                {
+                    DiagnosticCode = exception is InstallerProtocolException protocol ? protocol.DiagnosticCode : "installer.preferences.pending",
+                    PreferencesWarnings = InstallerPreferencesWarnings.UserSetupPending,
+                };
+            }
+        }
+        return result;
     }
 
     /// <inheritdoc />
@@ -490,13 +530,15 @@ public sealed class WindowsInstallerParentEngine : IInstallerRuntimeBackend, IIn
         string targetSid,
         IWindowsInstallerExecutionSessionFactory sessionFactory,
         IWindowsInstallerApplicationLock applicationLock,
-        IWindowsInstallerParentInspector? inspector = null) =>
+        IWindowsInstallerParentInspector? inspector = null,
+        WindowsInstallerPreferencesCoordinator? preferences = null) =>
         new(
             manifest,
             targetSid,
             sessionFactory,
             inspector ?? UnavailableWindowsInstallerParentInspector.Instance,
-            applicationLock);
+            applicationLock,
+            preferences);
 }
 
 internal sealed class WindowsInstallerParentInspector : IWindowsInstallerParentInspector
