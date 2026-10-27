@@ -63,6 +63,16 @@ jobs:
         shell: powershell
         run: ./eng/Test-ProductCiRunContract.ps1
 
+      - name: Verify release environment contract (Windows PowerShell 5.1)
+        if: steps.scope.outputs.product != 'false'
+        shell: powershell
+        run: ./eng/Test-ReleaseEnvironmentContract.ps1
+
+      - name: Verify release environment contract (PowerShell 7)
+        if: steps.scope.outputs.product != 'false'
+        shell: pwsh
+        run: ./eng/Test-ReleaseEnvironmentContract.ps1
+
       - name: Verify product CI input contract (PowerShell 7)
         if: steps.scope.outputs.product != 'false'
         shell: pwsh

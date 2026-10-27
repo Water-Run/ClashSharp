@@ -1,0 +1,42 @@
+name: Release protection preflight
+run-name: Read existing release protection
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  observe:
+    name: Verify existing release environment
+    runs-on: windows-2025
+    timeout-minutes: 5
+    steps:
+      - name: Require manual mainline context
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_REPOSITORY -cne 'Water-Run/ClashSharp' -or $env:GITHUB_REF -cne 'refs/heads/main' -or $env:GITHUB_EVENT_NAME -cne 'workflow_dispatch') { throw 'Release preflight requires this repository and manual mainline dispatch.' }
+
+      - name: Check out trusted reader
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+
+      - name: Read existing protection
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $null = [IO.Directory]::CreateDirectory((Join-Path $PWD 'artifacts/release-preflight'))
+          ./Tools/Get-ReleaseEnvironment.ps1 -OutputPath (Join-Path $PWD 'artifacts/release-preflight/environment.json')
+
+      - name: Retain actual protection observation
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: release-protection-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/release-preflight/environment.json
+          if-no-files-found: warn
+          retention-days: 7
