@@ -10,6 +10,8 @@ internal static partial class LocalizationResources
     {
         return new ReadOnlyDictionary<string, string>(new Dictionary<string, string>
         {
+            ["Installation.Taskbar.Title"] = "An Taskleiste anheften",
+            ["Installation.Taskbar.Unavailable"] = "Windows konnte die Bestätigung zum Anheften nicht anzeigen. Wenn Ihr System es erlaubt, können Sie Clash# über das Kontextmenü des Taskleistensymbols manuell anheften.",
             ["ColorPicker.Red"] = "Rot",
             ["ColorPicker.Green"] = "Grün",
             ["ColorPicker.Blue"] = "Blau",

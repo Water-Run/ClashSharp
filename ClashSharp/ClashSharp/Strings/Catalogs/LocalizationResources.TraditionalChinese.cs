@@ -10,6 +10,8 @@ internal static partial class LocalizationResources
     {
         return new ReadOnlyDictionary<string, string>(new Dictionary<string, string>
         {
+            ["Installation.Taskbar.Title"] = "釘選到工作列",
+            ["Installation.Taskbar.Unavailable"] = "Windows 無法顯示釘選確認。若系統允許，您可以在工作列上的 Clash# 圖示按右鍵，手動選擇釘選。",
             ["ColorPicker.Red"] = "紅色",
             ["ColorPicker.Green"] = "綠色",
             ["ColorPicker.Blue"] = "藍色",

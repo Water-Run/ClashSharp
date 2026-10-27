@@ -10,6 +10,8 @@ internal static partial class LocalizationResources
     {
         return new ReadOnlyDictionary<string, string>(new Dictionary<string, string>
         {
+            ["Installation.Taskbar.Title"] = "Закрепление на панели задач",
+            ["Installation.Taskbar.Unavailable"] = "Windows не удалось показать запрос на закрепление. Если система разрешает, вы можете закрепить Clash# вручную через контекстное меню значка на панели задач.",
             ["ColorPicker.Red"] = "Красный",
             ["ColorPicker.Green"] = "Зелёный",
             ["ColorPicker.Blue"] = "Синий",

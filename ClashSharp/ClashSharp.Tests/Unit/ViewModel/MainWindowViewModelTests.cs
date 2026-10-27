@@ -6,6 +6,27 @@ namespace ClashSharp.Tests.Unit.ViewModel;
 public sealed class MainWindowViewModelTests
 {
     [Fact]
+    public void TaskbarNotice_IsDismissibleAndRelocalizesWithoutReopening()
+    {
+        FakeShellLocalization localization = new();
+        using MainWindowViewModel viewModel = new(localization);
+        Assert.False(viewModel.IsInstallationPinUnavailableVisible);
+        viewModel.IsInstallationPinUnavailableVisible = true;
+        Assert.Equal("Pin to taskbar", viewModel.InstallationPinTitleText);
+        viewModel.IsInstallationPinUnavailableVisible = false;
+        List<string?> changed = [];
+        viewModel.PropertyChanged += (_, args) => changed.Add(args.PropertyName);
+        localization.Strings["Installation.Taskbar.Title"] = "固定到任务栏";
+        localization.Strings["Installation.Taskbar.Unavailable"] = "可手动固定";
+        localization.RaiseLanguageChanged();
+        Assert.False(viewModel.IsInstallationPinUnavailableVisible);
+        Assert.Equal("固定到任务栏", viewModel.InstallationPinTitleText);
+        Assert.Equal("可手动固定", viewModel.InstallationPinUnavailableText);
+        Assert.Contains(nameof(viewModel.InstallationPinTitleText), changed);
+        Assert.Contains(nameof(viewModel.InstallationPinUnavailableText), changed);
+    }
+
+    [Fact]
     public void RecoveryNotice_UsesTheActivePageWithoutClearingFailureState()
     {
         using MainWindowViewModel viewModel = new(new FakeShellLocalization());
@@ -103,6 +124,8 @@ public sealed class MainWindowViewModelTests
             ["Nav.Statistics"] = "Statistics",
             ["Nav.About"] = "About",
             ["Nav.Settings"] = "Settings",
+            ["Installation.Taskbar.Title"] = "Pin to taskbar",
+            ["Installation.Taskbar.Unavailable"] = "Manual pinning guidance",
         };
 
         /// <summary>Occurs when the fake language changes.</summary>

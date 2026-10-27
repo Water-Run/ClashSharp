@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using ClashSharp.ApplicationModel.Network;
 using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.ApplicationModel.Settings;
+using ClashSharp.ApplicationModel.Startup;
 using ClashSharp.Model;
 using ClashSharp.Presentation.Adapters;
 using ClashSharp.Presentation.Dialogs;
@@ -169,8 +170,12 @@ internal sealed class MainWindowComposition
 
         /// <summary>Bindable shell state and navigation resolution.</summary>
         public MainWindowViewModel ViewModel { get; }
-        public Task CompleteInstallationPinsAsync(Microsoft.UI.Xaml.Window owner, CancellationToken cancellationToken) =>
-            _installationPins.CompleteAsync(owner, cancellationToken);
+        public async Task CompleteInstallationPinsAsync(Microsoft.UI.Xaml.Window owner, CancellationToken cancellationToken)
+        {
+            InstallationPinningStatus result = await _installationPins.CompleteAsync(owner, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            if (result == InstallationPinningStatus.Unavailable) { ViewModel.IsInstallationPinUnavailableVisible = true; }
+        }
         public bool HasFailedSettingsApplications => _settings.HasFailedSettingsApplications;
         public IDisposable SubscribeToSettingsApplicationChanges(Action changed) => new SettingsApplicationSubscription(_settings, changed);
 

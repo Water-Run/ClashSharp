@@ -10,6 +10,8 @@ internal static partial class LocalizationResources
     {
         return new ReadOnlyDictionary<string, string>(new Dictionary<string, string>
         {
+            ["Installation.Taskbar.Title"] = "Pin to taskbar",
+            ["Installation.Taskbar.Unavailable"] = "Windows could not offer pinning confirmation. If allowed by your system, you can pin Clash# manually from its taskbar icon's context menu.",
             ["ColorPicker.Red"] = "Red",
             ["ColorPicker.Green"] = "Green",
             ["ColorPicker.Blue"] = "Blue",

@@ -87,7 +87,7 @@ public sealed partial class InstallerShellViewModel
         if (result.PreferencesWarnings.HasFlag(InstallerPreferencesWarnings.StartupDenied)) { detail.Add("Windows 未启用应用自动启动；请在启动应用设置中确认。"); }
         if (result.PreferencesWarnings.HasFlag(InstallerPreferencesWarnings.ProxyRecoveryDenied)) { detail.Add("Windows 未启用登录时代理恢复；可在应用设置中检查。"); }
         if (result.PreferencesWarnings.HasFlag(InstallerPreferencesWarnings.ExistingSettingsPreserved)) { detail.Add("检测到已有应用设置，已保留原有偏好。"); }
-        if (result.PreferencesWarnings.HasFlag(InstallerPreferencesWarnings.NativePinConfirmationPending)) { detail.Add("首次打开 Clash# 后，将由 Windows 确认任务栏固定。"); }
+        if (result.PreferencesWarnings.HasFlag(InstallerPreferencesWarnings.NativePinConfirmationPending)) { detail.Add("首次打开 Clash# 后，将在 Windows 支持的情况下请求任务栏固定确认。"); }
         StatusDetail = string.Join(" ", detail);
     }
 }

@@ -10,6 +10,8 @@ internal static partial class LocalizationResources
     {
         return new ReadOnlyDictionary<string, string>(new Dictionary<string, string>
         {
+            ["Installation.Taskbar.Title"] = "سنجاق کردن به نوار وظیفه",
+            ["Installation.Taskbar.Unavailable"] = "ویندوز نتوانست تأیید سنجاق کردن را نمایش دهد. اگر سیستم اجازه دهد، می‌توانید از منوی کلیک راست نماد Clash# در نوار وظیفه، برنامه را به‌صورت دستی سنجاق کنید.",
             ["ColorPicker.Red"] = "قرمز",
             ["ColorPicker.Green"] = "سبز",
             ["ColorPicker.Blue"] = "آبی",

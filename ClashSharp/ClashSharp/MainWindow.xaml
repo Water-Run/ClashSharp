@@ -128,7 +128,7 @@
                 </NavigationViewItem>
             </NavigationView.FooterMenuItems>
 
-            <Grid RowDefinitions="Auto,Auto,*">
+            <Grid RowDefinitions="Auto,Auto,Auto,*">
                 <InfoBar
                     Margin="24,12,24,0"
                     IsOpen="{Binding IsExitFailureVisible, Mode=TwoWay}"
@@ -144,7 +144,11 @@
                         <HyperlinkButton Content="{Binding OpenSettingsRecoveryText}" Click="OpenSettingsRecovery_Click" />
                     </InfoBar.ActionButton>
                 </InfoBar>
-                <Frame x:Name="ContentFrame" Grid.Row="2" />
+                <InfoBar Grid.Row="2" Margin="24,12,24,0" IsClosable="True" Severity="Informational"
+                         IsOpen="{Binding IsInstallationPinUnavailableVisible, Mode=TwoWay}"
+                         Visibility="{Binding IsInstallationPinUnavailableVisible, Converter={StaticResource BooleanToVisibilityConverter}}"
+                         Title="{Binding InstallationPinTitleText}" Message="{Binding InstallationPinUnavailableText}" />
+                <Frame x:Name="ContentFrame" Grid.Row="3" />
             </Grid>
         </NavigationView>
 

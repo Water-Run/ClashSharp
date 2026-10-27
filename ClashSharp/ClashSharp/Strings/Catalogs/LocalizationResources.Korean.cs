@@ -10,6 +10,8 @@ internal static partial class LocalizationResources
     {
         return new ReadOnlyDictionary<string, string>(new Dictionary<string, string>
         {
+            ["Installation.Taskbar.Title"] = "작업 표시줄에 고정",
+            ["Installation.Taskbar.Unavailable"] = "Windows에서 고정 확인을 표시하지 못했습니다. 시스템에서 허용하는 경우 작업 표시줄의 Clash# 아이콘을 마우스 오른쪽 단추로 클릭하여 직접 고정할 수 있습니다.",
             ["ColorPicker.Red"] = "빨강",
             ["ColorPicker.Green"] = "초록",
             ["ColorPicker.Blue"] = "파랑",

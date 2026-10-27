@@ -52,6 +52,19 @@ internal sealed class MainWindowViewModel : ObservableObject, IDisposable
     private bool _isExitFailureVisible;
     private bool _hasSettingsApplicationFailures;
     private bool _isSettingsPageActive;
+    private bool _isInstallationPinUnavailableVisible;
+
+    /// <summary>Whether a requested native taskbar confirmation could not be offered.</summary>
+    public bool IsInstallationPinUnavailableVisible
+    {
+        get => _isInstallationPinUnavailableVisible;
+        set => SetProperty(ref _isInstallationPinUnavailableVisible, value);
+    }
+
+    /// <summary>Localized title for the dismissible installation taskbar notice.</summary>
+    public string InstallationPinTitleText => _localization.GetString("Installation.Taskbar.Title");
+    /// <summary>Localized manual pinning guidance when native confirmation is unavailable.</summary>
+    public string InstallationPinUnavailableText => _localization.GetString("Installation.Taskbar.Unavailable");
 
     public bool HasSettingsApplicationFailures
     {
@@ -224,6 +237,8 @@ internal sealed class MainWindowViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(SettingsRecoveryTitleText));
         OnPropertyChanged(nameof(SettingsRecoveryDescriptionText));
         OnPropertyChanged(nameof(OpenSettingsRecoveryText));
+        OnPropertyChanged(nameof(InstallationPinTitleText));
+        OnPropertyChanged(nameof(InstallationPinUnavailableText));
         SettingsText = _restartState.IsRestartPending
             ? $"{_localization.GetString("Nav.Settings")}*"
             : _localization.GetString("Nav.Settings");

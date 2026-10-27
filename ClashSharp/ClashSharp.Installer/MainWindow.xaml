@@ -135,7 +135,7 @@
             <CheckBox Content="添加桌面快捷方式" IsChecked="{Binding CreateDesktopShortcut}" Margin="0,0,0,6" />
             <TextBlock Text="开始菜单入口由 Windows 自动管理。" Style="{StaticResource MutedTextStyle}" FontSize="12" Margin="24,0,0,6" />
             <CheckBox Content="添加到任务栏" IsChecked="{Binding RequestTaskbarPin}" />
-            <TextBlock Text="首次打开应用时由 Windows 确认固定。" Style="{StaticResource MutedTextStyle}" FontSize="12" Margin="24,4,0,0" />
+            <TextBlock Text="首次打开应用时，在 Windows 支持的情况下请求固定确认。" Style="{StaticResource MutedTextStyle}" FontSize="12" Margin="24,4,0,0" />
             <TextBlock Text="启动与恢复" FontWeight="SemiBold" Margin="0,20,0,8" />
             <CheckBox Content="开机自动启动" IsChecked="{Binding LaunchAtStartup}" Margin="0,0,0,6" />
             <CheckBox Content="注册登录时代理恢复" IsChecked="{Binding RegisterProxyRecovery}" />

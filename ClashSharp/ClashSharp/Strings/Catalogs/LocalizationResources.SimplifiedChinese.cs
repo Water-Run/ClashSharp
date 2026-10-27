@@ -10,6 +10,8 @@ internal static partial class LocalizationResources
     {
         return new ReadOnlyDictionary<string, string>(new Dictionary<string, string>
         {
+            ["Installation.Taskbar.Title"] = "固定到任务栏",
+            ["Installation.Taskbar.Unavailable"] = "Windows 未能显示固定确认。若系统允许，可右键单击任务栏上的 Clash# 图标，手动选择固定。",
             ["ColorPicker.Red"] = "红色",
             ["ColorPicker.Green"] = "绿色",
             ["ColorPicker.Blue"] = "蓝色",

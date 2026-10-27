@@ -10,6 +10,8 @@ internal static partial class LocalizationResources
     {
         return new ReadOnlyDictionary<string, string>(new Dictionary<string, string>
         {
+            ["Installation.Taskbar.Title"] = "Épingler à la barre des tâches",
+            ["Installation.Taskbar.Unavailable"] = "Windows n’a pas pu proposer la confirmation. Si votre système l’autorise, vous pouvez épingler Clash# manuellement depuis le menu contextuel de son icône dans la barre des tâches.",
             ["ColorPicker.Red"] = "Rouge",
             ["ColorPicker.Green"] = "Vert",
             ["ColorPicker.Blue"] = "Bleu",
