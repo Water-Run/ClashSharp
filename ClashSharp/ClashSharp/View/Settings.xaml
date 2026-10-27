@@ -103,22 +103,6 @@
                         </components:SettingRow.ActionContent>
                     </components:SettingRow>
 
-                    <components:SettingRow Title="{Binding DataUnitStyleTitleText}" Description="{Binding DataUnitStyleDescriptionText}">
-                        <components:SettingRow.ActionContent>
-                            <ComboBox x:Name="DataUnitStyleBox" Width="240" ItemsSource="{Binding DataUnitStyleOptions}" SelectedIndex="{Binding DataUnitStyleIndex, Mode=OneWay}" SelectionChanged="PreferenceCombo_SelectionChanged" />
-                        </components:SettingRow.ActionContent>
-                    </components:SettingRow>
-                    <components:SettingRow Title="{Binding RateUnitTitleText}" Description="{Binding RateUnitDescriptionText}">
-                        <components:SettingRow.ActionContent>
-                            <ComboBox x:Name="RateUnitBox" Width="240" ItemsSource="{Binding RateUnitOptions}" SelectedIndex="{Binding RateUnitIndex, Mode=OneWay}" SelectionChanged="PreferenceCombo_SelectionChanged" />
-                        </components:SettingRow.ActionContent>
-                    </components:SettingRow>
-                    <components:SettingRow Title="{Binding ClockFormatTitleText}" Description="{Binding ClockFormatDescriptionText}">
-                        <components:SettingRow.ActionContent>
-                            <ComboBox x:Name="ClockFormatBox" Width="240" ItemsSource="{Binding ClockFormatOptions}" SelectedIndex="{Binding ClockFormatIndex, Mode=OneWay}" SelectionChanged="PreferenceCombo_SelectionChanged" />
-                        </components:SettingRow.ActionContent>
-                    </components:SettingRow>
-
                     <components:SettingRow x:Name="AppThemeModeRow" Title="{Binding AppThemeModeTitleText}" Description="{Binding AppThemeModeDescriptionText}">
                         <components:SettingRow.ActionContent>
                             <ComboBox x:Name="AppThemeModeBox" Width="180" ItemsSource="{Binding AppThemeModeOptions}" SelectedIndex="{Binding AppThemeModeIndex, Mode=OneWay}" SelectionChanged="PreferenceCombo_SelectionChanged" />
@@ -178,6 +162,26 @@
 
                     <HyperlinkButton x:Name="ResetBasicSettingsLink" Content="{Binding ResetGroupToDefaultsText}" HorizontalAlignment="Right" Margin="0,0,8,0" Padding="0" Click="ResetBasicSettingsButton_Click" />
 
+                    <TextBlock Text="{Binding UnitsSectionTitleText}" Margin="0,20,0,4"
+                               Style="{ThemeResource BodyStrongTextBlockStyle}" AutomationProperties.HeadingLevel="Level2" />
+                    <components:SettingRow Title="{Binding DataUnitStyleTitleText}" Description="{Binding DataUnitStyleDescriptionText}">
+                        <components:SettingRow.ActionContent>
+                            <ComboBox x:Name="DataUnitStyleBox" Width="240" ItemsSource="{Binding DataUnitStyleOptions}" SelectedIndex="{Binding DataUnitStyleIndex, Mode=OneWay}" SelectionChanged="PreferenceCombo_SelectionChanged" />
+                        </components:SettingRow.ActionContent>
+                    </components:SettingRow>
+                    <components:SettingRow Title="{Binding RateUnitTitleText}" Description="{Binding RateUnitDescriptionText}">
+                        <components:SettingRow.ActionContent>
+                            <ComboBox x:Name="RateUnitBox" Width="240" ItemsSource="{Binding RateUnitOptions}" SelectedIndex="{Binding RateUnitIndex, Mode=OneWay}" SelectionChanged="PreferenceCombo_SelectionChanged" />
+                        </components:SettingRow.ActionContent>
+                    </components:SettingRow>
+                    <components:SettingRow Title="{Binding ClockFormatTitleText}" Description="{Binding ClockFormatDescriptionText}">
+                        <components:SettingRow.ActionContent>
+                            <ComboBox x:Name="ClockFormatBox" Width="240" ItemsSource="{Binding ClockFormatOptions}" SelectedIndex="{Binding ClockFormatIndex, Mode=OneWay}" SelectionChanged="PreferenceCombo_SelectionChanged" />
+                        </components:SettingRow.ActionContent>
+                    </components:SettingRow>
+
+                    <HyperlinkButton x:Name="ResetUnitsSettingsLink" Content="{Binding ResetGroupToDefaultsText}" HorizontalAlignment="Right"
+                                     Margin="0,0,8,0" Padding="0" Click="ResetUnitsSettingsButton_Click" />
                     <TextBlock x:Name="StartupSectionTitleText" Text="{Binding StartupSectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" Margin="0,8,0,0" />
                     <components:SettingRow x:Name="LaunchAtStartupRow" Title="{Binding LaunchAtStartupTitleText}" Description="{Binding LaunchAtStartupDescriptionText}">
                         <components:SettingRow.ActionContent>
@@ -259,6 +263,17 @@
                                 </Button>
                             </StackPanel>
                         </components:SettingRow.ActionContent>
+                        <components:SettingRow.DetailContent>
+                            <StackPanel x:Name="ConnectionTestFeedback" Margin="0,16,0,0" Spacing="12" Visibility="Collapsed">
+                                <StackPanel x:Name="ConnectionTestBusyPanel" Orientation="Horizontal" Spacing="10" Visibility="Collapsed">
+                                    <ProgressRing Width="20" Height="20" MinWidth="0" MinHeight="0"
+                                                  IsActive="{Binding IsConnectionTestRunning, Mode=OneWay}" />
+                                    <TextBlock Text="{Binding ConnectionTestRunningText}" VerticalAlignment="Center" TextWrapping="Wrap" />
+                                </StackPanel>
+                                <StackPanel x:Name="ConnectionTestResults" HorizontalAlignment="Stretch"
+                                            AutomationProperties.LiveSetting="Polite" />
+                            </StackPanel>
+                        </components:SettingRow.DetailContent>
                     </components:SettingRow>
 
                     <components:SettingRow x:Name="ConnectionSamplingRow" Title="{Binding ConnectionSamplingTitleText}" Description="{Binding ConnectionSamplingDescriptionText}">

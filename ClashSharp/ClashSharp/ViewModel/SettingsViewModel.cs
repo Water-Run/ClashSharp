@@ -636,6 +636,10 @@ internal sealed partial class SettingsViewModel : ObservableObject
 
     public string LanguageSectionTitleText => _getString("Settings.Section.Language");
 
+    public string UnitsSectionTitleText => _getString("Settings.Section.Units");
+
+    public string ConnectionTestRunningText => _getString("Settings.ConnectionTest.Running");
+
     public string LanguageTitleText => _getString("Settings.Language.Title");
 
     public string LanguageDescriptionText => _getString("Settings.Language.Description");
@@ -1715,6 +1719,7 @@ internal sealed partial class SettingsViewModel : ObservableObject
             nameof(PageTitleText),
             nameof(DescriptionText),
             nameof(LanguageSectionTitleText),
+            nameof(UnitsSectionTitleText), nameof(ConnectionTestRunningText),
             nameof(LanguageTitleText),
             nameof(LanguageDescriptionText),
             // The existing observable language source updates its automatic label in place.
@@ -2458,7 +2463,7 @@ internal sealed partial class SettingsViewModel : ObservableObject
             }
         }
 
-        return _getString("Settings.ConnectionTestUrl.Provider.Custom");
+        return ConnectionTestSiteCatalog.Find(host) ?? _getString("Settings.ConnectionTestUrl.Provider.Custom");
     }
 
     private static string ExtractNormalizedHost(string value)
@@ -2469,9 +2474,8 @@ internal sealed partial class SettingsViewModel : ObservableObject
             return string.Empty;
         }
 
-        return uri.Host.StartsWith("www.", StringComparison.OrdinalIgnoreCase)
-            ? uri.Host[4..]
-            : uri.Host;
+        string host = uri.IdnHost.TrimEnd('.');
+        return host.StartsWith("www.", StringComparison.OrdinalIgnoreCase) ? host[4..] : host;
     }
 
     private static bool TryNormalizeConnectionTestUrl(string value, out string normalizedUrl)
@@ -2487,6 +2491,7 @@ internal sealed partial class SettingsViewModel : ObservableObject
     /// <returns>Structured target rows and localized summary text.</returns>
     public async Task<ConnectionTestReport> RunConnectionTestAsync(CancellationToken cancellationToken)
     {
+        if (IsConnectionTestRunning) { throw new InvalidOperationException("A connection test is already running."); }
         List<ConnectionTestTargetResult> results = [];
         try
         {
@@ -2498,7 +2503,10 @@ internal sealed partial class SettingsViewModel : ObservableObject
                 ("Settings.ConnectionTestUrl.Direct", ConnectionTestDirectUrl),
             ];
 
-            results.AddRange(await Task.WhenAll(targets.Select(target => RunConnectionTestTargetAsync(target.LabelKey, target.Url, cancellationToken))));
+            // DNS/proxy discovery can block before the HTTP port's first await. Own that preamble
+            // on a worker while retaining one awaited, cancellable batch and the caller's UI context.
+            results.AddRange(await Task.Run(() => Task.WhenAll(targets.Select(target =>
+                RunConnectionTestTargetAsync(target.LabelKey, target.Url, cancellationToken))), cancellationToken));
 
             ConnectionTestSummaryState summaryState = BuildConnectionTestSummaryState(results);
             ConnectionTestReport report = new(results.AsReadOnly(), BuildConnectionTestSummary(results, summaryState), summaryState)

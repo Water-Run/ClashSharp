@@ -557,7 +557,7 @@ public sealed partial class AppSettingsService :
 
     private static IReadOnlyList<SettingDefinition> GetPreferenceResetDefinitions(SettingsResetScope scope)
     {
-        if (scope is not (SettingsResetScope.Basic or SettingsResetScope.Notifications
+        if (scope is not (SettingsResetScope.Basic or SettingsResetScope.Units or SettingsResetScope.Notifications
             or SettingsResetScope.Triggers or SettingsResetScope.Tray
             or SettingsResetScope.WindowsNative or SettingsResetScope.MainlandChina))
         {

@@ -31,6 +31,7 @@ internal sealed class LinksViewModel : ObservableObject, ILocalizedPresentation
         OnPropertyChanged(nameof(EditLinkText));
         OnPropertyChanged(nameof(DeleteLinkText));
         OnPropertyChanged(nameof(EmptyStateText));
+        OnPropertyChanged(nameof(EmptyStateTitleText));
         if (_statusTextFactory is not null) { StatusText = _statusTextFactory(); }
         foreach (ProfileSubscriptionLinkDisplay row in SubscriptionLinks) { row.RefreshLocalization(_getString); }
     }
@@ -128,6 +129,8 @@ internal sealed class LinksViewModel : ObservableObject, ILocalizedPresentation
     public string DeleteLinkText => _getString("Command.Delete");
 
     public string EmptyStateText => _getString("Links.Empty");
+
+    public string EmptyStateTitleText => _getString("Links.EmptyState.Title");
 
     public bool HasNoLinks => SubscriptionLinks.Count == 0;
 

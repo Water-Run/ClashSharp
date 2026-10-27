@@ -21,7 +21,8 @@ public sealed partial class SettingsRegistry
         | SettingsResetScope.WindowsNative
         | SettingsResetScope.MainlandChina
         | SettingsResetScope.MasterControl
-        | SettingsResetScope.McpServer;
+        | SettingsResetScope.McpServer
+        | SettingsResetScope.Units;
 
     private const string DefaultAccentColor = "#FF0078D4";
     private const string DefaultProfileId = "builtin-direct";
@@ -220,13 +221,13 @@ public sealed partial class SettingsRegistry
             (int)McpAccessScope.ReadStatus, 0, (int)McpAccessPolicy.KnownScopes, McpMetadata());
         yield return SettingDefinition.CreateEnum(
             Keys.DataUnitStyle, DataUnitStyle.BinaryWithDecimalLabels, DataUnitStyle.BinaryWithDecimalLabels,
-            Metadata(SettingCategory.Regional, SettingsResetScope.Basic, SettingAuthority.Internal, SettingApplicationKind.Appearance, "Settings.Basic"));
+            Metadata(SettingCategory.Regional, SettingsResetScope.Units, SettingAuthority.Internal, SettingApplicationKind.Appearance, "Settings.Units"));
         yield return SettingDefinition.CreateEnum(
             Keys.RateUnit, RateUnit.Bytes, RateUnit.Bytes,
-            Metadata(SettingCategory.Regional, SettingsResetScope.Basic, SettingAuthority.Internal, SettingApplicationKind.Appearance, "Settings.Basic"));
+            Metadata(SettingCategory.Regional, SettingsResetScope.Units, SettingAuthority.Internal, SettingApplicationKind.Appearance, "Settings.Units"));
         yield return SettingDefinition.CreateEnum(
             Keys.ClockFormat, ClockFormat.FollowSystem, ClockFormat.FollowSystem,
-            Metadata(SettingCategory.Regional, SettingsResetScope.Basic, SettingAuthority.Internal, SettingApplicationKind.Appearance, "Settings.Basic"));
+            Metadata(SettingCategory.Regional, SettingsResetScope.Units, SettingAuthority.Internal, SettingApplicationKind.Appearance, "Settings.Units"));
         yield return SettingDefinition.CreateEnum(
             Keys.DisplayLanguage,
             AppLanguage.AutoDetect,
@@ -342,8 +343,8 @@ public sealed partial class SettingsRegistry
             Metadata(SettingCategory.General, SettingsResetScope.Basic, SettingAuthority.Internal, SettingApplicationKind.Internal, "Settings.Basic"));
         yield return SettingDefinition.CreateBoolean(
             Keys.TrayUseMonochromeInactiveIcon,
-            defaultValue: false,
-            safeFallback: false,
+            defaultValue: true,
+            safeFallback: true,
             Metadata(SettingCategory.Tray, SettingsResetScope.Tray, SettingAuthority.Internal, SettingApplicationKind.Appearance, "Settings.Tray"));
         yield return SettingDefinition.CreateString(
             Keys.TrayVisibleFeatureIds,

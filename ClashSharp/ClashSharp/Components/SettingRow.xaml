@@ -10,6 +10,7 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*" />
@@ -32,5 +33,8 @@
             VerticalAlignment="Center"
             SizeChanged="Layout_SizeChanged"
             Content="{Binding ActionContent, ElementName=Root}" />
+        <ContentPresenter Grid.Row="2" Grid.ColumnSpan="2"
+                          Content="{Binding DetailContent, ElementName=Root}"
+                          HorizontalContentAlignment="Stretch" />
     </Grid>
 </UserControl>

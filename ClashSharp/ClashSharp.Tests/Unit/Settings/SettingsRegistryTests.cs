@@ -58,7 +58,7 @@ public sealed class SettingsRegistryTests
             ["TriggersEnabled"] = "true",
             ["TriggerNotificationsEnabled"] = "true",
             ["CloseBehaviorMode"] = "MinimizeToTray",
-            ["TrayUseMonochromeInactiveIcon"] = "false",
+            ["TrayUseMonochromeInactiveIcon"] = "true",
             ["TrayVisibleFeatureIds"] = "status,mode,pages,transparent-proxy,settings,safe-exit",
             ["MainlandChinaFeatureMode"] = "FlagReplacementAndTextCompletion",
             ["MainlandChinaUrlBlockingEnabled"] = "false",
@@ -376,7 +376,7 @@ public sealed class SettingsRegistryTests
     public void GetResetDefinitions_CombinedScope_ReturnsUnionInSchemaOrder()
     {
         IReadOnlyList<SettingDefinition> definitions = SettingsRegistry.Default.GetResetDefinitions(
-            SettingsResetScope.Basic | SettingsResetScope.Startup);
+            SettingsResetScope.Basic | SettingsResetScope.Units | SettingsResetScope.Startup);
 
         Assert.Equal(
             [
@@ -587,11 +587,12 @@ public sealed class SettingsRegistryTests
     public static TheoryData<SettingsResetScope, string[]> ResetScopeCases => new()
     {
         {
+            SettingsResetScope.Units,
+            ["DataUnitStyle", "RateUnit", "ClockFormat"]
+        },
+        {
             SettingsResetScope.Basic,
             [
-                "DataUnitStyle",
-                "RateUnit",
-                "ClockFormat",
                 "DisplayLanguage",
                 "AppThemeMode",
                 "AppAccentColorMode",

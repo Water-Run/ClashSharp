@@ -45,6 +45,9 @@ public sealed partial class Settings : Page, ILocalizedPresentation
     private readonly IStartupGuidePresenter _startupGuide;
     private readonly DataPackageDialogPresenter _dataPackages;
     private readonly PageOperationSession _pageOperations;
+    private readonly PageOperationSession _connectionTestOperations;
+    private ConnectionTestDisplay? _connectionTestDisplay;
+    private readonly List<Action> _connectionTestTextRefresh = [];
     private readonly Func<Action, IDisposable> _subscribeToRuntimeSettingsChanges;
     private IDisposable? _runtimeSettingsSubscription;
 
@@ -77,6 +80,7 @@ public sealed partial class Settings : Page, ILocalizedPresentation
         _dataPackages = dependencies.DataPackages
             ?? throw new ArgumentException("A data-package presenter is required.", nameof(dependencies));
         _pageOperations = new PageOperationSession(_errorSink, "settings-page-operation");
+        _connectionTestOperations = new PageOperationSession(_errorSink, "settings-connection-test");
         _subscribeToRuntimeSettingsChanges = dependencies.SubscribeToRuntimeSettingsChanges
             ?? throw new ArgumentException("A runtime settings subscription is required.", nameof(dependencies));
         InitializeComponent();
@@ -125,11 +129,14 @@ public sealed partial class Settings : Page, ILocalizedPresentation
 
         _isLoaded = true;
         int visit = ++_visit;
-        await _pageOperations.DrainAsync();
+        await Task.WhenAll(_pageOperations.DrainAsync(), _connectionTestOperations.DrainAsync());
         if (!_isLoaded || visit != _visit)
         {
             return;
         }
+        ConnectionTestButton.IsEnabled = true;
+        EditConnectionTestUrlsButton.IsEnabled = true;
+        ConnectionTestBusyPanel.Visibility = Visibility.Collapsed;
 
         await RunPageOperationAsync(async token =>
         {
@@ -171,11 +178,17 @@ public sealed partial class Settings : Page, ILocalizedPresentation
         _isLoaded = false;
         _visit++;
         _pageOperations.Cancel();
-        await _pageOperations.DrainAsync();
+        _connectionTestOperations.Cancel();
+        await Task.WhenAll(_pageOperations.DrainAsync(), _connectionTestOperations.DrainAsync());
     }
 
     /// <summary>Refreshes visible text immediately under the input guard, including behind an open modal editor.</summary>
-    public void RefreshLocalization() => RefreshRuntimeSettings(_visit, projectCommitted: false);
+    public void RefreshLocalization()
+    {
+        RefreshRuntimeSettings(_visit, projectCommitted: false);
+        _connectionTestDisplay?.RefreshLocalization();
+        foreach (Action refresh in _connectionTestTextRefresh) { refresh(); }
+    }
 
     private async void RefreshRuntimeSettings(int visit, bool projectCommitted = true)
     {
@@ -363,35 +376,36 @@ public sealed partial class Settings : Page, ILocalizedPresentation
     /// <summary>Runs a connection test against the configured test URL.</summary>
     private async void ConnectionTestButton_Click(object sender, RoutedEventArgs e)
     {
-        await RunPageOperationAsync(async cancellationToken =>
+        if (!_isLoaded || _viewModel.IsConnectionTestRunning || !ConnectionTestButton.IsEnabled) { return; }
+        int visit = _visit;
+        ConnectionTestButton.IsEnabled = false;
+        EditConnectionTestUrlsButton.IsEnabled = false;
+        await _connectionTestOperations.RunAsync(async cancellationToken =>
         {
-            ConnectionTestReport report = await _viewModel.RunConnectionTestAsync(cancellationToken);
-            cancellationToken.ThrowIfCancellationRequested();
-            await ShowConnectionTestResultAsync(report, cancellationToken);
-        });
-    }
-
-    /// <summary>Shows the connection test result.</summary>
-    private async Task ShowConnectionTestResultAsync(
-        ConnectionTestReport report,
-        CancellationToken cancellationToken)
-    {
-        ConnectionTestDisplay display = new(report, _getString);
-        List<Action> refreshText = [];
-        await CenteredDialogOverlay.ShowAsync(
-            GetDialogXamlRoot(),
-            _getString("Settings.ConnectionTest.Result.Title"),
-            BuildConnectionTestResultPanel(display, refreshText),
-            _getString("Command.Close"),
-            720,
-            cancellationToken,
-            dialog => dialog.Localize(() =>
+            try
             {
-                dialog.Title = _getString("Settings.ConnectionTest.Result.Title");
-                dialog.CloseButtonText = _getString("Command.Close");
-                foreach (Action refresh in refreshText) { refresh(); }
-                display.RefreshLocalization();
-            }));
+                cancellationToken.ThrowIfCancellationRequested();
+                ConnectionTestFeedback.Visibility = Visibility.Visible;
+                ConnectionTestBusyPanel.Visibility = Visibility.Visible;
+                ConnectionTestResults.Children.Clear();
+                _connectionTestTextRefresh.Clear();
+                _connectionTestDisplay = null;
+                ConnectionTestReport report = await _viewModel.RunConnectionTestAsync(cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
+                if (!_isLoaded || visit != _visit) { return; }
+                _connectionTestDisplay = new(report, _getString);
+                ConnectionTestResults.Children.Add(BuildConnectionTestResultPanel(_connectionTestDisplay, _connectionTestTextRefresh));
+            }
+            finally
+            {
+                if (_isLoaded && visit == _visit)
+                {
+                    ConnectionTestBusyPanel.Visibility = Visibility.Collapsed;
+                    ConnectionTestButton.IsEnabled = true;
+                    EditConnectionTestUrlsButton.IsEnabled = true;
+                }
+            }
+        });
     }
 
     private StackPanel BuildConnectionTestResultPanel(ConnectionTestDisplay report, List<Action> refreshText)
@@ -399,8 +413,7 @@ public sealed partial class Settings : Page, ILocalizedPresentation
         StackPanel panel = new()
         {
             Spacing = 12,
-            MinWidth = 520,
-            MaxWidth = 680,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
         };
 
         Grid table = new()
@@ -745,6 +758,11 @@ public sealed partial class Settings : Page, ILocalizedPresentation
     private async void ResetBasicSettingsButton_Click(object sender, RoutedEventArgs e)
     {
         await ResetSettingsGroupAsync(token => _viewModel.ResetPreferenceGroupAsync(SettingsResetScope.Basic, token));
+    }
+
+    private async void ResetUnitsSettingsButton_Click(object sender, RoutedEventArgs e)
+    {
+        await ResetSettingsGroupAsync(token => _viewModel.ResetPreferenceGroupAsync(SettingsResetScope.Units, token));
     }
 
     private async void ResetStartupSettingsButton_Click(object sender, RoutedEventArgs e)

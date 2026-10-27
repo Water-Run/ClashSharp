@@ -106,7 +106,7 @@ internal sealed class GenerationSettingsStore(ISettingsAuthority authority) : IS
 
     public Task ResetPreferenceGroupAsync(SettingsResetScope scope, CancellationToken cancellationToken)
     {
-        if (scope is not (SettingsResetScope.Basic or SettingsResetScope.Notifications
+        if (scope is not (SettingsResetScope.Basic or SettingsResetScope.Units or SettingsResetScope.Notifications
             or SettingsResetScope.Triggers or SettingsResetScope.Tray
             or SettingsResetScope.WindowsNative or SettingsResetScope.MainlandChina))
         {

@@ -43,6 +43,9 @@ public enum SettingsResetScope
     /// <summary>Local MCP enablement, endpoint and access grants.</summary>
     McpServer = 1 << 11,
 
+    /// <summary>Traffic units, rates and clock display format.</summary>
+    Units = 1 << 12,
+
     /// <summary>Every canonical setting, including settings without a group membership.</summary>
     All = 1 << 30,
 }

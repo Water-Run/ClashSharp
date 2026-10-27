@@ -83,15 +83,17 @@
                 </DataTemplate>
             </ListView.ItemTemplate>
         </ListView>
-        <Grid Grid.Row="3" Margin="0,16,0,0" Style="{StaticResource ClashCardGridStyle}" Padding="32" VerticalAlignment="Top"
+        <Grid Grid.Row="3" Margin="0,40,0,0" Padding="24,32" VerticalAlignment="Top"
               Visibility="{Binding HasNoLinks, Converter={StaticResource BooleanToVisibilityConverter}}">
-            <StackPanel Spacing="16" MaxWidth="480" HorizontalAlignment="Left">
-                <FontIcon Glyph="&#xE71B;" FontSize="32" HorizontalAlignment="Left"
+            <StackPanel Spacing="16" MaxWidth="560" HorizontalAlignment="Center">
+                <FontIcon Glyph="&#xE71B;" FontSize="44" HorizontalAlignment="Center" Margin="0,0,0,8"
                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" AutomationProperties.AccessibilityView="Raw" />
-                <TextBlock Text="{Binding EmptyStateText}" TextWrapping="Wrap" Style="{ThemeResource BodyTextBlockStyle}"
+                <TextBlock Text="{Binding EmptyStateTitleText}" TextAlignment="Center" TextWrapping="Wrap"
+                           Style="{ThemeResource SubtitleTextBlockStyle}" />
+                <TextBlock Text="{Binding EmptyStateText}" TextWrapping="Wrap" TextAlignment="Center" Style="{ThemeResource BodyTextBlockStyle}"
                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                 <Button x:Name="EmptyAddLinkButton" Content="{Binding AddLinkText}" Click="AddLinkButton_Click"
-                        Style="{StaticResource AccentButtonStyle}" HorizontalAlignment="Left" />
+                        Style="{StaticResource AccentButtonStyle}" HorizontalAlignment="Center" MinWidth="132" />
             </StackPanel>
         </Grid>
     </Grid>

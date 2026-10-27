@@ -28,7 +28,7 @@ public sealed class AppearanceSettingsParticipantTests
         AppearanceSettingsSnapshot snapshot = reader.CaptureSnapshot();
         Assert.Same(generation, snapshot.Generation);
         Assert.Equal(9, snapshot.Values.Count);
-        Assert.False(snapshot.Get<bool>(SettingsRegistry.Keys.TrayUseMonochromeInactiveIcon));
+        Assert.True(snapshot.Get<bool>(SettingsRegistry.Keys.TrayUseMonochromeInactiveIcon));
         Assert.Throws<KeyNotFoundException>(() => snapshot.Get<AppThemeMode>(SettingsRegistry.Keys.AppThemeMode));
         Assert.Throws<NotSupportedException>(() => ((IDictionary<SettingKey, SettingValue>)snapshot.Values).Clear());
         Assert.Equal(0, native.Reads);
@@ -44,7 +44,7 @@ public sealed class AppearanceSettingsParticipantTests
         AppearanceSettingsSnapshot before = fixture.Current();
         SettingValueChange[] changes =
         [Change("DisplayLanguage", "English"), Change("AppThemeMode", "Dark"), Change("AppAccentColorMode", "Custom"),
-            Change("AppAccentColorValue", "#804477AA"), Change("TrayUseMonochromeInactiveIcon", "true"),
+            Change("AppAccentColorValue", "#804477AA"), Change("TrayUseMonochromeInactiveIcon", "false"),
             Change("TrayVisibleFeatureIds", "settings,safe-exit"), Change("MainlandChinaFeatureMode", "Disabled"),
             Change("MainlandChinaUrlBlockingEnabled", "true"), Change("MasterHeroStatusLayout", ReverseDefault("MasterHeroStatusLayout")),
             Change("MasterInfoTileLayout", ReverseDefault("MasterInfoTileLayout")),
@@ -71,10 +71,10 @@ public sealed class AppearanceSettingsParticipantTests
         Assert.Equal(AppLanguage.English, actual.Language);
         Assert.Equal(AppThemeMode.Dark, actual.Theme);
         Assert.Equal(new(AppAccentColorMode.Custom, "#804477AA"), actual.Accent);
-        Assert.Equal(55, fixture.Native.Resources.Values.Count);
+        Assert.Equal(57, fixture.Native.Resources.Values.Count);
         Assert.Equal(0x804477AAu, fixture.Native.Resources.Values["SystemAccentColor"].Argb);
-        Assert.True(fixture.Current().Get<bool>(SettingsRegistry.Keys.TrayUseMonochromeInactiveIcon));
-        Assert.False(before.Get<bool>(SettingsRegistry.Keys.TrayUseMonochromeInactiveIcon));
+        Assert.False(fixture.Current().Get<bool>(SettingsRegistry.Keys.TrayUseMonochromeInactiveIcon));
+        Assert.True(before.Get<bool>(SettingsRegistry.Keys.TrayUseMonochromeInactiveIcon));
         Assert.NotSame(before, fixture.Current());
     }
 
@@ -191,7 +191,7 @@ public sealed class AppearanceSettingsParticipantTests
         Assert.Same(fatal, observed);
         Assert.Same(before, fixture.Current());
         Assert.Equal(2, fixture.Native.Writes);
-        Assert.Equal(55, fixture.Native.Resources.Values.Count);
+        Assert.Equal(57, fixture.Native.Resources.Values.Count);
         Assert.Equal(SettingsApplicationBatchState.Running, Assert.Single((await fixture.Repository.OpenAsync(CancellationToken.None)).Envelope!.PendingApplications).State);
     }
 
@@ -218,7 +218,7 @@ public sealed class AppearanceSettingsParticipantTests
     public async Task GenerationReplacement_RetiresTheOldReaderAndUsesANewPolicyOwnerWithTheSameWindow()
     {
         await using Fixture fixture = await Fixture.CreateAsync();
-        Assert.True((await fixture.Authority.ApplyChangesAsync([Change("AppThemeMode", "Dark"), Change("TrayUseMonochromeInactiveIcon", "true")], Guid.NewGuid(), CancellationToken.None)).IsSucceeded);
+        Assert.True((await fixture.Authority.ApplyChangesAsync([Change("AppThemeMode", "Dark"), Change("TrayUseMonochromeInactiveIcon", "false")], Guid.NewGuid(), CancellationToken.None)).IsSucceeded);
         AppearanceSettingsSnapshot historical = fixture.Current();
         DataGenerationTransition transition = await fixture.Generations.BeginDrainAsync(fixture.Generations.CurrentManifest.ContentHash, CancellationToken.None);
         DataGenerationDescriptor generation = fixture.Directory.CreateGeneration(2);
@@ -228,13 +228,13 @@ public sealed class AppearanceSettingsParticipantTests
         transition.SwapToPromoted();
         await transition.CommitAsync();
         Assert.Throws<ObjectDisposedException>(() => fixture.Participant.CaptureSnapshot());
-        Assert.True(historical.Get<bool>(SettingsRegistry.Keys.TrayUseMonochromeInactiveIcon));
-        Assert.False(fixture.Current().Get<bool>(SettingsRegistry.Keys.TrayUseMonochromeInactiveIcon));
+        Assert.False(historical.Get<bool>(SettingsRegistry.Keys.TrayUseMonochromeInactiveIcon));
+        Assert.True(fixture.Current().Get<bool>(SettingsRegistry.Keys.TrayUseMonochromeInactiveIcon));
         Assert.Equal(generation.GenerationId, fixture.Current().Generation.GenerationId);
         Assert.Equal(AppThemeMode.Dark, (await next.Dispatcher.InvokeAsync(fixture.Native.CaptureConfiguration, CancellationToken.None)).Theme);
         Assert.True((await fixture.Authority.ApplyChangesAsync([Change("TrayVisibleFeatureIds", "safe-exit")], Guid.NewGuid(), CancellationToken.None)).IsSucceeded);
         Assert.Equal("safe-exit", fixture.Current().Get<string>(SettingsRegistry.Keys.TrayVisibleFeatureIds));
-        Assert.True((await fixture.Repository.OpenAsync(CancellationToken.None)).Envelope!.Desired[SettingsRegistry.Keys.TrayUseMonochromeInactiveIcon].Value.Get<bool>());
+        Assert.False((await fixture.Repository.OpenAsync(CancellationToken.None)).Envelope!.Desired[SettingsRegistry.Keys.TrayUseMonochromeInactiveIcon].Value.Get<bool>());
     }
 
     [Fact]
@@ -288,7 +288,7 @@ public sealed class AppearanceSettingsParticipantTests
             SettingsApplicationPhase.Startup, startup, CancellationToken.None);
         Assert.True(result.IsSucceeded, result.Code);
         Assert.Equal("safe-exit", reopened.CaptureSnapshot().Get<string>(SettingsRegistry.Keys.TrayVisibleFeatureIds));
-        Assert.Equal(55, newWindow.Resources.Values.Count);
+        Assert.Equal(57, newWindow.Resources.Values.Count);
         Assert.Equal(SettingAppliedValueSource.StartupReconciliation, result.Envelope!.Applied[SettingsRegistry.Keys.AppThemeMode].Source);
         await startup.DisposeAsync();
         using MutationAdmissionLease ordinary = fixture.Admission.AcquireOrdinary();

@@ -73,6 +73,8 @@ internal static class AppThemeService
         "ToggleButtonForegroundCheckedPressed",
         "TextOnAccentFillColorPrimaryBrush",
         "NavigationViewSelectionIndicatorForeground",
+        "ComboBoxItemPillFillBrush",
+        "ListViewItemSelectionIndicatorBrush",
         "ProgressBarForeground",
         "ProgressRingForegroundThemeBrush",
     ];
@@ -223,6 +225,8 @@ internal static class AppThemeService
         resources["NavigationViewSelectionIndicatorForeground"] = accentText;
         resources["ProgressBarForeground"] = accentText;
         resources["ProgressRingForegroundThemeBrush"] = accentText;
+        resources["ComboBoxItemPillFillBrush"] = accentBrush;
+        resources["ListViewItemSelectionIndicatorBrush"] = accentBrush;
         return resources;
     }
 

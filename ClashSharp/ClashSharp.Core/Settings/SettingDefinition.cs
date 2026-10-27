@@ -17,7 +17,8 @@ public sealed class SettingDefinitionMetadata
         | SettingsResetScope.WindowsNative
         | SettingsResetScope.MainlandChina
         | SettingsResetScope.MasterControl
-        | SettingsResetScope.McpServer;
+        | SettingsResetScope.McpServer
+        | SettingsResetScope.Units;
 
     /// <summary>Initializes validated immutable definition metadata.</summary>
     /// <param name="schemaVersion">Positive schema version that introduced the canonical definition.</param>

@@ -78,7 +78,7 @@ internal sealed partial class SettingsViewModel
     /// <summary>Resets one preference-only group without replacing unrelated staged or restart state.</summary>
     public Task ResetPreferenceGroupAsync(SettingsResetScope scope, CancellationToken cancellationToken)
     {
-        if (scope is not (SettingsResetScope.Basic or SettingsResetScope.Notifications
+        if (scope is not (SettingsResetScope.Basic or SettingsResetScope.Units or SettingsResetScope.Notifications
             or SettingsResetScope.Triggers or SettingsResetScope.Tray
             or SettingsResetScope.WindowsNative or SettingsResetScope.MainlandChina))
         {

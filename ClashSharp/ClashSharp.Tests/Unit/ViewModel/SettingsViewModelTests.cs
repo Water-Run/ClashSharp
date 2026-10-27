@@ -2292,7 +2292,7 @@ public sealed partial class SettingsViewModelTests
 
         await viewModel.ResetTraySettingsToDefaultsAsync();
 
-        Assert.False(store.TrayUseMonochromeInactiveIcon);
+        Assert.True(store.TrayUseMonochromeInactiveIcon);
         Assert.Contains("pages", store.TrayVisibleFeatureIds, StringComparison.Ordinal);
 
         Assert.False(store.TransparentProxyEnabled);
@@ -2427,10 +2427,12 @@ public sealed partial class SettingsViewModelTests
 
             switch (scope)
             {
-                case SettingsResetScope.Basic:
+                case SettingsResetScope.Units:
                     DataUnitStyle = DataUnitStyle.BinaryWithDecimalLabels;
                     RateUnit = RateUnit.Bytes;
                     ClockFormat = ClockFormat.FollowSystem;
+                    break;
+                case SettingsResetScope.Basic:
                     DisplayLanguage = AppLanguage.AutoDetect;
                     AppThemeMode = AppThemeMode.FollowSystem;
                     AppAccentColorMode = AppAccentColorMode.FollowSystem;
@@ -2446,7 +2448,7 @@ public sealed partial class SettingsViewModelTests
                     TriggerNotificationsEnabled = true;
                     break;
                 case SettingsResetScope.Tray:
-                    TrayUseMonochromeInactiveIcon = false;
+                    TrayUseMonochromeInactiveIcon = true;
                     TrayVisibleFeatureIds = "status,mode,pages,transparent-proxy,settings,safe-exit";
                     break;
                 case SettingsResetScope.WindowsNative:

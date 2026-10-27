@@ -39,11 +39,11 @@ public sealed class SettingsRegistryMetadataTests
         Mcp("McpServerPort", typeof(int), "17892"),
         Mcp("McpAllowedScopes", typeof(int), "1"),
         Internal("DataUnitStyle", typeof(DataUnitStyle), "BinaryWithDecimalLabels", SettingCategory.Regional,
-            SettingsResetScope.Basic, SettingApplicationKind.Appearance, "Settings.Basic"),
+            SettingsResetScope.Units, SettingApplicationKind.Appearance, "Settings.Units"),
         Internal("RateUnit", typeof(RateUnit), "Bytes", SettingCategory.Regional,
-            SettingsResetScope.Basic, SettingApplicationKind.Appearance, "Settings.Basic"),
+            SettingsResetScope.Units, SettingApplicationKind.Appearance, "Settings.Units"),
         Internal("ClockFormat", typeof(ClockFormat), "FollowSystem", SettingCategory.Regional,
-            SettingsResetScope.Basic, SettingApplicationKind.Appearance, "Settings.Basic"),
+            SettingsResetScope.Units, SettingApplicationKind.Appearance, "Settings.Units"),
         Internal(
             "DisplayLanguage",
             typeof(AppLanguage),
@@ -207,7 +207,7 @@ public sealed class SettingsRegistryMetadataTests
         Internal(
             "TrayUseMonochromeInactiveIcon",
             typeof(bool),
-            "false",
+            "true",
             SettingCategory.Tray,
             SettingsResetScope.Tray,
             SettingApplicationKind.Appearance,

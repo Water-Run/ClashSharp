@@ -35,6 +35,10 @@ public sealed partial class SettingRow : UserControl
         typeof(SettingRow),
         new PropertyMetadata(null));
 
+    /// <summary>Dependency property backing <see cref="DetailContent"/>.</summary>
+    public static readonly DependencyProperty DetailContentProperty = DependencyProperty.Register(
+        nameof(DetailContent), typeof(object), typeof(SettingRow), new PropertyMetadata(null));
+
     /// <summary>Initializes the settings row component.</summary>
     public SettingRow()
     {
@@ -88,5 +92,12 @@ public sealed partial class SettingRow : UserControl
     {
         get => GetValue(ActionContentProperty);
         set => SetValue(ActionContentProperty, value);
+    }
+
+    /// <summary>Gets or sets expanded feedback below the row's text and actions.</summary>
+    public object? DetailContent
+    {
+        get => GetValue(DetailContentProperty);
+        set => SetValue(DetailContentProperty, value);
     }
 }

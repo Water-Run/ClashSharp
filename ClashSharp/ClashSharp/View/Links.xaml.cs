@@ -110,6 +110,7 @@ public sealed partial class Links : Page
                 DefaultButton = ContentDialogButton.Primary,
                 XamlRoot = XamlRoot,
             };
+            ConfigureSubscriptionEditor(dialog, content);
 
             dialog.Localize(() =>
             {
@@ -197,6 +198,7 @@ public sealed partial class Links : Page
                 DefaultButton = ContentDialogButton.Primary,
                 XamlRoot = XamlRoot,
             };
+            ConfigureSubscriptionEditor(dialog, content);
             dialog.Localize(() =>
             {
                 dialog.Title = _getString("Links.Dialog.EditTitle");
@@ -225,6 +227,16 @@ public sealed partial class Links : Page
                     cancellationToken);
             }
         });
+    }
+
+    private static void ConfigureSubscriptionEditor(ThemedContentDialog dialog, FrameworkElement content)
+    {
+        // Native ContentDialog resources control the surface; SizeToContent alone leaves the default narrow template.
+        dialog.Resources["ContentDialogMinWidth"] = 0d;
+        dialog.Resources["ContentDialogMaxWidth"] = 720d;
+        content.Width = 620;
+        content.MaxWidth = Math.Max(240, (dialog.XamlRoot?.Size.Width ?? 720) - 96);
+        content.HorizontalAlignment = HorizontalAlignment.Stretch;
     }
 
     private async void DeleteLinkButton_Click(object sender, RoutedEventArgs e)

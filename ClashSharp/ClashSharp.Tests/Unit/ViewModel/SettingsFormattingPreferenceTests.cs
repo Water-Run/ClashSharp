@@ -7,7 +7,7 @@ namespace ClashSharp.Tests.Unit.ViewModel;
 public sealed partial class SettingsViewModelTests
 {
     [Fact]
-    public async Task FormattingChoicesSurvivePageReloadAndParticipateInBasicReset()
+    public async Task FormattingChoicesSurvivePageReloadAndParticipateInTheirOwnReset()
     {
         FakeSettingsStore store = new();
         SettingsViewModel page = new(store, _ => { }, () => { });
@@ -25,7 +25,7 @@ public sealed partial class SettingsViewModelTests
         Assert.Equal(ClockFormat.TwelveHour, reopened.ClockFormat);
         Assert.Equal(3, reopened.DataUnitStyleOptions.Count);
         Assert.Equal(3, reopened.ClockFormatOptions.Count);
-        await reopened.ResetPreferenceGroupAsync(SettingsResetScope.Basic, CancellationToken.None);
+        await reopened.ResetPreferenceGroupAsync(SettingsResetScope.Units, CancellationToken.None);
         Assert.Equal(DataUnitStyle.BinaryWithDecimalLabels, store.DataUnitStyle);
         Assert.Equal(ClockFormat.FollowSystem, store.ClockFormat);
         Assert.Equal(RateUnit.Bytes, store.RateUnit);

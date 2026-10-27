@@ -820,9 +820,10 @@ public sealed class AppResourcePackagingTests
         Assert.DoesNotContain("new HttpClient", settingsCode, StringComparison.Ordinal);
         Assert.DoesNotContain("HttpResponseMessage", settingsCode, StringComparison.Ordinal);
         Assert.Contains("RunConnectionTestAsync", settingsCode, StringComparison.Ordinal);
-        Assert.Contains("BuildConnectionTestResultPanel(display, refreshText)", settingsCode, StringComparison.Ordinal);
-        Assert.Contains("ConnectionTestDisplay display = new(report, _getString)", settingsCode, StringComparison.Ordinal);
-        Assert.Contains("CenteredDialogOverlay.ShowAsync", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("ConnectionTestResults.Children.Add(BuildConnectionTestResultPanel(", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("_connectionTestDisplay = new(report, _getString)", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("_connectionTestOperations.RunAsync", settingsCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("ShowConnectionTestResultAsync", settingsCode, StringComparison.Ordinal);
         Assert.Contains("GetConnectionTestSummaryStyle(report.SummaryState)", settingsCode, StringComparison.Ordinal);
         Assert.Contains("ConnectionTestSummaryState.AllPassed", settingsCode, StringComparison.Ordinal);
         Assert.Contains("ClashSuccessTextBlockStyle", settingsCode, StringComparison.Ordinal);
@@ -1619,6 +1620,7 @@ public sealed class AppResourcePackagingTests
         string[] resetLinkNames =
         [
             "ResetBasicSettingsLink",
+            "ResetUnitsSettingsLink",
             "ResetStartupSettingsLink",
             "ResetNotificationSettingsLink",
             "ResetTriggerSettingsLink",
@@ -2314,7 +2316,8 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("_errorSink.ReportAsync(", operationSession, StringComparison.Ordinal);
         Assert.DoesNotContain("exception.Message", settingsCode, StringComparison.Ordinal);
         Assert.Contains("_pageOperations.Cancel()", settingsCode, StringComparison.Ordinal);
-        Assert.Contains("await _pageOperations.DrainAsync()", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("await Task.WhenAll(_pageOperations.DrainAsync(), _connectionTestOperations.DrainAsync())", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("_connectionTestOperations.Cancel()", settingsCode, StringComparison.Ordinal);
         Assert.DoesNotContain("ResetAllSettingsAsync(CancellationToken.None)", settingsCode, StringComparison.Ordinal);
         Assert.DoesNotContain("dialog.ShowManagedAsync()", settingsCode, StringComparison.Ordinal);
     }
