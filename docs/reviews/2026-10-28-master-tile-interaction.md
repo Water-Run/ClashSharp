@@ -20,5 +20,20 @@
   新增 `InfoLayout_LongPressMoveReordersLocallyWithoutSaving` 覆盖换位、未知标识和零保存。
 - 18 项目 Release x64 构建零警告、零错误；应用测试 4745 通过／0 失败／0 跳过，
   `dotnet format --verify-no-changes` 无变更。
-- 长按阈值、选中配色和拖动跟手效果尚未在 Windows 11 与 Server Desktop 上实机确认，
-  本轮只交付代码与单元测试，视觉验收留待下一次安装候选。
+- 长按阈值、选中配色和拖动跟手效果尚待原 Server 2025 上的新候选实机确认，
+  按既定验收范围不额外要求第二套 Windows 11 环境。
+
+## 整合时补查
+
+候选整合前发现 `FindInfoTileAt` 接收的是网格局部坐标，却直接传给
+`VisualTreeHelper.FindElementsInHostCoordinates`。该 API 即使限定子树，也要求窗口坐标；
+导航区、页边距或滚动偏移会造成命中位置错误。现先通过
+`InfoTileGrid.TransformToVisual(null).TransformPoint(position)` 转换至 XAML 根坐标，再查找磁贴。
+依据[命中检测 API](https://learn.microsoft.com/en-us/windows/windows-app-sdk/api/winrt/microsoft.ui.xaml.media.visualtreehelper.findelementsinhostcoordinates?view=windows-app-sdk-1.8)
+和[坐标转换 API](https://learn.microsoft.com/en-us/windows/windows-app-sdk/api/winrt/microsoft.ui.xaml.uielement.transformtovisual?view=windows-app-sdk-1.8)。
+
+原 c2a556b 的准确完整 CI40631898108 两任务成功，四份原始报告已核对为7466／0／0。
+为避免交付已知命中缺陷，已取消尚在准备阶段的内部候选40645289673，没有接受其产物。
+坐标修正在服务器独立源码副本编译通过，零警告、零错误，完整格式检查通过，源码摘要
+`38c9665fdc2149736925632f2fd64dad8fbc41ae31da3f00b751fd3609dd25f9` 前后保持；新源码 CI 尚待完成。
+原服务器当前应用和最新手验数据保持，真正的长按交互仍须以整合候选的原生操作为准。

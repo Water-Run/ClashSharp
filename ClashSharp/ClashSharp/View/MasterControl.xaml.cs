@@ -1179,7 +1179,10 @@ public sealed partial class MasterControl : Page
 
     private MasterControlInfoTileViewModel? FindInfoTileAt(Point position)
     {
-        foreach (UIElement element in VisualTreeHelper.FindElementsInHostCoordinates(position, InfoTileGrid))
+        // Pointer positions are relative to the grid; hit testing requires XAML-root
+        // coordinates even when its search is limited to this subtree.
+        Point hostPosition = InfoTileGrid.TransformToVisual(null).TransformPoint(position);
+        foreach (UIElement element in VisualTreeHelper.FindElementsInHostCoordinates(hostPosition, InfoTileGrid))
         {
             for (DependencyObject? node = element; node is not null; node = VisualTreeHelper.GetParent(node))
             {
