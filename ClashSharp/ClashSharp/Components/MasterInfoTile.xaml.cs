@@ -25,17 +25,6 @@ public sealed partial class MasterInfoTile : UserControl
 
     private bool _isLoaded;
 
-    /// <summary>Identifies the localized hint for the separate drag handle.</summary>
-    public static readonly DependencyProperty ReorderHintProperty = DependencyProperty.Register(
-        nameof(ReorderHint), typeof(string), typeof(MasterInfoTile), new PropertyMetadata(string.Empty));
-
-    /// <summary>Gets or sets the drag handle's accessible description.</summary>
-    public string ReorderHint
-    {
-        get => (string)GetValue(ReorderHintProperty);
-        set => SetValue(ReorderHintProperty, value);
-    }
-
     /// <summary>Identifies the recent rate samples shown as a compact trend.</summary>
     public static readonly DependencyProperty HistoryProperty = DependencyProperty.Register(
         nameof(History), typeof(double[]), typeof(MasterInfoTile),
@@ -176,14 +165,14 @@ public sealed partial class MasterInfoTile : UserControl
         set => SetValue(GlyphProperty, value);
     }
 
-    /// <summary>Gets or sets whether the tile displays its toggle indicator.</summary>
+    /// <summary>Gets or sets whether the tile represents a state that its selected appearance reports.</summary>
     public bool IsToggleVisible
     {
         get => (bool)GetValue(IsToggleVisibleProperty);
         set => SetValue(IsToggleVisibleProperty, value);
     }
 
-    /// <summary>Gets or sets the effective state represented by the toggle indicator.</summary>
+    /// <summary>Gets or sets the effective state shown by the tile's selected appearance.</summary>
     public bool IsToggleOn
     {
         get => (bool)GetValue(IsToggleOnProperty);
@@ -405,6 +394,13 @@ public sealed partial class MasterInfoTile : UserControl
 
     private void UpdateVisualState(bool useTransitions)
     {
-        _ = VisualStateManager.GoToState(this, IsToggleOn ? "SwitchOn" : "SwitchOff", useTransitions);
+        _ = VisualStateManager.GoToState(this, IsToggleOn ? "TileOn" : "TileOff", useTransitions);
+    }
+
+    /// <summary>Prevents the click that follows a page-initiated long-press reorder from activating the tile.</summary>
+    /// <remarks>The page raises this while the pointer is still down, before the release click is dispatched.</remarks>
+    internal void SuppressNextActivation()
+    {
+        _suppressNextTap = true;
     }
 }

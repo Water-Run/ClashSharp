@@ -891,6 +891,43 @@ internal sealed partial class MasterControlViewModel : ObservableObject, ILocali
         ApplyInfoTileLayout(_committedInfoTileIds);
     }
 
+    /// <summary>Moves one visible tile onto another tile's position without persisting the new order.</summary>
+    /// <param name="tileId">Identifier of the tile the user is dragging.</param>
+    /// <param name="targetTileId">Identifier of the tile whose position the dragged tile takes.</param>
+    /// <returns>True when the published order changed.</returns>
+    /// <remarks>
+    /// Long-press reordering moves tiles while the pointer stays down and commits once on release,
+    /// so this method only republishes the local order; persistence stays with
+    /// <see cref="SetVisibleInfoTileIdsAsync"/>.
+    /// </remarks>
+    internal bool MoveVisibleInfoTile(string tileId, string targetTileId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tileId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(targetTileId);
+        int sourceIndex = -1;
+        int targetIndex = -1;
+        for (int index = 0; index < _visibleInfoTiles.Count; index++)
+        {
+            string candidate = _visibleInfoTiles[index].Id;
+            if (StringComparer.Ordinal.Equals(candidate, tileId))
+            {
+                sourceIndex = index;
+            }
+            else if (StringComparer.Ordinal.Equals(candidate, targetTileId))
+            {
+                targetIndex = index;
+            }
+        }
+
+        if (sourceIndex < 0 || targetIndex < 0 || sourceIndex == targetIndex)
+        {
+            return false;
+        }
+
+        _visibleInfoTiles.Move(sourceIndex, targetIndex);
+        return true;
+    }
+
     private async Task SaveTileLayoutAsync(Func<Task> save, Action reconcile, CancellationToken cancellationToken)
     {
         await _layoutSaveGate.WaitAsync(cancellationToken);

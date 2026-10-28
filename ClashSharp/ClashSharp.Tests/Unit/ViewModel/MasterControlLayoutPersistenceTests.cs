@@ -259,4 +259,21 @@ public sealed partial class MasterControlViewModelTests
         Assert.Equal(store.SavedLayout, viewModel.HeroStatusItems.Select(static item => item.Kind));
         Assert.True(viewModel.HasOperationError);
     }
+
+    [Fact]
+    public async Task InfoLayout_LongPressMoveReordersLocallyWithoutSaving()
+    {
+        FakeMasterInfoTileLayoutService store = new() { SavedLayout = ["core", "latency", "memory-usage"] };
+        MasterControlViewModel viewModel = CreateViewModel(infoTileLayout: store);
+        await viewModel.LoadAsync(CancellationToken.None);
+        string[] original = viewModel.VisibleInfoTiles.Select(static tile => tile.Id).ToArray();
+
+        Assert.True(viewModel.MoveVisibleInfoTile("core", "memory-usage"));
+        Assert.Equal(["latency", "memory-usage", "core"], viewModel.VisibleInfoTiles.Select(static tile => tile.Id));
+        Assert.False(viewModel.MoveVisibleInfoTile("core", "missing"));
+        Assert.False(viewModel.MoveVisibleInfoTile("core", "core"));
+        Assert.Equal(original.Length, viewModel.VisibleInfoTiles.Count);
+        Assert.Equal(0, store.SaveCount);
+        Assert.True(viewModel.CanEditTileLayout);
+    }
 }

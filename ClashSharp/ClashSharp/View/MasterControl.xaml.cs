@@ -13,11 +13,15 @@ using ClashSharp.Presentation.Dialogs;
 using ClashSharp.Presentation.Layout;
 using ClashSharp.Presentation.Lifecycle;
 using ClashSharp.ViewModel;
+using Microsoft.UI.Dispatching;
+using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Data;
+using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 using Windows.Foundation;
 
 namespace ClashSharp.View;
@@ -49,6 +53,12 @@ public sealed partial class MasterControl : Page
     private const double InfoTileEditorMaxDialogHeight = 756;
     private const double InfoTileEditorWindowChrome = 272;
 
+    /// <summary>Delay that turns a tile press into a reorder drag, matching the platform long press.</summary>
+    private const int InfoTileHoldDelayMilliseconds = 450;
+
+    /// <summary>Pointer travel that cancels the pending hold so ordinary clicks and scrolling still work.</summary>
+    private const double InfoTileHoldTolerance = 8;
+
     /// <summary>Bindable view model for this page.</summary>
     private readonly MasterControlViewModel _viewModel;
     private readonly Func<string, string> _getString;
@@ -79,6 +89,11 @@ public sealed partial class MasterControl : Page
 
     private double _heroStatusItemWidth = PreferredHeroStatusItemWidth;
     private double _infoTileItemWidth = PreferredInfoTileWidth;
+
+    private DispatcherQueueTimer? _infoTileHoldTimer;
+    private Point _infoTilePressPoint;
+    private string? _infoTileDragTileId;
+    private bool _infoTileOrderChanged;
 
     internal MasterControl(MasterControlPageDependencies dependencies)
     {
@@ -113,6 +128,12 @@ public sealed partial class MasterControl : Page
             ?? throw new ArgumentException("A settings navigation function is required.", nameof(dependencies));
         InitializeComponent();
         DataContext = _viewModel;
+        // Long-press reordering is owned by this page: the tile keeps its native button for click,
+        // keyboard and UIA behavior, so the handled pointer events must be observed here.
+        InfoTileGrid.AddHandler(PointerPressedEvent, new PointerEventHandler(InfoTileGrid_PointerPressed), true);
+        InfoTileGrid.AddHandler(PointerMovedEvent, new PointerEventHandler(InfoTileGrid_PointerMoved), true);
+        InfoTileGrid.AddHandler(PointerReleasedEvent, new PointerEventHandler(InfoTileGrid_PointerReleased), true);
+        InfoTileGrid.AddHandler(PointerCanceledEvent, new PointerEventHandler(InfoTileGrid_PointerCanceled), true);
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
     }
@@ -490,6 +511,9 @@ public sealed partial class MasterControl : Page
 
         _pageLifetime = null;
         _dataReady = false;
+        _infoTileDragTileId = null;
+        _infoTileOrderChanged = false;
+        CancelInfoTileHold();
         _dataChanges.Stop();
         _tileActions.Deactivate();
         _loadSession.Cancel();
@@ -1039,11 +1063,151 @@ public sealed partial class MasterControl : Page
         ApplyInfoTileContainerWidth(args.ItemContainer);
     }
 
-    private async void InfoTileGrid_DragItemsCompleted(
-        ListViewBase sender,
-        DragItemsCompletedEventArgs args)
+    private void InfoTileGrid_PointerPressed(object sender, PointerRoutedEventArgs e)
     {
-        // Capture before queueing: another drag must not mutate this request while it waits.
+        CancelInfoTileHold();
+        if (!_viewModel.CanEditTileLayout)
+        {
+            return;
+        }
+
+        PointerPoint point = e.GetCurrentPoint(InfoTileGrid);
+        if (!point.Properties.IsLeftButtonPressed
+            || FindInfoTileAt(point.Position) is not MasterControlInfoTileViewModel tile)
+        {
+            return;
+        }
+
+        _infoTilePressPoint = point.Position;
+        DispatcherQueueTimer timer = DispatcherQueue.CreateTimer();
+        timer.Interval = TimeSpan.FromMilliseconds(InfoTileHoldDelayMilliseconds);
+        timer.IsRepeating = false;
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            if (ReferenceEquals(_infoTileHoldTimer, timer))
+            {
+                BeginInfoTileDrag(tile.Id);
+            }
+        };
+        _infoTileHoldTimer = timer;
+        timer.Start();
+    }
+
+    private void InfoTileGrid_PointerMoved(object sender, PointerRoutedEventArgs e)
+    {
+        Point position = e.GetCurrentPoint(InfoTileGrid).Position;
+        if (_infoTileDragTileId is null)
+        {
+            if (_infoTileHoldTimer is not null
+                && Distance(position, _infoTilePressPoint) > InfoTileHoldTolerance)
+            {
+                CancelInfoTileHold();
+            }
+
+            return;
+        }
+
+        if (FindInfoTileAt(position) is MasterControlInfoTileViewModel target
+            && _viewModel.MoveVisibleInfoTile(_infoTileDragTileId, target.Id))
+        {
+            _infoTileOrderChanged = true;
+        }
+    }
+
+    private async void InfoTileGrid_PointerReleased(object sender, PointerRoutedEventArgs e)
+    {
+        bool commit = _infoTileDragTileId is not null && _infoTileOrderChanged;
+        _infoTileDragTileId = null;
+        _infoTileOrderChanged = false;
+        CancelInfoTileHold();
+        if (commit)
+        {
+            await CommitInfoTileOrderAsync();
+        }
+    }
+
+    private void InfoTileGrid_PointerCanceled(object sender, PointerRoutedEventArgs e)
+    {
+        bool reordered = _infoTileDragTileId is not null;
+        _infoTileDragTileId = null;
+        _infoTileOrderChanged = false;
+        CancelInfoTileHold();
+        if (reordered)
+        {
+            // A cancelled gesture never commits, so drop the uncommitted local order.
+            _viewModel.RestoreCommittedInfoTileOrder();
+        }
+    }
+
+    private void BeginInfoTileDrag(string tileId)
+    {
+        _infoTileHoldTimer = null;
+        _infoTileDragTileId = tileId;
+        _infoTileOrderChanged = false;
+        // The release click follows this frame, while the pointer is still down; suppress it here.
+        if (FindInfoTileById(tileId) is MasterControlInfoTileViewModel tile
+            && InfoTileGrid.ContainerFromItem(tile) is GridViewItem { ContentTemplateRoot: MasterInfoTile control })
+        {
+            control.SuppressNextActivation();
+        }
+    }
+
+    private void CancelInfoTileHold()
+    {
+        if (_infoTileHoldTimer is not DispatcherQueueTimer timer)
+        {
+            return;
+        }
+
+        _infoTileHoldTimer = null;
+        timer.Stop();
+    }
+
+    private MasterControlInfoTileViewModel? FindInfoTileById(string tileId)
+    {
+        foreach (MasterControlInfoTileViewModel tile in _viewModel.VisibleInfoTiles)
+        {
+            if (StringComparer.Ordinal.Equals(tile.Id, tileId))
+            {
+                return tile;
+            }
+        }
+
+        return null;
+    }
+
+    private MasterControlInfoTileViewModel? FindInfoTileAt(Point position)
+    {
+        foreach (UIElement element in VisualTreeHelper.FindElementsInHostCoordinates(position, InfoTileGrid))
+        {
+            for (DependencyObject? node = element; node is not null; node = VisualTreeHelper.GetParent(node))
+            {
+                if (node is GridViewItem { Content: MasterControlInfoTileViewModel tile })
+                {
+                    return tile;
+                }
+
+                if (ReferenceEquals(node, InfoTileGrid))
+                {
+                    break;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static double Distance(Point first, Point second)
+    {
+        double deltaX = first.X - second.X;
+        double deltaY = first.Y - second.Y;
+        return Math.Sqrt((deltaX * deltaX) + (deltaY * deltaY));
+    }
+
+    private async Task CommitInfoTileOrderAsync()
+    {
+        // Capture before queueing: another gesture must not mutate this request while it waits.
         string[] requestedOrder = _viewModel.VisibleInfoTiles.Select(static tile => tile.Id).ToArray();
         try
         {
@@ -1051,7 +1215,7 @@ public sealed partial class MasterControl : Page
         }
         finally
         {
-            // The page queue may cancel before invoking the write, leaving the native list reordered.
+            // The page queue may cancel before invoking the write, leaving the local order reordered.
             _viewModel.RestoreCommittedInfoTileOrder();
         }
     }
