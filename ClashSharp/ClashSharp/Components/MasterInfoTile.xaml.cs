@@ -13,13 +13,14 @@ using Windows.Foundation;
 
 namespace ClashSharp.Components;
 
-/// <summary>Reusable compact information tile with an optional switch action.</summary>
+/// <summary>Reusable compact information tile with an optional state action.</summary>
 public sealed partial class MasterInfoTile : UserControl
 {
     private const double DragSuppressThreshold = 8;
 
     private Point? _pressedPoint;
     private bool _suppressNextTap;
+    private bool _isReordering;
 
     private ICommand? _observedCommand;
 
@@ -219,6 +220,7 @@ public sealed partial class MasterInfoTile : UserControl
 
     private void TileButton_Click(object sender, RoutedEventArgs e)
     {
+        if (_isReordering) { return; }
         if (_suppressNextTap)
         {
             _suppressNextTap = false;
@@ -338,6 +340,7 @@ public sealed partial class MasterInfoTile : UserControl
         ObserveCommand();
         _pressedPoint = null;
         _suppressNextTap = false;
+        _isReordering = false;
     }
 
     private static void OnTileCommandChanged(DependencyObject dependencyObject, DependencyPropertyChangedEventArgs args)
@@ -402,5 +405,24 @@ public sealed partial class MasterInfoTile : UserControl
     internal void SuppressNextActivation()
     {
         _suppressNextTap = true;
+    }
+
+    /// <summary>Transfers this button's active pointer to the page's reorder gesture.</summary>
+    /// <param name="pointer">The system pointer that is still pressed on this tile.</param>
+    internal void BeginReorderPointer(Pointer pointer)
+    {
+        _isReordering = true;
+        _pressedPoint = null;
+        SuppressNextActivation();
+        TileButton.ReleasePointerCapture(pointer);
+    }
+
+    /// <summary>Restores ordinary pointer, keyboard and UIA activation after this input turn.</summary>
+    internal void EndReorderPointer()
+    {
+        _isReordering = false;
+        _pressedPoint = null;
+        _ = VisualStateManager.GoToState(this, "Normal", true);
+        if (!DispatcherQueue.TryEnqueue(() => _suppressNextTap = false)) { _suppressNextTap = false; }
     }
 }

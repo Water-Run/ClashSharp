@@ -23,6 +23,7 @@ using Microsoft.UI.Xaml.Data;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Windows.Foundation;
+using VirtualKey = Windows.System.VirtualKey;
 
 namespace ClashSharp.View;
 
@@ -94,6 +95,10 @@ public sealed partial class MasterControl : Page
     private Point _infoTilePressPoint;
     private string? _infoTileDragTileId;
     private bool _infoTileOrderChanged;
+    // The grid owns capture only after a hold wins over the tile's ordinary button action.
+    private Pointer? _infoTilePointer;
+    private MasterInfoTile? _infoTileDragControl;
+    private long _infoTileGestureEpoch;
 
     internal MasterControl(MasterControlPageDependencies dependencies)
     {
@@ -134,6 +139,8 @@ public sealed partial class MasterControl : Page
         InfoTileGrid.AddHandler(PointerMovedEvent, new PointerEventHandler(InfoTileGrid_PointerMoved), true);
         InfoTileGrid.AddHandler(PointerReleasedEvent, new PointerEventHandler(InfoTileGrid_PointerReleased), true);
         InfoTileGrid.AddHandler(PointerCanceledEvent, new PointerEventHandler(InfoTileGrid_PointerCanceled), true);
+        InfoTileGrid.AddHandler(PointerCaptureLostEvent, new PointerEventHandler(InfoTileGrid_PointerCaptureLost), true);
+        InfoTileGrid.AddHandler(KeyDownEvent, new KeyEventHandler(InfoTileGrid_KeyDown), true);
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
     }
@@ -511,9 +518,7 @@ public sealed partial class MasterControl : Page
 
         _pageLifetime = null;
         _dataReady = false;
-        _infoTileDragTileId = null;
-        _infoTileOrderChanged = false;
-        CancelInfoTileHold();
+        EndInfoTileGesture(restoreOrder: true);
         _dataChanges.Stop();
         _tileActions.Deactivate();
         _loadSession.Cancel();
@@ -1065,8 +1070,7 @@ public sealed partial class MasterControl : Page
 
     private void InfoTileGrid_PointerPressed(object sender, PointerRoutedEventArgs e)
     {
-        CancelInfoTileHold();
-        if (!_viewModel.CanEditTileLayout)
+        if (_infoTilePointer is not null || !_viewModel.CanEditTileLayout)
         {
             return;
         }
@@ -1079,6 +1083,8 @@ public sealed partial class MasterControl : Page
         }
 
         _infoTilePressPoint = point.Position;
+        _infoTilePointer = e.Pointer;
+        _infoTileGestureEpoch++;
         DispatcherQueueTimer timer = DispatcherQueue.CreateTimer();
         timer.Interval = TimeSpan.FromMilliseconds(InfoTileHoldDelayMilliseconds);
         timer.IsRepeating = false;
@@ -1096,13 +1102,15 @@ public sealed partial class MasterControl : Page
 
     private void InfoTileGrid_PointerMoved(object sender, PointerRoutedEventArgs e)
     {
+        if (_infoTilePointer?.PointerId != e.Pointer.PointerId) { return; }
+        if (!_viewModel.CanEditTileLayout) { EndInfoTileGesture(restoreOrder: true); return; }
         Point position = e.GetCurrentPoint(InfoTileGrid).Position;
         if (_infoTileDragTileId is null)
         {
             if (_infoTileHoldTimer is not null
                 && Distance(position, _infoTilePressPoint) > InfoTileHoldTolerance)
             {
-                CancelInfoTileHold();
+                EndInfoTileGesture(restoreOrder: false);
             }
 
             return;
@@ -1117,10 +1125,11 @@ public sealed partial class MasterControl : Page
 
     private async void InfoTileGrid_PointerReleased(object sender, PointerRoutedEventArgs e)
     {
+        if (_infoTilePointer?.PointerId != e.Pointer.PointerId) { return; }
+        bool wasDragging = _infoTileDragTileId is not null;
         bool commit = _infoTileDragTileId is not null && _infoTileOrderChanged;
-        _infoTileDragTileId = null;
-        _infoTileOrderChanged = false;
-        CancelInfoTileHold();
+        EndInfoTileGesture(restoreOrder: false);
+        if (wasDragging) { e.Handled = true; }
         if (commit)
         {
             await CommitInfoTileOrderAsync();
@@ -1129,28 +1138,70 @@ public sealed partial class MasterControl : Page
 
     private void InfoTileGrid_PointerCanceled(object sender, PointerRoutedEventArgs e)
     {
-        bool reordered = _infoTileDragTileId is not null;
-        _infoTileDragTileId = null;
-        _infoTileOrderChanged = false;
-        CancelInfoTileHold();
-        if (reordered)
+        if (_infoTilePointer?.PointerId != e.Pointer.PointerId) { return; }
+        // Taking capture away from the original button may cancel its pressed state. Only
+        // cancellation of the grid's own gesture cancels an already accepted reorder.
+        if (_infoTileDragTileId is not null && !ReferenceEquals(e.OriginalSource, InfoTileGrid)) { return; }
+        EndInfoTileGesture(restoreOrder: true);
+    }
+
+    private void InfoTileGrid_PointerCaptureLost(object sender, PointerRoutedEventArgs e)
+    {
+        if (_infoTilePointer?.PointerId != e.Pointer.PointerId || !ReferenceEquals(e.OriginalSource, InfoTileGrid)) { return; }
+        long epoch = _infoTileGestureEpoch;
+        // Native release can drop capture before the routed release handler reaches us. Give
+        // that handler this input turn to commit; an actual lost gesture then rolls back.
+        if (!DispatcherQueue.TryEnqueue(() =>
         {
-            // A cancelled gesture never commits, so drop the uncommitted local order.
-            _viewModel.RestoreCommittedInfoTileOrder();
-        }
+            if (_infoTilePointer is not null && _infoTileGestureEpoch == epoch) { EndInfoTileGesture(restoreOrder: true); }
+        })) { EndInfoTileGesture(restoreOrder: true); }
+    }
+
+    private void InfoTileGrid_KeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (e.Key != VirtualKey.Escape || _infoTilePointer is null) { return; }
+        EndInfoTileGesture(restoreOrder: true);
+        e.Handled = true;
     }
 
     private void BeginInfoTileDrag(string tileId)
     {
         _infoTileHoldTimer = null;
+        if (_infoTilePointer is not Pointer pointer || !pointer.IsInContact || !_viewModel.CanEditTileLayout
+            || FindInfoTileById(tileId) is not MasterControlInfoTileViewModel tile
+            || InfoTileGrid.ContainerFromItem(tile) is not GridViewItem container
+            || container.ContentTemplateRoot is not MasterInfoTile control)
+        {
+            EndInfoTileGesture(restoreOrder: true);
+            return;
+        }
         _infoTileDragTileId = tileId;
         _infoTileOrderChanged = false;
-        // The release click follows this frame, while the pointer is still down; suppress it here.
-        if (FindInfoTileById(tileId) is MasterControlInfoTileViewModel tile
-            && InfoTileGrid.ContainerFromItem(tile) is GridViewItem { ContentTemplateRoot: MasterInfoTile control })
+        _infoTileDragControl = control;
+        control.BeginReorderPointer(pointer);
+        container.ReleasePointerCapture(pointer);
+        bool captured = InfoTileGrid.PointerCaptures.Any(candidate => candidate.PointerId == pointer.PointerId)
+            || InfoTileGrid.CapturePointer(pointer);
+        if (!captured || _infoTilePointer is null)
         {
-            control.SuppressNextActivation();
+            EndInfoTileGesture(restoreOrder: true);
         }
+    }
+
+    private void EndInfoTileGesture(bool restoreOrder)
+    {
+        Pointer? pointer = _infoTilePointer;
+        MasterInfoTile? control = _infoTileDragControl;
+        bool changed = _infoTileOrderChanged;
+        _infoTilePointer = null;
+        _infoTileDragControl = null;
+        _infoTileDragTileId = null;
+        _infoTileOrderChanged = false;
+        _infoTileGestureEpoch++;
+        CancelInfoTileHold();
+        if (pointer is not null) { InfoTileGrid.ReleasePointerCapture(pointer); }
+        control?.EndReorderPointer();
+        if (restoreOrder && changed) { _viewModel.RestoreCommittedInfoTileOrder(); }
     }
 
     private void CancelInfoTileHold()
