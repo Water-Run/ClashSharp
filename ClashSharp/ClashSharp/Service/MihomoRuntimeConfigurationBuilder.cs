@@ -114,7 +114,11 @@ internal static class MihomoRuntimeConfigurationBuilder
 
         YamlStream managedStream = new(new YamlDocument(managedRoot));
         using StringWriter writer = new(CultureInfo.InvariantCulture);
-        managedStream.Save(writer, assignAnchors: true);
+        // The generated text is parsed again by the semantic validator below. YamlDotNet 18 writes
+        // anchors whenever repeated scalars appear, and its own parser rejects an anchored value
+        // inside a flow mapping that continues with another pair. Imported aliases are already
+        // materialized as shared nodes, so emitting without anchors preserves the same meaning.
+        managedStream.Save(writer, assignAnchors: false);
         string managedConfigurationText = NormalizeConfigurationText(writer.ToString());
         MihomoYamlSemanticValidator.ValidateManagedRuntimeConfiguration(
             managedConfigurationText,

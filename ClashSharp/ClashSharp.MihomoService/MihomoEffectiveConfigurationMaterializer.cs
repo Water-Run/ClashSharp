@@ -381,7 +381,9 @@ internal sealed class MihomoEffectiveConfigurationMaterializer
     {
         YamlStream stream = new(new YamlDocument(root));
         using StringWriter writer = new(CultureInfo.InvariantCulture);
-        stream.Save(writer, assignAnchors: true);
+        // The staged text is parsed again by the service trust validator. YamlDotNet 18 anchors
+        // repeated scalars and then cannot re-read anchored values inside flow mappings.
+        stream.Save(writer, assignAnchors: false);
         string normalized = writer.ToString()
             .Replace("\r\n", "\n", StringComparison.Ordinal)
             .Replace('\r', '\n')

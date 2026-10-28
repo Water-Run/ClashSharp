@@ -344,6 +344,36 @@ public sealed class MihomoEffectiveConfigurationMaterializerTests
         Assert.True(File.Exists(userNote));
     }
 
+    [Fact]
+    public async Task MaterializeAsync_FlowStyleRepeatedScalars_StagesReloadableConfiguration()
+    {
+        using MihomoServiceTemporaryDirectory temporaryDirectory = new();
+        string runtimeDirectory = Path.Combine(temporaryDirectory.Path, "runtime");
+        Directory.CreateDirectory(runtimeDirectory);
+        const string sourceText = """
+            mixed-port: 7890
+            proxies:
+              - {name: 'Expire: 2027-02-23', type: vless, server: 192.0.2.10, port: 443, udp: true}
+              - {name: 'Traffic: 1.07TB', type: vless, server: 192.0.2.10, port: 443, udp: true}
+            """;
+        string sourcePath = Path.Combine(temporaryDirectory.Path, "generation.yaml");
+        await File.WriteAllTextAsync(sourcePath, sourceText, new UTF8Encoding(false));
+        MihomoStagedGeneration source = new(8, ComputeHash(await File.ReadAllBytesAsync(sourcePath)), sourcePath);
+        MihomoEffectiveConfigurationMaterializer materializer = new(protectDirectory: false);
+
+        MihomoEffectiveGeneration effective = await materializer.MaterializeAsync(
+            source,
+            runtimeDirectory,
+            CancellationToken.None);
+
+        YamlMappingNode root = LoadRoot(await File.ReadAllTextAsync(effective.ConfigurationPath));
+        YamlSequenceNode proxies = Assert.IsType<YamlSequenceNode>(GetValue(root, "proxies"));
+        Assert.Equal(2, proxies.Children.Count);
+
+        materializer.DeleteAfterJobEmpty(effective);
+        Assert.False(File.Exists(effective.ConfigurationPath));
+    }
+
     private static YamlMappingNode LoadRoot(string text)
     {
         YamlStream stream = new();

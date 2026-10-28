@@ -712,6 +712,42 @@ public sealed class MihomoRuntimeConfigurationBuilderTests
         Assert.Contains($"secret: '{NumericSecret}'", configuration, StringComparison.Ordinal);
     }
 
+    /// <summary>Verifies flow-style nodes with repeated scalars survive the managed-text round trip.</summary>
+    /// <remarks>
+    /// Subscriptions commonly emit every node as one flow mapping with identical field values.
+    /// Anchoring those repeated scalars produces text YamlDotNet cannot parse back, which used to
+    /// fail profile activation with "Mihomo configuration is not valid YAML".
+    /// </remarks>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void OverrideRuntimeKeys_FlowStyleRepeatedScalars_EmitsReloadableText(bool transparentProxyEnabled)
+    {
+        const string Imported = """
+            mixed-port: 7890
+            proxies:
+              - {name: 'Expire: 2027-02-23', type: vless, server: 192.0.2.10, port: 443, udp: true}
+              - {name: 'Traffic: 1.07TB', type: vless, server: 192.0.2.10, port: 443, udp: true}
+              - {name: 'Sync: 2026-10-28 11:35:49', type: vless, server: 192.0.2.10, port: 443, udp: true}
+            proxy-groups:
+              - {name: GLOBAL, type: select, proxies: [DIRECT]}
+            rules:
+              - MATCH,GLOBAL
+            """;
+
+        string output = MihomoRuntimeConfigurationBuilder.OverrideRuntimeKeys(
+            Imported, 7890, ClashSharpMode.RuleTakeover, transparentProxyEnabled, ControllerSecret);
+
+        YamlStream stream = new();
+        using StringReader reader = new(output);
+        stream.Load(reader);
+        YamlMappingNode root = Assert.IsType<YamlMappingNode>(Assert.Single(stream.Documents).RootNode);
+        YamlSequenceNode proxies = Assert.IsType<YamlSequenceNode>(
+            root.Children[new YamlScalarNode("proxies")]);
+        Assert.Equal(3, proxies.Children.Count);
+        Assert.DoesNotContain("\n- {&", output, StringComparison.Ordinal);
+    }
+
     private static int CountLines(string configuration, string expectedLine)
     {
         return configuration.Split('\n').Count(line => StringComparer.Ordinal.Equals(line, expectedLine));
