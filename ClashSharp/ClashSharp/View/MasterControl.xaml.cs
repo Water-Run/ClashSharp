@@ -99,6 +99,8 @@ public sealed partial class MasterControl : Page
     private Pointer? _infoTilePointer;
     private MasterInfoTile? _infoTileDragControl;
     private long _infoTileGestureEpoch;
+    private bool _infoTileCaptureTransferInProgress;
+    private XamlRoot? _infoTileXamlRoot;
 
     internal MasterControl(MasterControlPageDependencies dependencies)
     {
@@ -157,6 +159,11 @@ public sealed partial class MasterControl : Page
 
         CancellationTokenSource lifetime = new();
         _pageLifetime = lifetime;
+        if (XamlRoot is XamlRoot visualRoot)
+        {
+            _infoTileXamlRoot = visualRoot;
+            visualRoot.Changed += InfoTileXamlRoot_Changed;
+        }
         await Task.WhenAll(_tileActions.DrainAsync(), _refreshSession.DrainAsync());
         await _dataChanges.DrainAsync();
         if (!ReferenceEquals(_pageLifetime, lifetime))
@@ -510,6 +517,11 @@ public sealed partial class MasterControl : Page
     /// <summary>Cancels and observes current-page loading when the page leaves the visual tree.</summary>
     private async void OnUnloaded(object sender, RoutedEventArgs e)
     {
+        if (_infoTileXamlRoot is XamlRoot visualRoot)
+        {
+            visualRoot.Changed -= InfoTileXamlRoot_Changed;
+            _infoTileXamlRoot = null;
+        }
         CancellationTokenSource? lifetime = _pageLifetime;
         if (lifetime is null)
         {
@@ -1139,22 +1151,32 @@ public sealed partial class MasterControl : Page
     private void InfoTileGrid_PointerCanceled(object sender, PointerRoutedEventArgs e)
     {
         if (_infoTilePointer?.PointerId != e.Pointer.PointerId) { return; }
-        // Taking capture away from the original button may cancel its pressed state. Only
-        // cancellation of the grid's own gesture cancels an already accepted reorder.
-        if (_infoTileDragTileId is not null && !ReferenceEquals(e.OriginalSource, InfoTileGrid)) { return; }
+        // Releasing the original button can cancel its pressed state synchronously.
+        // Later system cancellation ends the gesture regardless of its routed source.
+        if (_infoTileCaptureTransferInProgress) { return; }
         EndInfoTileGesture(restoreOrder: true);
     }
 
     private void InfoTileGrid_PointerCaptureLost(object sender, PointerRoutedEventArgs e)
     {
-        if (_infoTilePointer?.PointerId != e.Pointer.PointerId || !ReferenceEquals(e.OriginalSource, InfoTileGrid)) { return; }
+        if (_infoTilePointer?.PointerId != e.Pointer.PointerId) { return; }
         long epoch = _infoTileGestureEpoch;
-        // Native release can drop capture before the routed release handler reaches us. Give
-        // that handler this input turn to commit; an actual lost gesture then rolls back.
+        uint pointerId = e.Pointer.PointerId;
+        // Native release can drop capture before the release handler reaches us. Delay the
+        // decision one input turn, then distinguish a completed transfer from actual loss.
         if (!DispatcherQueue.TryEnqueue(() =>
         {
-            if (_infoTilePointer is not null && _infoTileGestureEpoch == epoch) { EndInfoTileGesture(restoreOrder: true); }
+            if (_infoTilePointer is not null && _infoTileGestureEpoch == epoch && !HasInfoTilePointerCapture(pointerId))
+            {
+                EndInfoTileGesture(restoreOrder: true);
+            }
         })) { EndInfoTileGesture(restoreOrder: true); }
+    }
+
+    private void InfoTileXamlRoot_Changed(XamlRoot sender, XamlRootChangedEventArgs args)
+    {
+        // Minimized or hidden hosts need not deliver another pointer event before returning.
+        if (!sender.IsHostVisible) { EndInfoTileGesture(restoreOrder: true); }
     }
 
     private void InfoTileGrid_KeyDown(object sender, KeyRoutedEventArgs e)
@@ -1178,16 +1200,25 @@ public sealed partial class MasterControl : Page
         _infoTileDragTileId = tileId;
         _infoTileOrderChanged = false;
         _infoTileDragControl = control;
-        control.BeginReorderPointer(pointer);
-        container.ReleasePointerCapture(pointer);
-        // WinUI can return null when the element has not captured any pointers yet.
-        bool captured = InfoTileGrid.PointerCaptures?.Any(candidate => candidate.PointerId == pointer.PointerId) == true
-            || InfoTileGrid.CapturePointer(pointer);
+        bool captured;
+        _infoTileCaptureTransferInProgress = true;
+        try
+        {
+            control.BeginReorderPointer(pointer);
+            container.ReleasePointerCapture(pointer);
+            captured = HasInfoTilePointerCapture(pointer.PointerId) || InfoTileGrid.CapturePointer(pointer);
+        }
+        finally { _infoTileCaptureTransferInProgress = false; }
         if (!captured || _infoTilePointer is null)
         {
+            if (captured) { InfoTileGrid.ReleasePointerCapture(pointer); }
             EndInfoTileGesture(restoreOrder: true);
         }
     }
+
+    private bool HasInfoTilePointerCapture(uint pointerId) =>
+        // WinUI can return null when the element has not captured any pointers yet.
+        InfoTileGrid.PointerCaptures?.Any(candidate => candidate.PointerId == pointerId) == true;
 
     private void EndInfoTileGesture(bool restoreOrder)
     {
