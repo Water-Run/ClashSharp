@@ -15,6 +15,7 @@ using ClashSharp.Presentation.Lifecycle;
 using ClashSharp.ViewModel;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Input;
+using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
@@ -100,7 +101,7 @@ public sealed partial class MasterControl : Page
     private MasterInfoTile? _infoTileDragControl;
     private long _infoTileGestureEpoch;
     private bool _infoTileCaptureTransferInProgress;
-    private XamlRoot? _infoTileXamlRoot;
+    private AppWindow? _infoTileHostWindow;
 
     internal MasterControl(MasterControlPageDependencies dependencies)
     {
@@ -159,10 +160,11 @@ public sealed partial class MasterControl : Page
 
         CancellationTokenSource lifetime = new();
         _pageLifetime = lifetime;
-        if (XamlRoot is XamlRoot visualRoot)
+        if (XamlRoot is XamlRoot visualRoot
+            && AppWindow.GetFromWindowId(visualRoot.ContentIslandEnvironment.AppWindowId) is AppWindow hostWindow)
         {
-            _infoTileXamlRoot = visualRoot;
-            visualRoot.Changed += InfoTileXamlRoot_Changed;
+            _infoTileHostWindow = hostWindow;
+            hostWindow.Changed += InfoTileHostWindow_Changed;
         }
         await Task.WhenAll(_tileActions.DrainAsync(), _refreshSession.DrainAsync());
         await _dataChanges.DrainAsync();
@@ -517,10 +519,10 @@ public sealed partial class MasterControl : Page
     /// <summary>Cancels and observes current-page loading when the page leaves the visual tree.</summary>
     private async void OnUnloaded(object sender, RoutedEventArgs e)
     {
-        if (_infoTileXamlRoot is XamlRoot visualRoot)
+        if (_infoTileHostWindow is AppWindow hostWindow)
         {
-            visualRoot.Changed -= InfoTileXamlRoot_Changed;
-            _infoTileXamlRoot = null;
+            hostWindow.Changed -= InfoTileHostWindow_Changed;
+            _infoTileHostWindow = null;
         }
         CancellationTokenSource? lifetime = _pageLifetime;
         if (lifetime is null)
@@ -1173,10 +1175,14 @@ public sealed partial class MasterControl : Page
         })) { EndInfoTileGesture(restoreOrder: true); }
     }
 
-    private void InfoTileXamlRoot_Changed(XamlRoot sender, XamlRootChangedEventArgs args)
+    private void InfoTileHostWindow_Changed(AppWindow sender, AppWindowChangedEventArgs args)
     {
-        // Minimized or hidden hosts need not deliver another pointer event before returning.
-        if (!sender.IsHostVisible) { EndInfoTileGesture(restoreOrder: true); }
+        // Observe the owning presenter so minimization does not depend on another pointer
+        // event or an island visibility notification.
+        if (!sender.IsVisible || sender.Presenter is OverlappedPresenter { State: OverlappedPresenterState.Minimized })
+        {
+            EndInfoTileGesture(restoreOrder: true);
+        }
     }
 
     private void InfoTileGrid_KeyDown(object sender, KeyRoutedEventArgs e)

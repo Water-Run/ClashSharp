@@ -29,7 +29,7 @@ DispatcherQueueTimer TypedEventHandler
 
 Esc 已实际取消临时换位。使用传统 Win32 鼠标捕获查询的取消探针未适配此 XAML 输入站点，记录不具备取消通过的证明。改为最小化本应用窗口的实际边界测试后发现：恢复窗口再松手会提交临时顺序。读取受校验的设置载荷确认仅 MasterInfoTileLayout 改变，37 项 desired／待处理 0，其余值保持；这是另一个待修复的产品问题。
 
-后续修正让页面在 XamlRoot 隐藏时取消手势并恢复已提交顺序，按页面生命周期成对订阅／解除；捕获丢失通过当前所有权判断，取消只忽略本次同步捕获交接，避免依赖 OriginalSource 必须等于 Grid 的假设。此边界修正的准确 CI 和原生复验仍待完成。当前已安装 ac500 候选不能整体标为验收通过；桌面手验包仍未替换。用户手验及正式发布未完成。
+后续修正从 XamlRoot 的 ContentIslandEnvironment 取得实际顶层窗口，按页面生命周期成对订阅／解除 AppWindow.Changed；窗口隐藏或 OverlappedPresenter.Minimized 时取消手势并恢复已提交顺序，不依赖岛可见性通知。捕获丢失通过当前所有权判断，取消只忽略本次同步捕获交接，避免依赖 OriginalSource 必须等于 Grid 的假设。此边界修正的准确 CI 和原生复验仍待完成。当前已安装 ac500 候选不能整体标为验收通过；桌面手验包仍未替换。用户手验及正式发布未完成。
 
 证据目录：`C:\ClashSharpValidation\pointer-capture-20261028` 和 `pointer-null-20261029`，异常摘要位于前者 `diagnostics/managed-exception-clrmd.json`。旧 60B Auth 公开根已按租约删除，7 个首轮自有任务已导出并移除。只对本次候选导入公开 Auth 根，独立租约记录所有权；没有导入私钥。正常 MSIX 信任和此前存在的测试信任保留。
 
