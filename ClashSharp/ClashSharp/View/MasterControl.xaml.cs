@@ -1180,7 +1180,8 @@ public sealed partial class MasterControl : Page
         _infoTileDragControl = control;
         control.BeginReorderPointer(pointer);
         container.ReleasePointerCapture(pointer);
-        bool captured = InfoTileGrid.PointerCaptures.Any(candidate => candidate.PointerId == pointer.PointerId)
+        // WinUI can return null when the element has not captured any pointers yet.
+        bool captured = InfoTileGrid.PointerCaptures?.Any(candidate => candidate.PointerId == pointer.PointerId) == true
             || InfoTileGrid.CapturePointer(pointer);
         if (!captured || _infoTilePointer is null)
         {
