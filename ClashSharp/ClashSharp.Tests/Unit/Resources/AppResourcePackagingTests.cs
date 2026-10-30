@@ -1998,6 +1998,54 @@ public sealed class AppResourcePackagingTests
         }
     }
 
+    /// <summary>Verifies the shell icon is the hinted brand mark, not a tray-state icon.</summary>
+    [Fact]
+    public void ApplicationIcon_MatchesInstallerBrandMark()
+    {
+        string projectPath = FindSourceFile("ClashSharp", "ClashSharp", "ClashSharp.csproj");
+        string setupPath = FindSourceFile(
+            "ClashSharp",
+            "ClashSharp.Installer.Windows",
+            "Execution",
+            "WindowsInstallerUserSetup.cs");
+        string windowPath = FindSourceFile("ClashSharp", "ClashSharp", "MainWindow.xaml.cs");
+        string scriptPath = FindSourceFile("eng", "Generate-InstallerIcon.ps1");
+        string appIconPath = FindSourceFile("ClashSharp", "ClashSharp", "Assets", "Logo.ico");
+        string installerIconPath = FindSourceFile("ClashSharp", "Installer", "LogoInstaller.ico");
+
+        string project = File.ReadAllText(projectPath);
+        string setup = File.ReadAllText(setupPath);
+        string window = File.ReadAllText(windowPath);
+        string script = File.ReadAllText(scriptPath);
+        byte[] appIcon = File.ReadAllBytes(appIconPath);
+        byte[] installerIcon = File.ReadAllBytes(installerIconPath);
+
+        Assert.Contains("<ApplicationIcon>Assets\\Logo.ico</ApplicationIcon>", project, StringComparison.Ordinal);
+        Assert.Contains(
+            "Content Include=\"Assets\\Logo.ico\" CopyToOutputDirectory=\"PreserveNewest\"",
+            project,
+            StringComparison.Ordinal);
+        Assert.Contains("Path.Combine(roots[0], \"Assets\", \"Logo.ico\")", setup, StringComparison.Ordinal);
+        Assert.DoesNotContain("Logo.SystemProxy.ico", setup, StringComparison.Ordinal);
+        Assert.Contains("Path.Combine(AppContext.BaseDirectory, \"Assets\", \"Logo.ico\")", window, StringComparison.Ordinal);
+        Assert.Contains("_appWindow.SetIcon(iconPath)", window, StringComparison.Ordinal);
+        Assert.Contains("ClashSharp/ClashSharp/Assets/Logo.ico", script, StringComparison.Ordinal);
+        Assert.Equal(installerIcon, appIcon);
+        Assert.Equal(new byte[] { 0, 0, 1, 0 }, appIcon[..4]);
+
+        int entryCount = appIcon[4] | (appIcon[5] << 8);
+        Assert.Equal(9, entryCount);
+        int[] expectedDimensions = [16, 20, 24, 32, 40, 48, 64, 128, 256];
+        int[] actualDimensions = Enumerable.Range(0, entryCount)
+            .Select(index =>
+            {
+                int width = appIcon[6 + (index * 16)];
+                return width == 0 ? 256 : width;
+            })
+            .ToArray();
+        Assert.Equal(expectedDimensions, actualDimensions);
+    }
+
     /// <summary>Verifies master control page uses extracted reusable mode-button and info-tile components.</summary>
     [Fact]
     public void MasterControlXaml_UsesModeButtonAndTileComponents()

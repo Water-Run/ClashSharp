@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -276,6 +277,12 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
     {
         var windowId = Win32Interop.GetWindowIdFromWindow(windowHandle);
         _appWindow = AppWindow.GetFromWindowId(windowId);
+        // The 88 px tile and tray-state icons are the wrong shell asset. This hinted ICO matches the installer.
+        string iconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "Logo.ico");
+        if (File.Exists(iconPath))
+        {
+            _appWindow.SetIcon(iconPath);
+        }
 
         _appWindow.TitleBar.ExtendsContentIntoTitleBar = true;
         _appWindow.TitleBar.ButtonBackgroundColor = Colors.Transparent;

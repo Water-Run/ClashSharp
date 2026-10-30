@@ -34,7 +34,7 @@ internal sealed class WindowsInstallerUserSetup(InstallerReleaseManifest manifes
         if (roots.Count != 1) { throw Failure("package_root_unconfirmed"); }
         string applicationId = family + "!App";
         string executable = Path.Combine(roots[0], "ClashSharp.exe");
-        string icon = Path.Combine(roots[0], "Assets", "Tray", "Logo.SystemProxy.ico");
+        string icon = Path.Combine(roots[0], "Assets", "Logo.ico");
         await _shell.ApplyAsync(document.Preferences, applicationId, icon, cancellationToken).ConfigureAwait(false);
         ApplicationData data = ApplicationDataManager.CreateForPackageFamily(family);
         InstallerPreferencesWarnings warnings = InstallerPreferencesWarnings.None;
