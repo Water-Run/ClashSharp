@@ -147,15 +147,15 @@ internal static class MihomoRuntimeConfigurationBuilder
         };
     }
 
-    /// <summary>Normalizes line endings and ensures one trailing line break.</summary>
+    /// <summary>Normalizes line endings without changing YAML indentation or literal scalar content.</summary>
     public static string NormalizeConfigurationText(string configurationText)
     {
         ArgumentNullException.ThrowIfNull(configurationText);
         string normalized = configurationText
             .Replace("\r\n", "\n", StringComparison.Ordinal)
-            .Replace('\r', '\n')
-            .Trim();
-        return normalized + "\n";
+            .Replace('\r', '\n');
+        if (normalized.StartsWith('\uFEFF')) { normalized = normalized[1..]; }
+        return normalized.EndsWith('\n') ? normalized : normalized + "\n";
     }
 
     private static void AddManagedRuntimeFields(

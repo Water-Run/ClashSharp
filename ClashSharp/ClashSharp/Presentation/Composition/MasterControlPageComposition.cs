@@ -111,7 +111,7 @@ internal static class MasterControlPageComposition
             probeWebsiteAsync: networkProbe.CheckWebsiteAsync,
             probePublicIpAsync: networkProbe.GetPublicIpAsync,
             updateChecker: new GitHubReleaseUpdateChecker(ReleaseHttpClient, ApplicationVersion.Current),
-            navigateToPage: navigateToPage);
+            navigateToPage: navigateToPage, notifications: context.Notifications);
 
         return new MasterControlPageDependencies(
             viewModel,
@@ -132,7 +132,7 @@ internal static class MasterControlPageComposition
                     cancellationToken);
             },
             proxyNodes.GetNodes,
-            proxyLatency.TestNodesAsync,
+            new ProxyLatencyTesterAdapter(proxyLatency, context.Notifications).TestNodesAsync,
             new DataPackageDialogPresenter(SettingsPageComposition.CreateOperations(context), localization.GetString),
             openSettings,
             context.MainlandChinaTextDisplay.Apply,

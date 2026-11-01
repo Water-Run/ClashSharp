@@ -63,14 +63,14 @@ With *Enable tray color status indicator* on under **Settings › Taskbar tray**
 
 Once an official version is released, packages are published on the [Releases](https://github.com/Water-Run/ClashSharp/releases) page.
 
-1. Download and extract the release package. `ClashSharp-Installer.exe` must stay next to its `payload` folder.
-2. Run `ClashSharp-Installer.exe` in the current user session. The application is installed for the user who runs the installer; running as administrator is not required, and .NET does not need to be preinstalled.
+1. Download and extract the release package. `Setup.exe` must stay next to its `payload` folder.
+2. Run `Setup.exe` in the current user session. The application is installed for the user who runs the installer; running as administrator is not required, and .NET does not need to be preinstalled.
 3. The installer requests administrator approval when deploying the Mihomo service and any required certificate trust. The displayed publisher should be verified before approval.
 
 Repair, upgrade, and removal are all done by running the same installer again.
 
 > [!WARNING]
-> Uninstallation should go through `ClashSharp-Installer.exe`. Removing the app only from Windows *Settings › Apps* leaves machine-level resources such as the Mihomo service in place.
+> Uninstallation should go through `Setup.exe`. Removing the app only from Windows *Settings › Apps* leaves machine-level resources such as the Mihomo service in place.
 
 ## Getting started
 
@@ -145,6 +145,8 @@ The **About** page checks GitHub Releases for new versions. Updates are installe
 </details>
 
 ## Building from source
+
+See the [development documentation](./docs/README.md) for current implementation status, candidate validation and the development plan.
 
 Building requires Windows x64, PowerShell 7, and the .NET SDK version specified in [`global.json`](./global.json).
 

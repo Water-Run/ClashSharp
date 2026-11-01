@@ -12,14 +12,17 @@ internal sealed class TriggerPresentationFactory
 {
     private readonly ITriggerDefinitionStore _store;
     private readonly AppSettingsService _settings;
+    private readonly IUserOperationNotifications? _notifications;
     private TriggersViewModel? _viewModel;
 
     public TriggerPresentationFactory(
         ITriggerDefinitionStore store,
-        AppSettingsService settings)
+        AppSettingsService settings,
+        IUserOperationNotifications? notifications = null)
     {
         _store = store ?? throw new ArgumentNullException(nameof(store));
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
+        _notifications = notifications;
     }
 
     public TriggersViewModel CreateViewModel(
@@ -32,7 +35,7 @@ internal sealed class TriggerPresentationFactory
             getString,
             _store,
             new PresentationSettings(_settings),
-            errorSink, new DisplayFormatter(_settings.ReadDisplayFormatting));
+            errorSink, new DisplayFormatter(_settings.ReadDisplayFormatting), _notifications);
     }
 
     public TriggerPresentationSummary GetSummary()

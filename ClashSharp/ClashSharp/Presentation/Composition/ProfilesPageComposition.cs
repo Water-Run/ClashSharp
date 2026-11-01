@@ -20,7 +20,8 @@ internal static class ProfilesPageComposition
             () => context.Settings.ActiveProfileId,
             context.ErrorSink,
             new ModelDisplayMapper(context.MainlandChinaTextDisplay.Apply, context.CreateDisplayFormatter(),
-                profileStatusLocalizer: ProfileStatusText.Localize));
+                profileStatusLocalizer: ProfileStatusText.Localize),
+            new SubscriptionLinkCatalogAdapter(context.Profiles));
 
         return new Dependencies(
             viewModel,

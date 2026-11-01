@@ -69,6 +69,7 @@ internal sealed class AboutViewModel : ObservableObject, ILocalizedPresentation
 
     /// <summary>URI launcher used by link commands.</summary>
     private readonly IUriLauncher _launcher;
+    private readonly IUserOperationNotifications? _notifications;
 
     /// <summary>Backing field for <see cref="MihomoStatusText"/>.</summary>
     private string _mihomoStatusText = string.Empty;
@@ -85,18 +86,21 @@ internal sealed class AboutViewModel : ObservableObject, ILocalizedPresentation
     /// <param name="updateChecker">Read-only release checker. Must not be null.</param>
     /// <param name="launcher">URI launcher. Must not be null.</param>
     /// <param name="errorSink">Boundary sink for unexpected command failures. Must not be null.</param>
+    /// <param name="notifications">User-policy update notifications.</param>
     /// <exception cref="ArgumentNullException">A required dependency is null.</exception>
     public AboutViewModel(
         IDisplayPageLocalization localization,
         IAboutCore core,
         IApplicationUpdateChecker updateChecker,
         IUriLauncher launcher,
-        IApplicationErrorSink errorSink)
+        IApplicationErrorSink errorSink,
+        IUserOperationNotifications? notifications = null)
     {
         _localization = localization ?? throw new ArgumentNullException(nameof(localization));
         _core = core ?? throw new ArgumentNullException(nameof(core));
         _updateChecker = updateChecker ?? throw new ArgumentNullException(nameof(updateChecker));
         _launcher = launcher ?? throw new ArgumentNullException(nameof(launcher));
+        _notifications = notifications;
         ArgumentNullException.ThrowIfNull(errorSink);
         RefreshCoreStatusText();
         RefreshUpdateStatusText();
@@ -303,6 +307,16 @@ internal sealed class AboutViewModel : ObservableObject, ILocalizedPresentation
 
         _updateResult = result;
         RefreshUpdateStatusText();
+        if (result.Availability == ApplicationUpdateAvailability.UpdateAvailable)
+        {
+            _notifications?.ReportAvailability("Nav.About", "Notification.Update.Available", false);
+        }
+        else
+        {
+            _notifications?.ReportOperation("Nav.About",
+                result.Availability == ApplicationUpdateAvailability.Current ? "About.Update.Current" : "About.Update.Unavailable",
+                result.Availability != ApplicationUpdateAvailability.Current);
+        }
     }
 
     private void RefreshCoreStatusText() => MihomoStatusText = !_coreProbeFinished

@@ -93,15 +93,19 @@ internal sealed class TriggersViewModel : ObservableObject, ILocalizedPresentati
         ITriggerDefinitionStore store,
         ITriggerPresentationSettings settings,
         IApplicationErrorSink errorSink,
-        DisplayFormatter? formatter = null)
+        DisplayFormatter? formatter = null,
+        IUserOperationNotifications? notifications = null)
     {
         _getString = getString ?? throw new ArgumentNullException(nameof(getString));
         _formatter = formatter ?? new();
         _store = store ?? throw new ArgumentNullException(nameof(store));
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _errorSink = errorSink ?? throw new ArgumentNullException(nameof(errorSink));
+        _notifications = notifications;
         _triggersEnabled = settings.IsEnabled;
     }
+
+    private readonly IUserOperationNotifications? _notifications;
 
     public string PageTitleText => _getString("Nav.Triggers");
 
@@ -520,10 +524,12 @@ internal sealed class TriggersViewModel : ObservableObject, ILocalizedPresentati
             {
                 await ReportUnexpectedAsync("Triggers.Replace", exception);
                 SetError("trigger.definition.write_unavailable");
+                _notifications?.ReportOperation("Nav.Triggers", "Application.UnexpectedError", true);
                 return false;
             }
             if (!result.IsSucceeded || result.Value is not TriggerDefinitionCatalog catalog)
             {
+                _notifications?.ReportOperation("Nav.Triggers", "Application.UnexpectedError", true);
                 SetPersistenceError(result.Status, result.Diagnostic, "trigger.definition.write_unavailable");
                 if (result.Status == TriggerPersistenceStatus.Conflict)
                 {
@@ -556,6 +562,7 @@ internal sealed class TriggersViewModel : ObservableObject, ILocalizedPresentati
 
             ApplyCatalog(catalog);
             ClearError();
+            _notifications?.ReportOperation("Nav.Triggers", "Notification.Triggers.Saved", false);
             return true;
         }
         finally

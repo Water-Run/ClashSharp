@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.Model;
 using ClashSharp.Service;
 using ClashSharp.ViewModel;
@@ -11,6 +12,8 @@ namespace ClashSharp.Presentation.Adapters;
 /// <summary>Adapts <see cref="MihomoControllerClient"/> to runtime proxy controls.</summary>
 internal sealed class ProxyRuntimeControllerAdapter : IProxyRuntimeController
 {
+    private readonly OperationNotificationRunner _notifications;
+
     /// <summary>Wrapped controller client.</summary>
     private readonly MihomoControllerClient _controller;
 
@@ -19,11 +22,13 @@ internal sealed class ProxyRuntimeControllerAdapter : IProxyRuntimeController
     /// <summary>Initializes a runtime controller adapter.</summary>
     /// <param name="controller">Controller client. Must not be null.</param>
     /// <param name="selections">Admitted durable proxy selection operations.</param>
+    /// <param name="notifications">User-policy operation notifications.</param>
     /// <exception cref="ArgumentNullException"><paramref name="controller"/> is null.</exception>
-    public ProxyRuntimeControllerAdapter(MihomoControllerClient controller, IProxySelectionService selections)
+    public ProxyRuntimeControllerAdapter(MihomoControllerClient controller, IProxySelectionService selections, IUserOperationNotifications? notifications = null)
     {
         _controller = controller ?? throw new ArgumentNullException(nameof(controller));
         _selections = selections ?? throw new ArgumentNullException(nameof(selections));
+        _notifications = new(notifications);
     }
 
     /// <summary>Checks runtime ownership using the same trusted observation as controller requests.</summary>
@@ -55,7 +60,8 @@ internal sealed class ProxyRuntimeControllerAdapter : IProxyRuntimeController
     /// <returns>A task that completes after mihomo applies the selection.</returns>
     public Task SelectProxyAsync(string groupName, string proxyName, CancellationToken cancellationToken)
     {
-        return _selections.SelectAsync(groupName, proxyName, cancellationToken);
+        return _notifications.ExecuteAsync(() => _selections.SelectAsync(groupName, proxyName, cancellationToken),
+            "Nav.ProxyNodes", "ProxyNodes.Status.SelectionApplied", "Application.UnexpectedError", cancellationToken);
     }
 
     /// <summary>Updates one runtime provider resource.</summary>
@@ -64,6 +70,7 @@ internal sealed class ProxyRuntimeControllerAdapter : IProxyRuntimeController
     /// <returns>A task that completes after mihomo updates the provider.</returns>
     public Task UpdateProviderAsync(MihomoProviderResource provider, CancellationToken cancellationToken)
     {
-        return _controller.UpdateProviderAsync(provider, cancellationToken);
+        return _notifications.ExecuteAsync(() => _controller.UpdateProviderAsync(provider, cancellationToken),
+            "Nav.ProxyNodes", "ProxyNodes.Status.ProviderUpdated", "Application.UnexpectedError", cancellationToken);
     }
 }

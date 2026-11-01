@@ -7,6 +7,8 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using ClashSharp.ApplicationModel.Startup;
+using ClashSharp.ApplicationModel.Presentation;
+using ClashSharp.ApplicationModel.Diagnostics;
 using ClashSharp.Model;
 using TriggerEventKind = global::ClashSharp.Model.Triggers.TriggerEventKind;
 using Windows.Storage;
@@ -25,6 +27,9 @@ internal interface IApplicationNotificationSink
 
     /// <summary>Sends a custom user-visible notification.</summary>
     void NotifyCustom(string message);
+
+    /// <summary>Reports a failed proxy availability change.</summary>
+    void NotifyProxyFailure() { }
 }
 
 /// <summary>Win11 notification display boundary used by <see cref="NotificationService"/>.</summary>
@@ -35,6 +40,19 @@ internal interface IWin11NotificationPlatform
 
     /// <summary>Shows one Win11 notification.</summary>
     void Show(string title, string message, string? idempotencyKey = null);
+}
+
+/// <summary>Owns notification activation registration for one primary window lifetime.</summary>
+internal interface IWin11NotificationRegistration
+{
+    IDisposable Register(Action activated);
+}
+
+/// <summary>Releases exactly one owned registration.</summary>
+internal sealed class NotificationRegistration(Action release) : IDisposable
+{
+    private Action? _release = release;
+    public void Dispose() => Interlocked.Exchange(ref _release, null)?.Invoke();
 }
 
 /// <summary>Durable receipt boundary used to bridge notification display and outbox commit.</summary>
@@ -60,12 +78,54 @@ internal interface IIdempotentTriggerNotificationSink
 
 #if !UNIT_TESTS
 /// <summary>Default Win11 notification platform backed by Windows App SDK notifications.</summary>
-internal sealed class Win11NotificationPlatform : IWin11NotificationPlatform
+internal sealed class Win11NotificationPlatform : IWin11NotificationPlatform, IWin11NotificationRegistration, IDisposable
 {
+    private readonly object _registrationGate = new();
+    private IDisposable? _registration;
+    private Action? _activated;
     public static Win11NotificationPlatform Instance { get; } = new();
 
     private Win11NotificationPlatform()
     {
+    }
+
+    public IDisposable Register(Action activated)
+    {
+        ArgumentNullException.ThrowIfNull(activated);
+        lock (_registrationGate)
+        {
+            _activated = activated;
+            EnsureRegistration();
+        }
+        return new NotificationRegistration(Dispose);
+    }
+
+    private void OnInvoked(AppNotificationManager sender, AppNotificationActivatedEventArgs args) =>
+        Volatile.Read(ref _activated)?.Invoke();
+
+    private void EnsureRegistration()
+    {
+        if (_registration is not null) { return; }
+        AppNotificationManager manager = AppNotificationManager.Default;
+        manager.NotificationInvoked += OnInvoked;
+        try { manager.Register(); }
+        catch { manager.NotificationInvoked -= OnInvoked; throw; }
+        _registration = new NotificationRegistration(() =>
+        {
+            manager.NotificationInvoked -= OnInvoked;
+            manager.Unregister();
+        });
+    }
+
+    public void Dispose()
+    {
+        lock (_registrationGate)
+        {
+            _activated = null;
+            IDisposable? registration = _registration;
+            _registration = null;
+            registration?.Dispose();
+        }
     }
 
     public async Task<bool> ContainsAsync(
@@ -73,6 +133,7 @@ internal sealed class Win11NotificationPlatform : IWin11NotificationPlatform
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        lock (_registrationGate) { EnsureRegistration(); }
         (string tag, string group) = CreateIdentity(idempotencyKey);
         IList<AppNotification> notifications = await AppNotificationManager.Default.GetAllAsync();
         cancellationToken.ThrowIfCancellationRequested();
@@ -92,7 +153,12 @@ internal sealed class Win11NotificationPlatform : IWin11NotificationPlatform
             (notification.Tag, notification.Group) = CreateIdentity(idempotencyKey);
         }
 
-        AppNotificationManager.Default.Show(notification);
+        lock (_registrationGate)
+        {
+            EnsureRegistration();
+            AppNotificationManager.Default.Show(notification);
+            if (notification.Id == 0) { throw new InvalidOperationException("Windows did not accept the notification."); }
+        }
     }
 
     private static (string Tag, string Group) CreateIdentity(string idempotencyKey)
@@ -108,13 +174,15 @@ internal sealed class Win11NotificationPlatform : IWin11NotificationPlatform
 /// <summary>Win11 notification gateway with policy filtering.</summary>
 internal sealed class NotificationService :
     IApplicationNotificationSink,
+    IUserOperationNotifications,
+    IDisposable,
     IIdempotentTriggerNotificationSink
 {
     public static NotificationService Instance { get; } = new(
         () => AppSettingsService.Instance.NotificationEnabled,
         () => AppSettingsService.Instance.NotificationLevel,
         LocalizationService.Instance.GetString,
-        RuntimeDataServices.Logs.AppendLog,
+        static (level, category, message, detail) => RuntimeDataServices.Logs.AppendLog(level, category, message, detail),
         TriggerRuntimeEventHub.Instance,
 #if UNIT_TESTS
         new ThrowingTestNotificationPlatform());
@@ -129,6 +197,9 @@ internal sealed class NotificationService :
     private readonly ITriggerRuntimeEventPublisher _triggerEvents;
     private readonly IWin11NotificationPlatform _platform;
     private readonly ITriggerNotificationReceiptStore _triggerReceipts;
+    private NotificationPolicySnapshot? _lastPolicy;
+
+    private sealed record NotificationPolicySnapshot(bool Enabled, NotificationLevel Level);
 
     internal NotificationService(
         Func<bool> getEnabled,
@@ -156,13 +227,63 @@ internal sealed class NotificationService :
             string.Format(CultureInfo.CurrentCulture, GetString("Notification.ProxyMode.Message.Format"), GetModeLabel(mode)));
     }
 
+    /// <summary>Uses detailed verbosity for success and the standard policy for actionable failures.</summary>
+    public void ReportOperation(string titleResourceKey, string messageResourceKey, bool failed, params object[] arguments)
+    {
+        try
+        {
+            ArgumentNullException.ThrowIfNull(arguments);
+            Show(failed ? NotificationLevel.Default : NotificationLevel.More,
+                GetString(titleResourceKey), arguments.Length == 0 ? GetString(messageResourceKey)
+                    : string.Format(CultureInfo.CurrentCulture, GetString(messageResourceKey), arguments));
+        }
+        catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
+        {
+            TryAppendNotificationLog("Warning", "Operation notification failed", titleResourceKey, messageResourceKey, exception.GetType().Name);
+        }
+    }
+
+    public void ReportAvailability(string titleResourceKey, string messageResourceKey, bool failed) =>
+        Show(failed ? NotificationLevel.CriticalOnly : NotificationLevel.Default, GetString(titleResourceKey), GetString(messageResourceKey));
+
+    internal IDisposable Register(Action activated)
+    {
+        try
+        {
+            _ = ShouldShow(NotificationLevel.More);
+            return _platform is IWin11NotificationRegistration registration
+                ? registration.Register(activated) : new NotificationRegistration(static () => { });
+        }
+        catch (Exception exception) when (IsRecoverableBestEffortFailure(exception))
+        {
+            TryAppendNotificationLog("Warning", GetString("Notification.Log.Failed"), "Registration", "notification.registration.failed", exception.GetType().Name);
+            return new NotificationRegistration(static () => { });
+        }
+    }
+
+    public void Dispose()
+    {
+        try { if (_platform is IDisposable owned) { owned.Dispose(); } }
+        catch (Exception exception) when (IsRecoverableBestEffortFailure(exception))
+        {
+            TryAppendNotificationLog("Warning", GetString("Notification.Log.Failed"), "Registration", "notification.unregister.failed", exception.GetType().Name);
+        }
+        Volatile.Write(ref _lastPolicy, null);
+    }
+
     public void NotifyConnectionTestTimeout(string target)
     {
         Show(
-            NotificationLevel.CriticalOnly,
+            NotificationLevel.Default,
             GetString("Notification.ConnectionTestTimeout.Title"),
             string.Format(CultureInfo.CurrentCulture, GetString("Notification.ConnectionTestTimeout.Message.Format"), target));
     }
+
+    /// <summary>Reports loss of the proxy runtime even under the important-only policy.</summary>
+    public void NotifyRuntimeFailure() => Show(NotificationLevel.CriticalOnly,
+        GetString("Notification.Runtime.Title"), GetString("Notification.Runtime.UnexpectedExit"));
+
+    public void NotifyProxyFailure() => ReportAvailability("Notification.Runtime.Title", "Notification.Proxy.Unavailable", true);
 
     public void NotifyCustom(string message)
     {
@@ -296,12 +417,24 @@ internal sealed class NotificationService :
 
     private bool ShouldShow(NotificationLevel minimumLevel)
     {
-        if (!_getEnabled())
+        NotificationPolicySnapshot? policy;
+        try
+        {
+            policy = new(_getEnabled(), _getLevel());
+            Volatile.Write(ref _lastPolicy, policy);
+        }
+        catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
+        {
+            // Durable replacement/recovery can temporarily close settings reads. Use only an
+            // already observed effective policy; never infer permission from unavailable settings.
+            policy = Volatile.Read(ref _lastPolicy);
+        }
+        if (policy is not { Enabled: true })
         {
             return false;
         }
 
-        NotificationLevel configured = _getLevel();
+        NotificationLevel configured = policy.Level;
         return configured switch
         {
             NotificationLevel.CriticalOnly => minimumLevel == NotificationLevel.CriticalOnly,

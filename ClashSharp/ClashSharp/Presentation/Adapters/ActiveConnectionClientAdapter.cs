@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.Model;
 using ClashSharp.Service;
 using ClashSharp.ViewModel;
@@ -16,15 +17,19 @@ namespace ClashSharp.Presentation.Adapters;
 /// </remarks>
 internal sealed class ActiveConnectionClientAdapter : IActiveConnectionClient
 {
+    private readonly OperationNotificationRunner _notifications;
+
     /// <summary>Wrapped connection service.</summary>
     private readonly MihomoConnectionService _connections;
 
     /// <summary>Initializes an active connection client adapter.</summary>
     /// <param name="connections">Connection service. Must not be null.</param>
+    /// <param name="notifications">User-policy operation notifications.</param>
     /// <exception cref="ArgumentNullException"><paramref name="connections"/> is null.</exception>
-    public ActiveConnectionClientAdapter(MihomoConnectionService connections)
+    public ActiveConnectionClientAdapter(MihomoConnectionService connections, IUserOperationNotifications? notifications = null)
     {
         _connections = connections ?? throw new ArgumentNullException(nameof(connections));
+        _notifications = new(notifications);
     }
 
     /// <summary>Gets active connection rows.</summary>
@@ -54,7 +59,8 @@ internal sealed class ActiveConnectionClientAdapter : IActiveConnectionClient
     /// <returns>A task that completes after the connection is closed.</returns>
     public Task CloseConnectionAsync(string connectionId, CancellationToken cancellationToken)
     {
-        return _connections.CloseConnectionAsync(connectionId, cancellationToken);
+        return _notifications.ExecuteAsync(() => _connections.CloseConnectionAsync(connectionId, cancellationToken),
+            "Nav.Connections", "Connections.Status.Closed", "Application.UnexpectedError", cancellationToken);
     }
 
     /// <summary>Closes all active connections.</summary>
@@ -62,6 +68,7 @@ internal sealed class ActiveConnectionClientAdapter : IActiveConnectionClient
     /// <returns>A task that completes after mihomo closes all connections.</returns>
     public Task CloseAllConnectionsAsync(CancellationToken cancellationToken)
     {
-        return _connections.CloseAllConnectionsAsync(cancellationToken);
+        return _notifications.ExecuteAsync(() => _connections.CloseAllConnectionsAsync(cancellationToken),
+            "Nav.Connections", "Connections.Status.ClosedAll", "Application.UnexpectedError", cancellationToken);
     }
 }

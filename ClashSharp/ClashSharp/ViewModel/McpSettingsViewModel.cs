@@ -11,7 +11,8 @@ using ClashSharp.ApplicationModel.Presentation;
 namespace ClashSharp.ViewModel;
 
 /// <summary>Owns an explicit permission draft and displays independently observed endpoint state.</summary>
-internal sealed class McpSettingsViewModel(IMcpServerManagement management, Func<string, string> getString, IApplicationErrorSink errors) : ObservableObject
+internal sealed class McpSettingsViewModel(IMcpServerManagement management, Func<string, string> getString,
+    IApplicationErrorSink errors, IUserOperationNotifications? notifications = null) : ObservableObject
 {
     private bool _enabled;
     private double _port = McpServerConfiguration.DefaultPort;
@@ -82,13 +83,13 @@ internal sealed class McpSettingsViewModel(IMcpServerManagement management, Func
         }
         McpAccessScope scopes = Scopes.Where(choice => choice.IsGranted).Aggregate(McpAccessScope.None, (combined, choice) => combined | choice.Scope);
         Load(await management.ApplyAsync(new((int)Port, new(Enabled, scopes)), cancellationToken), loadDraft: true);
-        SetMessage("Applied", false);
+        SetMessage(_runtime?.ErrorCode is null ? "Applied" : "Failed", _runtime?.ErrorCode is not null);
     }, cancellationToken);
 
     public Task ResetAsync(CancellationToken cancellationToken) => RunActionAsync(async () =>
     {
         Load(await management.ApplyAsync(new(McpServerConfiguration.DefaultPort, McpAccessPolicy.Default), cancellationToken), loadDraft: true);
-        SetMessage("Applied", false);
+        SetMessage(_runtime?.ErrorCode is null ? "Applied" : "Failed", _runtime?.ErrorCode is not null);
     }, cancellationToken);
 
     public Task RotateAsync(CancellationToken cancellationToken) => RunActionAsync(async () =>
@@ -178,6 +179,7 @@ internal sealed class McpSettingsViewModel(IMcpServerManagement management, Func
     private void SetMessage(string key, bool hasError)
     {
         _messageKey = key; _hasError = hasError;
+        if (key.Length > 0 && key != "InvalidPort") { notifications?.ReportOperation("Settings.Mcp.Title", "Settings.Mcp." + key, hasError); }
         OnPropertyChanged(nameof(Message)); OnPropertyChanged(nameof(HasError));
         OnPropertyChanged(nameof(MessageSeverity)); OnPropertyChanged(nameof(HasMessage));
         OnPropertyChanged(nameof(IsMessageOpen));

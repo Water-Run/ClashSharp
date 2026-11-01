@@ -1,24 +1,24 @@
 Bundled component: mihomo core
 Bundled binary: Binaries/mihomo.exe
-Bundled version: Mihomo Meta v1.19.27 windows amd64 with go1.26.4
-Bundled binary SHA256: 842FA17493A82C97148E76E3C523F5058E3CF386FBA611CAB86B6681E75F2F77
+Bundled version: Mihomo Meta v1.19.33 windows amd64 with go1.26.10 Wed Oct 21 16:44:37 UTC 2026
+Bundled binary SHA256: a4fbf2b8bc2b5416ce2d0d392ac59f2e0a234ea4fcf635b66bd21e62ea9641b9
 
 Upstream project: MetaCubeX/mihomo
-Upstream release: https://github.com/MetaCubeX/mihomo/releases/tag/v1.19.27
+Upstream release: https://github.com/MetaCubeX/mihomo/releases/tag/v1.19.33
+Upstream asset: mihomo-windows-amd64-v1-v1.19.33.zip
+Upstream asset URL: https://github.com/MetaCubeX/mihomo/releases/download/v1.19.33/mihomo-windows-amd64-v1-v1.19.33.zip
 Upstream documentation: https://wiki.metacubex.one/
 
 License: GPL-3.0. See mihomo-LICENSE.txt in this directory.
 
 Source availability: the upstream release page publishes the corresponding release,
-source archive links, and source-related assets such as vendor.tar.gz and
-toolchain.tar.gz. Clash# redistributes the unmodified Windows amd64 mihomo core
-as a bundled runtime dependency.
+source archive links, and source-related assets. Clash# redistributes the unmodified
+Windows amd64 mihomo core as a bundled runtime dependency.
 
-Clash# release materials include MIHOMO-SOURCE-MATERIALS.zip, bound to the above
-binary digest and source commit 5184081ac327394d9e15fa5d5f9f4a61e723fd94.
-It preserves the source, vendor, patched toolchain and observed public CA input,
-with an offline compilation script and original license documents. This fixed
-input archive does not claim byte-identical reproduction of the upstream binary.
+Clash# release materials include MIHOMO-SOURCE-MATERIALS.zip. Its manifest binds
+the corresponding source, vendor, patched toolchain and observed public CA input
+to the bundled binary, with an offline compilation script and original licenses.
+These fixed inputs do not claim byte-identical reproduction of the upstream binary.
 
 Trademark/naming note: Clash# is not affiliated with MetaCubeX and does not use
 "mihomo" in the application name.

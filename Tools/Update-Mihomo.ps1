@@ -175,10 +175,17 @@ try {
     }
 
     Expand-Archive -LiteralPath $archive.FullName -DestinationPath $extractDirectory
+    $assetStem = [System.IO.Path]::GetFileNameWithoutExtension($AssetName)
+    $releaseSuffix = "-$Version"
+    $assetExecutableName = if ($assetStem.EndsWith($releaseSuffix, [System.StringComparison]::Ordinal)) {
+        $assetStem.Substring(0, $assetStem.Length - $releaseSuffix.Length) + ".exe"
+    } else {
+        "mihomo.exe"
+    }
     $executables = @(Get-ChildItem -LiteralPath $extractDirectory -Recurse -File |
-        Where-Object { $_.Name -ceq "mihomo.exe" })
+        Where-Object { $_.Name -ceq "mihomo.exe" -or $_.Name -ceq $assetExecutableName })
     if ($executables.Count -ne 1) {
-        throw "Pinned Mihomo archive must contain exactly one mihomo.exe."
+        throw "Pinned Mihomo archive must contain exactly one canonical core executable."
     }
     $downloadedBinary = Get-OrdinaryFile `
         -LiteralPath $executables[0].FullName `
@@ -232,6 +239,11 @@ License: GPL-3.0. See mihomo-LICENSE.txt in this directory.
 Source availability: the upstream release page publishes the corresponding release,
 source archive links, and source-related assets. Clash# redistributes the unmodified
 Windows amd64 mihomo core as a bundled runtime dependency.
+
+Clash# release materials include MIHOMO-SOURCE-MATERIALS.zip. Its manifest binds
+the corresponding source, vendor, patched toolchain and observed public CA input
+to the bundled binary, with an offline compilation script and original licenses.
+These fixed inputs do not claim byte-identical reproduction of the upstream binary.
 
 Trademark/naming note: Clash# is not affiliated with MetaCubeX and does not use
 "mihomo" in the application name.

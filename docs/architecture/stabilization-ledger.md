@@ -1,6 +1,6 @@
 # ClashSharp Stabilization Ledger
 
-> This ledger preserves architecture-closure evidence; it is not the current project-status summary. Current status, release blockers, execution order, and validation are tracked in the [1.0.0 execution ledger](../reviews/1.0.0-execution-ledger.md). Earlier review documents preserve their original snapshots.
+> This ledger preserves architecture-closure evidence; it is not the current project-status summary. See the [current implementation and development plan](../reviews/2026-11-01-development-status-and-plan.md) for the overview, and the [1.0.0 execution ledger](../reviews/1.0.0-execution-ledger.md) for ongoing results and validation. Earlier review documents preserve their original snapshots.
 
 The architecture stabilization design and its audit traceability table are normative. A row becomes `Closed` only when its regression or manual evidence, closure commit, reviewer, and closure date are all recorded. `—` means evidence does not yet exist; it is never a substitute for closure proof.
 

@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Net.Http;
 using System.Security;
 using System.Threading;
 using System.Threading.Tasks;
@@ -19,7 +20,7 @@ namespace ClashSharp.ViewModel;
 /// Thread safety: Not thread-safe; intended for UI-thread binding and command execution.
 /// Side effects: Commands can import, validate, activate profiles, and write logs through injected delegates.
 /// </remarks>
-internal sealed class ProfilesViewModel : ObservableObject, ILocalizedPresentation
+internal sealed partial class ProfilesViewModel : ObservableObject, ILocalizedPresentation
 {
     /// <summary>Refreshes current page text without reloading data or changing user choices.</summary>
     public void RefreshLocalization()
@@ -27,6 +28,7 @@ internal sealed class ProfilesViewModel : ObservableObject, ILocalizedPresentati
         OnPropertyChanged(nameof(PageTitleText));
         OnPropertyChanged(nameof(DescriptionText));
         OnPropertyChanged(nameof(ImportProfileText));
+        RefreshImportLocalization();
         OnPropertyChanged(nameof(ValidateProfileText));
         OnPropertyChanged(nameof(SetActiveProfileText));
         OnPropertyChanged(nameof(RenameProfileText));
@@ -84,6 +86,7 @@ internal sealed class ProfilesViewModel : ObservableObject, ILocalizedPresentati
     /// <param name="getActiveProfileId">Active-profile resolver. Must not be null.</param>
     /// <param name="errorSink">Unexpected error sink. Must not be null.</param>
     /// <param name="displayMapper">UI display row mapper. Must not be null.</param>
+    /// <param name="subscriptions">Subscription import boundary for the combined configuration page.</param>
     /// <exception cref="ArgumentNullException">A required dependency is null.</exception>
     public ProfilesViewModel(
         Func<string, string> getString,
@@ -91,7 +94,8 @@ internal sealed class ProfilesViewModel : ObservableObject, ILocalizedPresentati
         IPageLog log,
         Func<string> getActiveProfileId,
         IApplicationErrorSink errorSink,
-        IModelDisplayMapper displayMapper)
+        IModelDisplayMapper displayMapper,
+        ISubscriptionLinkCatalog? subscriptions = null)
     {
         _getString = getString ?? throw new ArgumentNullException(nameof(getString));
         _profiles = profiles ?? throw new ArgumentNullException(nameof(profiles));
@@ -100,6 +104,7 @@ internal sealed class ProfilesViewModel : ObservableObject, ILocalizedPresentati
             ?? throw new ArgumentNullException(nameof(getActiveProfileId));
         _errorSink = errorSink ?? throw new ArgumentNullException(nameof(errorSink));
         _displayMapper = displayMapper ?? throw new ArgumentNullException(nameof(displayMapper));
+        InitializeImport(subscriptions);
         ImportProfileCommand = new AsyncRelayCommand(
             ImportLocalProfileFromCommandAsync,
             _errorSink,
@@ -136,7 +141,7 @@ internal sealed class ProfilesViewModel : ObservableObject, ILocalizedPresentati
 
     /// <summary>Gets the import command label.</summary>
     /// <value>Localized command label.</value>
-    public string ImportProfileText => _getString("Command.Import");
+    public string ImportProfileText => _getString("Profiles.Import.File");
 
     /// <summary>Gets the validate command label.</summary>
     /// <value>Localized command label.</value>
@@ -194,7 +199,10 @@ internal sealed class ProfilesViewModel : ObservableObject, ILocalizedPresentati
         StatusSeverity = PageStatusSeverity.Error;
         string? missing = (exception as ProfileValidationException)?.GetMissingSectionNames();
         _statusTextFactory = () => missing is not null
-            ? string.Format(CultureInfo.CurrentCulture, _getString("Profiles.Validation.MissingSections"), missing) : _getString(key);
+            ? string.Format(CultureInfo.CurrentCulture, _getString("Profiles.Validation.MissingSections"), missing)
+            : exception is HttpRequestException { StatusCode: { } status }
+                ? string.Format(CultureInfo.CurrentCulture, _getString("Profiles.Import.HttpFailed.Format"), (int)status)
+                : exception is OperationCanceledException ? _getString("Profiles.Import.TimedOut") : _getString(key);
         StatusText = _statusTextFactory();
     }
 
@@ -242,6 +250,7 @@ internal sealed class ProfilesViewModel : ObservableObject, ILocalizedPresentati
                 _selectedProfile = value;
                 OnPropertyChanged(nameof(SelectedProfile));
                 OnPropertyChanged(nameof(HasSelectedProfile));
+                OnPropertyChanged(nameof(CanUseImportedProfile));
                 OnPropertyChanged(nameof(CanModifySelectedProfile));
             }
         }
@@ -320,14 +329,17 @@ internal sealed class ProfilesViewModel : ObservableObject, ILocalizedPresentati
     public async Task ImportLocalProfileAsync(string filePath, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(filePath);
+        if (IsImporting) { return; }
         ClearStatus();
+        IsImporting = true;
         try
         {
             ProfileImportResult result = await _profiles.ImportLocalProfileAsync(filePath, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             _log.Append("Info", "Profiles", $"Local profile imported: {result.ProfileName}.", result.ConfigPath);
             await LoadAsync(cancellationToken);
-            SetStatus("Profiles.Status.Imported", PageStatusSeverity.Success);
+            cancellationToken.ThrowIfCancellationRequested();
+            ShowImportResult(result);
         }
         catch (Exception exception) when (
             exception is ArgumentException
@@ -343,6 +355,7 @@ internal sealed class ProfilesViewModel : ObservableObject, ILocalizedPresentati
             _log.Append("Warning", "Profiles", "Local profile import failed.", exception.Message);
             SetFailure("Profiles.Status.ImportFailed", exception);
         }
+        finally { IsImporting = false; }
     }
 
     /// <summary>Validates the selected profile and refreshes profile rows.</summary>

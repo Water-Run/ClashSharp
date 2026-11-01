@@ -1872,7 +1872,7 @@ public sealed class AppResourcePackagingTests
 
         Assert.Contains("GNU GENERAL PUBLIC LICENSE", licenseText, StringComparison.Ordinal);
         Assert.Contains("MetaCubeX/mihomo", noticeText, StringComparison.Ordinal);
-        Assert.Contains("v1.19.27", noticeText, StringComparison.Ordinal);
+        Assert.Contains("v1.19.33", noticeText, StringComparison.Ordinal);
         Assert.Contains("SHA256", noticeText, StringComparison.Ordinal);
         Assert.Contains("Binaries\\mihomo-LICENSE.txt", projectXml, StringComparison.Ordinal);
         Assert.Contains("Binaries\\mihomo-NOTICE.txt", projectXml, StringComparison.Ordinal);
@@ -1881,7 +1881,7 @@ public sealed class AppResourcePackagingTests
         using JsonDocument manifest = JsonDocument.Parse(File.ReadAllText(manifestPath));
         JsonElement root = manifest.RootElement;
         Assert.Equal(1, root.GetProperty("schemaVersion").GetInt32());
-        Assert.Equal("v1.19.27", root.GetProperty("version").GetString());
+        Assert.Equal("v1.19.33", root.GetProperty("version").GetString());
         Assert.Equal(new FileInfo(binaryPath).Length, root.GetProperty("length").GetInt64());
         using FileStream binary = File.OpenRead(binaryPath);
         string actualHash = Convert.ToHexString(SHA256.HashData(binary)).ToLowerInvariant();

@@ -282,6 +282,7 @@ internal sealed partial class MasterControlViewModel : ObservableObject, ILocali
     /// <param name="probeWebsiteAsync">Optional explicit website check using the current network route.</param>
     /// <param name="probePublicIpAsync">Optional explicit public egress metadata check.</param>
     /// <param name="updateChecker">Optional read-only release checker.</param>
+    /// <param name="notifications">User-policy results of explicit dashboard checks.</param>
     /// <param name="navigateToPage">Optional shell navigation for information-tile detail links.</param>
     /// <exception cref="ArgumentNullException">A required dependency is null.</exception>
     public MasterControlViewModel(
@@ -305,7 +306,8 @@ internal sealed partial class MasterControlViewModel : ObservableObject, ILocali
         Func<string, CancellationToken, Task<WebsiteProbeResult>>? probeWebsiteAsync = null,
         Func<CancellationToken, Task<PublicIpInformation>>? probePublicIpAsync = null,
         IApplicationUpdateChecker? updateChecker = null,
-        Action<string>? navigateToPage = null)
+        Action<string>? navigateToPage = null,
+        IUserOperationNotifications? notifications = null)
     {
         _localization = localization ?? throw new ArgumentNullException(nameof(localization));
         _core = core ?? throw new ArgumentNullException(nameof(core));
@@ -332,6 +334,7 @@ internal sealed partial class MasterControlViewModel : ObservableObject, ILocali
         _probeWebsiteAsync = probeWebsiteAsync;
         _probePublicIpAsync = probePublicIpAsync;
         _updateChecker = updateChecker;
+        _notifications = notifications;
         _navigateToPage = navigateToPage;
         _modeApplied = modeApplied ?? (_ => Task.CompletedTask);
         DisabledModeCommand = CreatePageCommand(

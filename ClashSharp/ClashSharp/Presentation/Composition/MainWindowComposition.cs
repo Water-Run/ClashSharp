@@ -125,6 +125,9 @@ internal sealed class MainWindowComposition
         private readonly ShellNavigationService _navigation;
         private readonly IWindowPlacementStore _windowPlacementStore;
         private readonly InstallationPinningService _installationPins = new();
+        private readonly NotificationService? _notifications;
+        private bool _observedTunRequirement;
+        private bool _serviceFailureReported;
         private int _disposed;
 
         public Runtime(
@@ -140,7 +143,8 @@ internal sealed class MainWindowComposition
             StartupGuideComposition startupGuideComposition,
             IPageFactory pageFactory,
             ShellNavigationService navigation,
-            IWindowPlacementStore windowPlacementStore)
+            IWindowPlacementStore windowPlacementStore,
+            NotificationService? notifications = null)
         {
             _settings = settings ?? throw new ArgumentNullException(nameof(settings));
             _localization = localization ?? throw new ArgumentNullException(nameof(localization));
@@ -155,6 +159,7 @@ internal sealed class MainWindowComposition
             PageFactory = pageFactory ?? throw new ArgumentNullException(nameof(pageFactory));
             _navigation = navigation ?? throw new ArgumentNullException(nameof(navigation));
             _windowPlacementStore = windowPlacementStore ?? throw new ArgumentNullException(nameof(windowPlacementStore));
+            _notifications = notifications;
             _startupGuide = startupGuideComposition.Create(errorSink, tag =>
             {
                 if (ShellRouteCatalog.TryParse(tag, out ShellRoute route)) { _navigation.Navigate(route); }
@@ -233,9 +238,25 @@ internal sealed class MainWindowComposition
         }
 
         /// <summary>Refreshes the cached Mihomo status used by the tray menu.</summary>
-        public Task RefreshMihomoStatusAsync(CancellationToken cancellationToken)
+        public async Task RefreshMihomoStatusAsync(CancellationToken cancellationToken)
         {
-            return _mihomoService.GetStatusAsync(cancellationToken);
+            MihomoServiceStatus status = await _mihomoService.GetStatusAsync(cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
+            bool intended = _settings.CurrentMode is ClashSharpMode.RuleTakeover or ClashSharpMode.FullTakeover
+                && _settings.TransparentProxyEnabled;
+            if (!intended) { _observedTunRequirement = false; _serviceFailureReported = false; return; }
+            _observedTunRequirement |= status.IsReady || _networkState.GetLatestVerifiedState()?.TransparentProxyEnabled == true;
+            if (!_observedTunRequirement) { return; }
+            if (!status.IsReady && !_serviceFailureReported)
+            {
+                _serviceFailureReported = true;
+                _notifications?.ReportAvailability("Notification.Runtime.Title", "Notification.Runtime.ServiceUnavailable", true);
+            }
+            else if (status.IsReady && _serviceFailureReported)
+            {
+                _serviceFailureReported = false;
+                _notifications?.ReportAvailability("Notification.Runtime.Title", "Notification.Runtime.Recovered", false);
+            }
         }
 
         /// <summary>Logs a localized warning emitted by startup-shell presentation.</summary>
@@ -329,6 +350,7 @@ internal sealed class MainWindowComposition
 
         private void MihomoCore_UnexpectedExit(object? sender, MihomoCoreUnexpectedExitEventArgs e)
         {
+            _notifications?.NotifyRuntimeFailure();
             TrayStateChanged?.Invoke(this, EventArgs.Empty);
         }
     }

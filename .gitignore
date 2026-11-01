@@ -9,6 +9,7 @@ x86/
 AppPackages/
 TestResults/
 artifacts/
+ClashSharp/.download/
 
 .vs/
 *.suo

@@ -119,7 +119,12 @@ internal sealed partial class SettingsViewModel
         return ExecutePreferenceCommandAsync(snapshot, token => _settings.ApplyChangesAsync(snapshot, token), cancellationToken);
     }
 
-    private async Task ExecutePreferenceCommandAsync(
+    private Task ExecutePreferenceCommandAsync(
+        IReadOnlyList<SettingValueChange> snapshot, Func<CancellationToken, Task> apply, CancellationToken cancellationToken) =>
+        _operationNotifications.ExecuteAsync(() => ExecutePreferenceCommandCoreAsync(snapshot, apply, cancellationToken),
+            "Nav.Settings", "Notification.Settings.Saved", "Application.UnexpectedError", cancellationToken);
+
+    private async Task ExecutePreferenceCommandCoreAsync(
         IReadOnlyList<SettingValueChange> snapshot, Func<CancellationToken, Task> apply, CancellationToken cancellationToken)
     {
         _preferenceCommands++;

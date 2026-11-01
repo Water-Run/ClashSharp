@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using ClashSharp.ApplicationModel.Diagnostics;
@@ -20,15 +21,18 @@ public sealed class StartupCheckService
     private readonly IStartupCheckProbe _probe;
     private readonly Func<string, string> _getString;
     private readonly IApplicationErrorSink _errorSink;
+    private readonly IUserOperationNotifications? _notifications;
 
     internal StartupCheckService(
         IStartupCheckProbe probe,
         Func<string, string> getString,
-        IApplicationErrorSink errorSink)
+        IApplicationErrorSink errorSink,
+        IUserOperationNotifications? notifications = null)
     {
         _probe = probe ?? throw new ArgumentNullException(nameof(probe));
         _getString = getString ?? throw new ArgumentNullException(nameof(getString));
         _errorSink = errorSink ?? throw new ArgumentNullException(nameof(errorSink));
+        _notifications = notifications;
     }
 
     /// <summary>
@@ -63,6 +67,10 @@ public sealed class StartupCheckService
             checks.Add(evaluation.Item);
         }
 
+        bool needsAttention = checks.Any(static item => !item.IsHealthy && !item.IsOptional
+            && item.Kind != StartupCheckKind.Subscription);
+        _notifications?.ReportOperation("Notification.Runtime.Title", needsAttention
+            ? "Notification.Startup.Attention" : "Notification.Startup.Checked", needsAttention);
         return checks.AsReadOnly();
     }
 

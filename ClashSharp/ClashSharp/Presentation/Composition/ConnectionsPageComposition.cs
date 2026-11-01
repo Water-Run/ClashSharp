@@ -14,7 +14,7 @@ internal static class ConnectionsPageComposition
         ArgumentNullException.ThrowIfNull(context);
         ConnectionsViewModel viewModel = new(
             new ConnectionsLocalizationAdapter(context.Localization, context.CreateDisplayFormatter()),
-            new ActiveConnectionClientAdapter(context.MihomoConnections),
+            new ActiveConnectionClientAdapter(context.MihomoConnections, context.Notifications),
             new ConnectionLogAdapter(context.LogStorage),
             context.ErrorSink,
             context.MainlandChinaTextDisplay.Apply,

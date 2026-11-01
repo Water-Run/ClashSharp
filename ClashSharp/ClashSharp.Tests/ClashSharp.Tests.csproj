@@ -147,6 +147,7 @@
     <Compile Include="..\ClashSharp\Presentation\Adapters\PageLogAdapter.cs" Link="Presentation\Adapters\PageLogAdapter.cs" />
     <Compile Include="..\ClashSharp\Presentation\Adapters\LogManagementStoreAdapter.cs" Link="Presentation\Adapters\LogManagementStoreAdapter.cs" />
     <Compile Include="..\ClashSharp\Service\MihomoProfilePreviewParser.cs" Link="Service\MihomoProfilePreviewParser.cs" />
+    <Compile Include="..\ClashSharp\Service\MihomoProfilePreviewParser.Semantic.cs" Link="Service\MihomoProfilePreviewParser.Semantic.cs" />
     <Compile Include="..\ClashSharp\Service\MihomoProfileParserService.cs" Link="Service\MihomoProfileParserService.cs" />
     <Compile Include="..\ClashSharp\Service\MihomoProfileParserServiceFactory.cs" Link="Service\MihomoProfileParserServiceFactory.cs" />
     <Compile Include="..\ClashSharp\Service\MihomoProfileShapeValidator.cs" Link="Service\MihomoProfileShapeValidator.cs" />
@@ -234,6 +235,7 @@
     <Compile Include="..\ClashSharp\ViewModel\IDiagnosticsLog.cs" Link="ViewModel\IDiagnosticsLog.cs" />
     <Compile Include="..\ClashSharp\ViewModel\SettingsDiagnosticStatus.cs" Link="ViewModel\SettingsDiagnosticStatus.cs" />
     <Compile Include="..\ClashSharp\ViewModel\SettingsViewModel.cs" Link="ViewModel\SettingsViewModel.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\SettingsViewModel.Notifications.cs" Link="ViewModel\SettingsViewModel.Notifications.cs" />
     <Compile Include="..\ClashSharp\ViewModel\ConnectionTestSiteCatalog.cs" Link="ViewModel\ConnectionTestSiteCatalog.cs" />
     <Compile Include="..\ClashSharp\ViewModel\McpSettingsViewModel.cs" Link="ViewModel\McpSettingsViewModel.cs" />
     <Compile Include="..\ClashSharp\ViewModel\SettingsViewModel.ResetOperation.cs" Link="ViewModel\SettingsViewModel.ResetOperation.cs" />
@@ -321,6 +323,8 @@
     <Compile Include="..\ClashSharp\ViewModel\IConnectionLog.cs" Link="ViewModel\IConnectionLog.cs" />
     <Compile Include="..\ClashSharp\ViewModel\ActiveConnectionDisplayRow.cs" Link="ViewModel\ActiveConnectionDisplayRow.cs" />
     <Compile Include="..\ClashSharp\ViewModel\ProfilesViewModel.cs" Link="ViewModel\ProfilesViewModel.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\ProfilesViewModel.Import.cs" Link="ViewModel\ProfilesViewModel.Import.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\SubscriptionImportWorkflow.cs" Link="ViewModel\SubscriptionImportWorkflow.cs" />
     <Compile Include="..\ClashSharp\ViewModel\LinksViewModel.cs" Link="ViewModel\LinksViewModel.cs" />
     <Compile Include="..\ClashSharp\ViewModel\LogsViewModel.cs" Link="ViewModel\LogsViewModel.cs" />
     <Compile Include="..\ClashSharp\ViewModel\LogRecordDisplay.cs" Link="ViewModel\LogRecordDisplay.cs" />

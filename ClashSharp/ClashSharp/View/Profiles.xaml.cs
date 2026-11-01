@@ -12,6 +12,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
+using Windows.ApplicationModel.DataTransfer;
 using Windows.Storage;
 using Windows.Storage.Pickers;
 using WinRT.Interop;
@@ -107,6 +108,36 @@ public sealed partial class Profiles : Page
                     file.Path,
                     cancellationToken);
             }
+        });
+    }
+
+    private async void ImportSubscriptionButton_Click(object sender, RoutedEventArgs e)
+    {
+        await RunPageOperationAsync(token => _viewModel.ImportSubscriptionCommand.ExecuteObservedAsync(null, token));
+    }
+
+    private void Page_DragOver(object sender, DragEventArgs e)
+    {
+        e.AcceptedOperation = _viewModel.CanImport && e.DataView.Contains(StandardDataFormats.StorageItems)
+            ? DataPackageOperation.Copy : DataPackageOperation.None;
+        e.Handled = true;
+    }
+
+    private async void Page_Drop(object sender, DragEventArgs e)
+    {
+        if (!_viewModel.CanImport || !e.DataView.Contains(StandardDataFormats.StorageItems)) { return; }
+        await RunPageOperationAsync(async token =>
+        {
+            IReadOnlyList<IStorageItem> items = await e.DataView.GetStorageItemsAsync();
+            token.ThrowIfCancellationRequested();
+            if (items.Count == 1 && items[0] is StorageFile file
+                && (file.FileType.Equals(".yaml", StringComparison.OrdinalIgnoreCase)
+                    || file.FileType.Equals(".yml", StringComparison.OrdinalIgnoreCase)
+                    || file.FileType.Equals(".txt", StringComparison.OrdinalIgnoreCase)))
+            {
+                await _viewModel.ImportProfileCommand.ExecuteObservedAsync(file.Path, token);
+            }
+            else { _viewModel.ReportInvalidDroppedFile(); }
         });
     }
 

@@ -379,7 +379,8 @@ internal sealed partial class SettingsViewModel : ObservableObject
         Func<AppLanguage, bool>? isDisplayLanguageRestartPending = null,
         Func<CancellationToken, Task<SettingsDataReplacementResult>>? replaceAllSettingsAsync = null,
         ISettingsRuntimeGroupReset? runtimeGroupReset = null,
-        Action? requireSettingsRestart = null)
+        Action? requireSettingsRestart = null,
+        IUserOperationNotifications? notifications = null)
         : this(
             settings,
             applyLanguage,
@@ -415,7 +416,8 @@ internal sealed partial class SettingsViewModel : ObservableObject
             isDisplayLanguageRestartPending,
             replaceAllSettingsAsync,
             runtimeGroupReset,
-            requireSettingsRestart)
+            requireSettingsRestart,
+            notifications)
     {
     }
 
@@ -456,10 +458,13 @@ internal sealed partial class SettingsViewModel : ObservableObject
         Func<AppLanguage, bool>? isDisplayLanguageRestartPending = null,
         Func<CancellationToken, Task<SettingsDataReplacementResult>>? replaceAllSettingsAsync = null,
         ISettingsRuntimeGroupReset? runtimeGroupReset = null,
-        Action? requireSettingsRestart = null)
+        Action? requireSettingsRestart = null,
+        IUserOperationNotifications? notifications = null)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _requireSettingsRestart = requireSettingsRestart ?? (() => { });
+        _operationNotifications = new(notifications);
+        _userNotifications = notifications;
 #if UNIT_TESTS
         _replaceAllSettingsAsync = replaceAllSettingsAsync;
         _runtimeGroupReset = runtimeGroupReset;
@@ -2519,6 +2524,18 @@ internal sealed partial class SettingsViewModel : ObservableObject
                 },
             };
             AppendConnectionTestLog(report);
+            string[] timedOut = results.Where(static result => result.WasTimeout).Select(static result => result.Label).ToArray();
+            if (timedOut.Length > 0) { _notifyConnectionTestTimeout(string.Join(", ", timedOut)); }
+            else if (summaryState == ConnectionTestSummaryState.AllPassed)
+            {
+                _userNotifications?.ReportOperation("Settings.ConnectionTestUrl.Title", "Settings.ConnectionTest.AllPassed", false);
+            }
+            else
+            {
+                _userNotifications?.ReportOperation("Settings.ConnectionTestUrl.Title",
+                    summaryState == ConnectionTestSummaryState.AllFailed ? "Settings.ConnectionTest.AllFailed" : "Settings.ConnectionTest.PartialPassed.Format",
+                    true, summaryState == ConnectionTestSummaryState.AllFailed ? [] : [results.Count(static result => result.Succeeded), results.Count]);
+            }
             return report;
         }
         finally
@@ -2550,12 +2567,11 @@ internal sealed partial class SettingsViewModel : ObservableObject
                 ObservedElapsedMilliseconds = Math.Max(0, (int)Math.Round(stopwatch.Elapsed.TotalMilliseconds)),
             };
         }
-        catch (TaskCanceledException exception) when (
+        catch (OperationCanceledException exception) when (
             !ExceptionGraphClassifier.IsProcessFatal(exception)
             && !ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
         {
             stopwatch.Stop();
-            _notifyConnectionTestTimeout(url);
             return new ConnectionTestTargetResult(
                 label,
                 url,
@@ -2566,6 +2582,7 @@ internal sealed partial class SettingsViewModel : ObservableObject
             {
                 LabelSource = new(labelKey),
                 StatusSource = new("Settings.ConnectionTest.TimedOut"),
+                WasTimeout = true,
                 ObservedElapsedMilliseconds = Math.Max(0, (int)Math.Round(stopwatch.Elapsed.TotalMilliseconds)),
             };
         }
@@ -2689,7 +2706,7 @@ internal sealed partial class SettingsViewModel : ObservableObject
         return ResetSettingsAsync(SettingsResetScope.All, cancellationToken);
     }
 
-    private async Task ResetSettingsAsync(SettingsResetScope scope, CancellationToken cancellationToken)
+    private async Task ResetSettingsCoreAsync(SettingsResetScope scope, CancellationToken cancellationToken)
     {
         await _resetSettingsGate.WaitAsync(cancellationToken);
         bool durableResetStarted = false;

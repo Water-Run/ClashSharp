@@ -74,6 +74,7 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
     /// <summary>Runtime-only shell dependencies created after startup completes.</summary>
     private MainWindowComposition.Runtime? _runtime;
     private IDisposable? _settingsApplicationSubscription;
+    private IDisposable? _notificationRegistration;
 
     /// <summary>Coordinates tray commands without coupling behavior to WinUI callbacks.</summary>
     private TrayCommandService _trayCommandService = null!;
@@ -157,7 +158,8 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
         ApplicationActionService applicationActions,
         ApplicationLifecycleService applicationLifecycle,
         TrayCommandService trayCommandService,
-        StartupConflictSnapshot startupConflicts)
+        StartupConflictSnapshot startupConflicts,
+        NotificationService? notifications = null)
     {
         if (_runtimeReady)
         {
@@ -170,6 +172,8 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
         _trayCommandService = trayCommandService ?? throw new ArgumentNullException(nameof(trayCommandService));
         _startupConflicts = startupConflicts ?? throw new ArgumentNullException(nameof(startupConflicts));
         _runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
+        _notificationRegistration = notifications?.Register(() =>
+            DispatcherQueue.TryEnqueue(() => PrimaryWindowActivation.BringToFront(this)));
         if (_windowPlacementView is not null)
         {
             _windowPlacement = runtime.CreateWindowPlacementSession(_windowPlacementView);
@@ -528,6 +532,8 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
     private async void OnWindowClosed(object sender, WindowEventArgs args)
     {
         Activated -= OnInstallationWindowActivated;
+        _ = StartupShellSetupPolicy.TryRun(() => _notificationRegistration?.Dispose());
+        _notificationRegistration = null;
         WindowDialogCoordinator.MarkWindowClosing(_dialogXamlRoot);
         _dialogXamlRoot = null;
         Task? statusMonitorTask = _mihomoServiceStatusMonitorTask;

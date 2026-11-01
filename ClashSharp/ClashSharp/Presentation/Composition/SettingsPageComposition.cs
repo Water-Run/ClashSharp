@@ -73,7 +73,7 @@ internal static class SettingsPageComposition
         SettingsDiagnosticsViewModel diagnosticsViewModel = new(
             new WindowsDiagnosticsClient(context.WindowsDiagnostics),
             new DiagnosticsLog(logStorage),
-            localization.GetString);
+            localization.GetString, context.Notifications);
         SettingsViewModel viewModel = new(
             new AppSettingsStore(settings),
             language => WinUiLanguageResources.Apply(localization, language),
@@ -113,14 +113,15 @@ internal static class SettingsPageComposition
             isDisplayLanguageRestartPending: language => language != localization.CurrentLanguage,
             replaceAllSettingsAsync: context.DataReplacement.ResetAllSettingsAsync,
             runtimeGroupReset: context.RuntimeGroupReset,
-            requireSettingsRestart: context.RestartState.RequireRestart);
+            requireSettingsRestart: context.RestartState.RequireRestart,
+            notifications: context.Notifications);
 
         SettingsPageOperations operations = CreateOperations(context);
 
         return new SettingsPageDependencies(
             viewModel,
-            new SettingsRecoveryViewModel(localization.GetString, context.SettingsApplicationRecovery, errorSink, context.RestartState.RequireRestart),
-            new McpSettingsViewModel(context.McpServer, localization.GetString, errorSink),
+            new SettingsRecoveryViewModel(localization.GetString, context.SettingsApplicationRecovery, errorSink, context.RestartState.RequireRestart, context.Notifications),
+            new McpSettingsViewModel(context.McpServer, localization.GetString, errorSink, context.Notifications),
             localization.GetString,
             context.RestartState.SetRestartPending,
             AppThemeService.ParseAccentColorOrDefault,
@@ -178,7 +179,8 @@ internal static class SettingsPageComposition
             context.DataPackages,
             context.DataReplacement,
             context.ErrorSink,
-            context.SettingsExports);
+            context.SettingsExports,
+            context.Notifications);
     }
 }
 
@@ -188,8 +190,11 @@ internal sealed class SettingsPageOperations(
     IDataPackageExporter dataPackages,
     ISettingsDataReplacement dataReplacement,
     IApplicationErrorSink errorSink,
-    SettingsExportCoordinator exports) : ISettingsPageOperations
+    SettingsExportCoordinator exports,
+    IUserOperationNotifications? notifications = null) : ISettingsPageOperations
 {
+    private readonly OperationNotificationRunner _notifications = new(notifications);
+
     /// <inheritdoc />
     public async Task<IPreparedSettingsImport?> PrepareDataImportAsync(string packagePath, CancellationToken cancellationToken)
     {
@@ -212,7 +217,8 @@ internal sealed class SettingsPageOperations(
 
     /// <inheritdoc />
     public Task<SettingsDataReplacementResult> ImportDataPackageAsync(IPreparedSettingsImport import, CancellationToken cancellationToken) =>
-        dataReplacement.ImportAsync(import, cancellationToken);
+        _notifications.ExecuteAsync(() => dataReplacement.ImportAsync(import, cancellationToken),
+            "Nav.Settings", "Settings.DataImport.Completed", "Settings.DataImport.Invalid", cancellationToken);
 
     /// <inheritdoc />
     public Task ExportDataAsync(
@@ -220,7 +226,7 @@ internal sealed class SettingsPageOperations(
         DataPackageExportScope scope,
         CancellationToken cancellationToken)
     {
-        return exports.ExecuteAsync((lease, token) => scope switch
+        return _notifications.ExecuteAsync(() => exports.ExecuteAsync((lease, token) => scope switch
         {
             DataPackageExportScope.Settings => dataPackages.ExportAdmittedAsync(
                 destinationPath,
@@ -236,7 +242,7 @@ internal sealed class SettingsPageOperations(
                 destinationPath,
                 token),
             _ => throw new ArgumentOutOfRangeException(nameof(scope), scope, "Unsupported export scope."),
-        }, cancellationToken);
+        }, cancellationToken), "Nav.Settings", "Settings.DataExport.Completed", "Settings.DataExport.Failed", cancellationToken);
     }
 
     /// <inheritdoc />

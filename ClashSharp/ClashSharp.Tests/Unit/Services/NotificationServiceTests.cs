@@ -13,6 +13,100 @@ namespace ClashSharp.Tests.Unit.Services;
 /// <summary>Unit tests for notification policy and logging behavior.</summary>
 public sealed class NotificationServiceTests
 {
+    [Theory]
+    [InlineData(NotificationLevel.CriticalOnly, false, false)]
+    [InlineData(NotificationLevel.Default, false, false)]
+    [InlineData(NotificationLevel.More, false, true)]
+    [InlineData(NotificationLevel.CriticalOnly, true, false)]
+    [InlineData(NotificationLevel.Default, true, true)]
+    [InlineData(NotificationLevel.More, true, true)]
+    public void OperationOutcomesRespectAllVerbosityLevels(NotificationLevel level, bool failed, bool expected)
+    {
+        FakeWin11NotificationPlatform platform = new();
+        NotificationService service = CreateService(true, level, platform, new(), new());
+        service.ReportOperation("Title", "Message", failed);
+        Assert.Equal(expected ? 1 : 0, platform.Requests.Count);
+    }
+
+    [Theory]
+    [InlineData(NotificationLevel.CriticalOnly)]
+    [InlineData(NotificationLevel.Default)]
+    [InlineData(NotificationLevel.More)]
+    public void DisabledNotificationsSuppressEveryOperationAndAvailabilityOutcome(NotificationLevel level)
+    {
+        FakeWin11NotificationPlatform platform = new();
+        NotificationService service = CreateService(false, level, platform, new(), new());
+        service.ReportOperation("Title", "Succeeded", false);
+        service.ReportOperation("Title", "Failed", true);
+        service.ReportAvailability("Title", "Unavailable", true);
+        service.ReportAvailability("Title", "Recovered", false);
+        service.NotifyConnectionTestTimeout("First target");
+        Assert.Empty(platform.Requests);
+    }
+
+    [Theory]
+    [InlineData(NotificationLevel.CriticalOnly, false)]
+    [InlineData(NotificationLevel.Default, true)]
+    [InlineData(NotificationLevel.More, true)]
+    public void TestTimeoutRequiresDefaultOrDetailedVerbosity(NotificationLevel level, bool expected)
+    {
+        FakeWin11NotificationPlatform platform = new();
+        NotificationService service = CreateService(true, level, platform, new(), new());
+        service.NotifyConnectionTestTimeout("First target");
+        Assert.Equal(expected ? 1 : 0, platform.Requests.Count);
+    }
+
+    [Theory]
+    [InlineData(NotificationLevel.CriticalOnly, true, true)]
+    [InlineData(NotificationLevel.Default, true, true)]
+    [InlineData(NotificationLevel.More, true, true)]
+    [InlineData(NotificationLevel.CriticalOnly, false, false)]
+    [InlineData(NotificationLevel.Default, false, true)]
+    [InlineData(NotificationLevel.More, false, true)]
+    public void AvailabilityFailureAndRecoveryUseImportantAndDefaultPolicies(NotificationLevel level, bool failed, bool expected)
+    {
+        FakeWin11NotificationPlatform platform = new();
+        NotificationService service = CreateService(true, level, platform, new(), new());
+        service.ReportAvailability("Title", "Message", failed);
+        Assert.Equal(expected ? 1 : 0, platform.Requests.Count);
+    }
+
+    [Fact]
+    public void OwnedNotificationRegistrationIsReleasedExactlyOnce()
+    {
+        int released = 0;
+        using ClashSharpUi::ClashSharp.Service.NotificationRegistration registration = new(() => released++);
+        registration.Dispose();
+        registration.Dispose();
+        Assert.Equal(1, released);
+    }
+
+    [Theory]
+    [InlineData(true, 1)]
+    [InlineData(false, 0)]
+    public void AvailabilityFailureUsesOnlyPreviouslyObservedPolicyDuringSettingsRecovery(bool enabled, int expected)
+    {
+        bool blocked = false;
+        FakeWin11NotificationPlatform platform = new();
+        NotificationService service = new(() => blocked ? throw new InvalidOperationException("settings admission closed") : enabled,
+            () => NotificationLevel.CriticalOnly, key => key, static (_, _, _, _) => { }, new FakeTriggerRuntimeEvents(), platform);
+        service.ReportOperation("Title", "Warm policy", false);
+        Assert.Empty(platform.Requests);
+        blocked = true;
+        service.ReportAvailability("Title", "Recovery required", true);
+        Assert.Equal(expected, platform.Requests.Count);
+    }
+
+    [Fact]
+    public void UnavailableSettingsDoNotInventNotificationPermission()
+    {
+        FakeWin11NotificationPlatform platform = new();
+        NotificationService service = new(() => throw new InvalidOperationException("settings unavailable"),
+            () => NotificationLevel.More, key => key, static (_, _, _, _) => { }, new FakeTriggerRuntimeEvents(), platform);
+        service.ReportAvailability("Title", "Recovery required", true);
+        Assert.Empty(platform.Requests);
+    }
+
     [Fact]
     public void Show_WhenNotificationIsSuppressed_LogsSuppressionWithoutPlatformCallOrRuntimeEvent()
     {

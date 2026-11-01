@@ -15,8 +15,8 @@ internal static class ProxiesPageComposition
         ProxiesViewModel viewModel = new(
             new ProxiesLocalizationAdapter(context.Localization),
             new ProxyNodeCatalogAdapter(context.ProxyNodes),
-            new ProxyLatencyTesterAdapter(context.ProxyLatency),
-            new ProxyRuntimeControllerAdapter(context.MihomoController, context.ProxySelections),
+            new ProxyLatencyTesterAdapter(context.ProxyLatency, context.Notifications),
+            new ProxyRuntimeControllerAdapter(context.MihomoController, context.ProxySelections, context.Notifications),
             new ProxiesLogAdapter(context.LogStorage),
             context.ErrorSink,
             new ModelDisplayMapper(context.MainlandChinaTextDisplay.Apply, context.CreateDisplayFormatter()));

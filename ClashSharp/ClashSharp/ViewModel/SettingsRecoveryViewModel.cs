@@ -13,7 +13,7 @@ namespace ClashSharp.ViewModel;
 
 /// <summary>Shows persisted failures without automatically repeating their effects.</summary>
 internal sealed class SettingsRecoveryViewModel(Func<string, string> getString, ISettingsApplicationRecovery recovery,
-    IApplicationErrorSink errors, Action requireRestart) : ObservableObject
+    IApplicationErrorSink errors, Action requireRestart, IUserOperationNotifications? notifications = null) : ObservableObject
 {
     private bool _isBusy;
     private string? _errorResourceKey;
@@ -76,6 +76,7 @@ internal sealed class SettingsRecoveryViewModel(Func<string, string> getString, 
             {
                 SetRetryError(issue, result.Outcome.Code == "settings.recovery.stale_attempt" ? "Settings.Recovery.Stale" : "Settings.Recovery.RetryFailed");
             }
+            else if (result.Outcome.IsSucceeded) { notifications?.ReportOperation("Nav.Settings", "Notification.Settings.Saved", false); }
         }
         catch (Exception failure) when (!ExceptionGraphClassifier.IsProcessFatal(failure)
             && !ExceptionGraphClassifier.IsCallerCancellation(failure, cancellationToken))
@@ -95,6 +96,7 @@ internal sealed class SettingsRecoveryViewModel(Func<string, string> getString, 
 
     private void SetRetryError(SettingsApplicationIssue issue, string resourceKey)
     {
+        notifications?.ReportOperation("Nav.Settings", resourceKey, true);
         _errorResourceKey = resourceKey;
         _errorGeneration = issue.Snapshot.Generation;
         _errorBatchId = issue.BatchId;

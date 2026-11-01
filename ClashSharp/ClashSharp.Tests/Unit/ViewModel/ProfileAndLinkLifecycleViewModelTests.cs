@@ -237,7 +237,7 @@ public sealed partial class ProfileAndLinkLifecycleViewModelTests
 
         ConfigurationProfileDisplay row = Assert.Single(viewModel.Profiles);
         Assert.Equal("after", row.Id);
-        Assert.Equal("Profiles.Status.Imported", viewModel.StatusText);
+        Assert.Equal("Profiles.Import.Success.Format", viewModel.StatusText);
         Assert.Equal(PageStatusSeverity.Success, viewModel.StatusSeverity);
         Assert.Equal(2, catalog.GetProfilesCallCount);
         Assert.Contains(
@@ -277,7 +277,7 @@ public sealed partial class ProfileAndLinkLifecycleViewModelTests
         await viewModel.ImportLocalProfileAsync("profile.yaml", CancellationToken.None);
 
         Assert.Equal(PageStatusSeverity.Success, viewModel.StatusSeverity);
-        Assert.Equal("Profiles.Status.Imported", viewModel.StatusText);
+        Assert.Equal("Profiles.Import.ActiveSuccess.Format", viewModel.StatusText);
         Assert.Equal(2, catalog.GetProfilesCallCount);
     }
 
@@ -475,7 +475,7 @@ public sealed partial class ProfileAndLinkLifecycleViewModelTests
             CancellationToken.None);
 
         Assert.Equal("added", Assert.Single(viewModel.SubscriptionLinks).Model.Id);
-        Assert.Equal(2, catalog.GetLinksCallCount);
+        Assert.Equal(1, catalog.ImportCallCount);
     }
 
     [Fact]
@@ -505,12 +505,14 @@ public sealed partial class ProfileAndLinkLifecycleViewModelTests
         await started.Task;
         ProfileSubscriptionLink staleLink = CreateLink("stale");
         catalog.Links = [staleLink];
+        int readsBeforeCompletion = catalog.GetLinksCallCount;
         lifetime.Cancel();
         completion.SetResult(staleLink);
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => add);
         Assert.Equal("visible", Assert.Single(viewModel.SubscriptionLinks).Model.Id);
-        Assert.Equal(1, catalog.GetLinksCallCount);
+        Assert.Equal(readsBeforeCompletion, catalog.GetLinksCallCount);
+        Assert.Equal(0, catalog.ImportCallCount);
     }
 
     [Fact]
@@ -726,6 +728,7 @@ public sealed partial class ProfileAndLinkLifecycleViewModelTests
         public List<string> DeletedIds { get; } = [];
 
         public int GetLinksCallCount { get; private set; }
+        public int ImportCallCount { get; private set; }
 
         public Func<string, string, CancellationToken, Task<ProfileSubscriptionLink>> AddSubscriptionLink { get; set; } =
             static (_, _, _) => throw new NotSupportedException();
@@ -771,7 +774,9 @@ public sealed partial class ProfileAndLinkLifecycleViewModelTests
             ProfileSubscriptionLink link,
             CancellationToken cancellationToken)
         {
-            throw new NotSupportedException();
+            cancellationToken.ThrowIfCancellationRequested();
+            ImportCallCount++;
+            return Task.FromResult(CreateImportResult(link.Id));
         }
     }
 

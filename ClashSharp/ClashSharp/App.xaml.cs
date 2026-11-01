@@ -252,7 +252,8 @@ public partial class App : Microsoft.UI.Xaml.Application
             context.Actions,
             context.Lifecycle,
             context.TrayCommands,
-            context.StartupConflicts);
+            context.StartupConflicts,
+            context.Notifications);
     }
 
     private MainWindow CreateMainWindow()

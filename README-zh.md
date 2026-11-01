@@ -63,14 +63,14 @@ Clash# 以模式对网络的作用为其命名。与常见客户端的对应关�
 
 正式版本发布后，安装包提供于 [Releases](https://github.com/Water-Run/ClashSharp/releases) 页面。
 
-1. 下载并解压发布包。`ClashSharp-Installer.exe` 须与同目录的 `payload` 文件夹保持在一起。
-2. 在当前用户会话中运行 `ClashSharp-Installer.exe`。应用安装于运行安装器的用户名下，无需以管理员身份运行，也无需预装 .NET。
+1. 下载并解压发布包。`Setup.exe` 须与同目录的 `payload` 文件夹保持在一起。
+2. 在当前用户会话中运行 `Setup.exe`。应用安装于运行安装器的用户名下，无需以管理员身份运行，也无需预装 .NET。
 3. 部署 Mihomo 服务及必要的证书信任时，安装器请求管理员授权。授权前应核对所显示的发布者。
 
 修复、升级与卸载均通过再次运行同一安装器完成。
 
 > [!WARNING]
-> 卸载应通过 `ClashSharp-Installer.exe` 进行。仅在 Windows 的「设置 › 应用」中移除时，Mihomo 服务等机器级资源不会同步清理。
+> 卸载应通过 `Setup.exe` 进行。仅在 Windows 的「设置 › 应用」中移除时，Mihomo 服务等机器级资源不会同步清理。
 
 ## 快速上手
 
@@ -145,6 +145,8 @@ Clash# 异常退出时，恢复进程会立即还原仍归 Clash# 所有的系�
 </details>
 
 ## 从源码构建
+
+当前实现、候选验证与后续开发计划见[开发文档入口](./docs/README.md)。
 
 需要 Windows x64、PowerShell 7，以及 [`global.json`](./global.json) 中指定版本的 .NET SDK。
 

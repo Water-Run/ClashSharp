@@ -17,7 +17,8 @@ internal sealed class StartupGuideComposition(
     StartupRestoreFallbackService startupRestoreFallback,
     WindowsProxyService windowsProxy,
     ProxyRecoveryService proxyRecovery,
-    MihomoCoreService core)
+    MihomoCoreService core,
+    IUserOperationNotifications? notifications = null)
 {
     /// <summary>Creates a presenter backed by explicitly composed application services.</summary>
     public IStartupGuidePresenter Create(IApplicationErrorSink errorSink, Action<string>? navigate = null)
@@ -35,7 +36,7 @@ internal sealed class StartupGuideComposition(
         StartupCheckService checks = new(
             probe,
             localization.GetString,
-            errorSink);
+            errorSink, notifications);
         return new StartupGuidePresenter(
             checks,
             localization.GetString,

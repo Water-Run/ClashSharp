@@ -15,7 +15,8 @@ internal sealed class WindowShellStartupStep(
     ApplicationActionService actions,
     ApplicationLifecycleService lifecycle,
     TrayCommandService trayCommands,
-    StartupConflictSnapshot startupConflicts) : IStartupStep
+    StartupConflictSnapshot startupConflicts,
+    NotificationService? notifications = null) : IStartupStep
 {
     public string Name => "window-shell";
 
@@ -30,7 +31,8 @@ internal sealed class WindowShellStartupStep(
             actions,
             lifecycle,
             trayCommands,
-            startupConflicts));
+            startupConflicts,
+            notifications));
         return Task.FromResult(StartupStepResult.Succeeded());
     }
 }
@@ -42,4 +44,5 @@ internal sealed record MainWindowStartupContext(
     ApplicationActionService Actions,
     ApplicationLifecycleService Lifecycle,
     TrayCommandService TrayCommands,
-    StartupConflictSnapshot StartupConflicts);
+    StartupConflictSnapshot StartupConflicts,
+    NotificationService? Notifications = null);

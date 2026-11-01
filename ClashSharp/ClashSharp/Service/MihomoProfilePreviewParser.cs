@@ -10,7 +10,7 @@ namespace ClashSharp.Service;
 /// Thread safety: Stateless methods are safe for concurrent calls.
 /// Side effects: Reads localization resources for fallback display names.
 /// </remarks>
-internal static class MihomoProfilePreviewParser
+internal static partial class MihomoProfilePreviewParser
 {
     /// <summary>Parses proxy node and provider preview rows from profile text.</summary>
     /// <param name="configurationText">mihomo configuration text. Must not be null.</param>
@@ -21,6 +21,7 @@ internal static class MihomoProfilePreviewParser
     {
         ArgumentNullException.ThrowIfNull(configurationText);
         ArgumentNullException.ThrowIfNull(resolveRegion);
+        if (TryReadSemanticRoot(configurationText, out var root)) { return ParseSemanticNodes(root, resolveRegion); }
 
         List<ProxyNode> nodes = [];
         foreach (YamlListItem item in EnumerateTopLevelListItems(configurationText, "proxies"))
@@ -97,6 +98,7 @@ internal static class MihomoProfilePreviewParser
         ArgumentNullException.ThrowIfNull(getString);
 
         string sourceName = getString("ProfilePreview.CurrentConfiguration");
+        if (TryReadSemanticRoot(configurationText, out var root)) { return ParseSemanticRules(root, sourceName); }
         List<RulePreview> rules = [];
         foreach (YamlListItem item in EnumerateTopLevelListItems(configurationText, "rules"))
         {

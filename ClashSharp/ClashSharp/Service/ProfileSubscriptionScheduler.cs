@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using ClashSharp.ApplicationModel.Diagnostics;
 using ClashSharp.ApplicationModel.Lifecycle;
+using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.ApplicationModel.Supervision;
 using ClashSharp.Model;
 
@@ -157,9 +158,10 @@ internal sealed class ProfileSubscriptionScheduler : IRuntimeParticipant
 }
 
 /// <summary>Adapts the profile catalog to the automatic update scheduler.</summary>
-internal sealed class ProfileSubscriptionSchedulerCatalogAdapter(IProfileCatalog catalog) :
+internal sealed class ProfileSubscriptionSchedulerCatalogAdapter(IProfileCatalog catalog, IUserOperationNotifications? notifications = null) :
     IProfileSubscriptionSchedulerCatalog
 {
+    private readonly OperationNotificationRunner _notifications = new(notifications);
     public IReadOnlyList<ProfileSubscriptionLink> GetDueSubscriptionLinks(DateTimeOffset now)
     {
         return catalog.GetDueSubscriptionLinks(now);
@@ -175,6 +177,7 @@ internal sealed class ProfileSubscriptionSchedulerCatalogAdapter(IProfileCatalog
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
-        return catalog.ImportDueSubscriptionLinkAsync(link, now, cancellationToken);
+        return _notifications.ExecuteAsync(() => catalog.ImportDueSubscriptionLinkAsync(link, now, cancellationToken),
+            "Nav.Links", "Links.Status.Updated", "Links.Status.UpdateFailed", cancellationToken);
     }
 }

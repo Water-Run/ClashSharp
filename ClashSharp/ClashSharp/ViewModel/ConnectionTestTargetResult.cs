@@ -14,4 +14,5 @@ internal sealed record ConnectionTestTargetResult(
     internal LocalizedDisplayText? LabelSource { get; init; }
     internal LocalizedDisplayText? StatusSource { get; init; }
     internal int? ObservedElapsedMilliseconds { get; init; }
+    internal bool WasTimeout { get; init; }
 }

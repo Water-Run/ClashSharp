@@ -269,19 +269,18 @@ internal sealed class LinksViewModel : ObservableObject, ILocalizedPresentation
     {
         try
         {
-            ProfileSubscriptionLink link = await _profiles.AddSubscriptionLinkAsync(
-                name,
-                uri,
-                cancellationToken);
+            var imported = await SubscriptionImportWorkflow.ImportAsync(_profiles, name, uri, cancellationToken);
+            ProfileSubscriptionLink link = imported.Link;
             cancellationToken.ThrowIfCancellationRequested();
             _log.Append("Info", "Links", $"Subscription link added: {link.Name}.", link.Uri);
             await LoadAsync(cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             SelectedLink = SubscriptionLinks.FirstOrDefault(row => row.Model.Id == link.Id);
-            SetStatus("Links.Status.Added", PageStatusSeverity.Success);
+            SetStatus("Links.Status.Updated", PageStatusSeverity.Success);
         }
         catch (Exception exception) when (
             exception is ArgumentException
+                or HttpRequestException
                 or IOException
                 or UnauthorizedAccessException
                 or SecurityException

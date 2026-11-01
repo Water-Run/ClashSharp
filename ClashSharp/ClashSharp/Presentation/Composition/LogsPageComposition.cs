@@ -18,7 +18,7 @@ internal static class LogsPageComposition
         ArgumentNullException.ThrowIfNull(navigateBack);
         LogsViewModel viewModel = new(
             context.Localization.GetString,
-            new LogManagementStoreAdapter(context.LogStorage),
+            new LogManagementStoreAdapter(context.LogStorage, context.Notifications),
             context.ErrorSink,
             context.MihomoController.StreamLogsAsync,
             context.MihomoService.ReadHostLogsAsync, context.CreateDisplayFormatter());

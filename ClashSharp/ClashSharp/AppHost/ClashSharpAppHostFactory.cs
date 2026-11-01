@@ -75,7 +75,15 @@ internal static class ClashSharpAppHostFactory
             services.AddSingleton<ILogStorage, GenerationLogStorage>();
             services.AddSingleton<IApplicationErrorSink>(provider => new ApplicationErrorSink(
                 provider.GetRequiredService<ILogStorage>().AppendLog,
-                provider.GetRequiredService<LocalizationService>().GetString));
+                provider.GetRequiredService<LocalizationService>().GetString,
+                error =>
+                {
+                    // These boundaries already publish their actionable outcome once.
+                    if (error.OperationName is "Mcp.Settings" or "settings-application-retry" or "Triggers.Replace"
+                        || error.OperationName.StartsWith("startup-check", StringComparison.Ordinal)) { return; }
+                    provider.GetRequiredService<NotificationService>().ReportOperation(
+                        "Notification.Runtime.Title", "Application.UnexpectedError", true);
+                }));
             services.AddSingleton<RuntimeLifetimeRegistry>();
             services.AddSingleton<IWindowPlacementStore>(_ => new JsonWindowPlacementStore(dataRoot.Value));
             services.AddSingleton<GenerationSamplingRuntime>();
@@ -93,6 +101,7 @@ internal static class ClashSharpAppHostFactory
             services.AddSingleton(_ => MihomoServiceManager.Instance);
             services.AddSingleton(_ => ProxyRecoveryService.Instance);
             services.AddSingleton(_ => NotificationService.Instance);
+            services.AddSingleton<IUserOperationNotifications>(provider => provider.GetRequiredService<NotificationService>());
             services.AddSingleton(_ => MainlandChinaTextDisplayService.Instance);
             services.AddSingleton(_ => ProxyLatencyService.Instance);
             services.AddSingleton(_ => ProxyNodeCatalogService.Instance);

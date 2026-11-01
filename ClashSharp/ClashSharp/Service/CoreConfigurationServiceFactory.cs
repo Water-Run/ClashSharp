@@ -84,7 +84,7 @@ internal sealed class CoreConfigurationValidator : ICoreConfigurationValidator
 
         if (!File.Exists(_binaryPath))
         {
-            return;
+            throw new InvalidOperationException("Bundled mihomo is unavailable for configuration validation.");
         }
 
         using CoreConfigurationGeoDataLease assets = await CoreConfigurationGeoDataLease.AcquireAsync(

@@ -140,9 +140,9 @@ public sealed class ProfilesViewModelTests
     public async Task LinksViewModel_AddAndDelete_ReportResultsAndSelectOnlyExistingRows()
     {
         using TempDirectory tempDirectory = new();
-        ProfileCatalogService profiles = CreateProfileCatalog(tempDirectory);
+        MemorySubscriptionCatalog profiles = new();
         LogStorageService logs = new(Path.Combine(tempDirectory.Path, "links-feedback.db"), static () => "profile");
-        LinksViewModel viewModel = new(static key => key, new SubscriptionLinkCatalogAdapter(profiles),
+        LinksViewModel viewModel = new(static key => key, profiles,
             new PageLogAdapter(logs), new TestApplicationErrorSink(), new ModelDisplayMapper(static text => text));
 
         await viewModel.AddSubscriptionLinkAsync("Invalid", string.Empty, CancellationToken.None);
@@ -154,7 +154,7 @@ public sealed class ProfilesViewModelTests
 
         await viewModel.AddSubscriptionLinkAsync("Example", "https://example.com/profile.yaml", CancellationToken.None);
         Assert.Same(Assert.Single(viewModel.SubscriptionLinks), viewModel.SelectedLink);
-        Assert.Equal("Links.Status.Added", viewModel.StatusText);
+        Assert.Equal("Links.Status.Updated", viewModel.StatusText);
         Assert.Equal(PageStatusSeverity.Success, viewModel.StatusSeverity);
         await viewModel.LoadAsync(CancellationToken.None);
         Assert.Same(Assert.Single(viewModel.SubscriptionLinks), viewModel.SelectedLink);
@@ -251,6 +251,23 @@ public sealed class ProfilesViewModelTests
 
         public Task<bool> DeleteImportedProfileAsync(string profileId, CancellationToken cancellationToken) =>
             Task.FromResult(true);
+    }
+
+    private sealed class MemorySubscriptionCatalog : ISubscriptionLinkCatalog
+    {
+        private readonly List<ProfileSubscriptionLink> _links = [];
+        public IReadOnlyList<ProfileSubscriptionLink> GetSubscriptionLinks() => _links.ToArray();
+        public Task<ProfileSubscriptionLink> AddSubscriptionLinkAsync(string name, string uri, CancellationToken cancellationToken)
+        {
+            ProfileSubscriptionLink link = new() { Id = Guid.NewGuid().ToString("N"), Name = name, Uri = uri, Status = "Saved", IsEnabled = true };
+            _links.Add(link);
+            return Task.FromResult(link);
+        }
+        public Task<ProfileImportResult> ImportSubscriptionLinkAsync(ProfileSubscriptionLink link, CancellationToken cancellationToken) =>
+            Task.FromResult(new ProfileImportResult(link.Id, link.Name, "profile.yaml", 1, 1, "Imported"));
+        public Task<bool> TryDeleteSubscriptionLinkAsync(string id, CancellationToken cancellationToken) => Task.FromResult(_links.RemoveAll(link => link.Id == id) > 0);
+        public Task<bool> TryUpdateSubscriptionLinkAsync(SubscriptionLinkEditRequest request, CancellationToken cancellationToken) => Task.FromResult(false);
+        public Task<string> CheckSubscriptionLinkAsync(ProfileSubscriptionLink link, CancellationToken cancellationToken) => Task.FromResult("Available");
     }
 
     private sealed class TempDirectory : IDisposable

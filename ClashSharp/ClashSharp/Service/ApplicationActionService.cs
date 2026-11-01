@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ClashSharp.ApplicationModel.Diagnostics;
 using ClashSharp.ApplicationModel.Lifecycle;
 using ClashSharp.ApplicationModel.Mutations;
 using ClashSharp.ApplicationModel.Network;
@@ -190,6 +191,18 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
     }
 
     private async Task<NetworkTakeoverResult> ApplyNetworkChangesAsync(
+        IReadOnlyList<SettingValueChange> changes, CancellationToken cancellationToken)
+    {
+        try { return await ApplyNetworkChangesCoreAsync(changes, cancellationToken).ConfigureAwait(false); }
+        catch (Exception failure) when (!ExceptionGraphClassifier.IsProcessFatal(failure)
+            && !ExceptionGraphClassifier.IsCallerCancellation(failure, cancellationToken))
+        {
+            _notifications.NotifyProxyFailure();
+            throw;
+        }
+    }
+
+    private async Task<NetworkTakeoverResult> ApplyNetworkChangesCoreAsync(
         IReadOnlyList<SettingValueChange> changes,
         CancellationToken cancellationToken)
     {

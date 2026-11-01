@@ -7,6 +7,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using ClashSharp.ApplicationModel.Diagnostics;
+using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.Infrastructure.Networking;
 
 namespace ClashSharp.ViewModel;
@@ -24,6 +25,7 @@ internal sealed partial class MasterControlViewModel
     private bool _checkingWebsites;
     private bool _checkingIp;
     private readonly IApplicationUpdateChecker? _updateChecker;
+    private readonly IUserOperationNotifications? _notifications;
     private ApplicationUpdateCheckResult? _updateResult;
     private DateTimeOffset? _updateCheckedAt;
     private bool _checkingUpdate;
@@ -66,6 +68,15 @@ internal sealed partial class MasterControlViewModel
             _checkingUpdate = false;
             RefreshTileValues();
         }
+        if (_updateResult?.Availability == ApplicationUpdateAvailability.UpdateAvailable)
+        {
+            _notifications?.ReportAvailability("Nav.About", "Notification.Update.Available", false);
+        }
+        else
+        {
+            _notifications?.ReportOperation("Nav.About", _updateResult?.Availability == ApplicationUpdateAvailability.Current
+                ? "About.Update.Current" : "About.Update.Unavailable", _updateResult?.Availability != ApplicationUpdateAvailability.Current);
+        }
     }
 
     public string WebsiteDetails => _websiteResults.Count == 0 ? _localization.GetString("Master.Diagnostics.NotTested")
@@ -97,6 +108,10 @@ internal sealed partial class MasterControlViewModel
             {
                 _websiteResults = results;
                 _websitesCheckedAt = _getNow();
+                bool failed = results.Any(static result => result.Failure is not null || result.StatusCode is not (>= 200 and < 400));
+                _notifications?.ReportOperation("Settings.ConnectionTestUrl.Title",
+                    results.Any(static result => result.Failure == "timeout") ? "Master.Diagnostics.Timeout"
+                        : failed ? "Master.Diagnostics.Failed" : "Settings.ConnectionTest.AllPassed", failed);
             }
         }
         finally
@@ -124,6 +139,7 @@ internal sealed partial class MasterControlViewModel
             {
                 _publicIp = result;
                 _ipCheckedAt = _getNow();
+                _notifications?.ReportOperation("Master.Tile.PublicIp", "Notification.Diagnostic.Completed", false);
             }
         }
         catch (Exception exception) when (exception is HttpRequestException or JsonException or OperationCanceledException
@@ -132,6 +148,7 @@ internal sealed partial class MasterControlViewModel
             if (context == GetDiagnosticContext())
             {
                 _ipFailure = exception is OperationCanceledException ? "Master.Diagnostics.Timeout" : "Master.Diagnostics.Failed";
+                _notifications?.ReportOperation("Master.Tile.PublicIp", _ipFailure, true);
             }
         }
         finally

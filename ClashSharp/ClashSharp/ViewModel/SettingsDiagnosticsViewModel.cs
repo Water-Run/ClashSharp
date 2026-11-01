@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using ClashSharp.ApplicationModel.Diagnostics;
+using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.Model;
 
 namespace ClashSharp.ViewModel;
@@ -34,16 +35,20 @@ internal sealed class SettingsDiagnosticsViewModel
 
     /// <summary>Localization lookup used for user-facing failure messages.</summary>
     private readonly Func<string, string> _getString;
+    private readonly IUserOperationNotifications? _notifications;
 
     /// <summary>Initializes a new diagnostics view model.</summary>
     /// <param name="diagnostics">Diagnostic operation runner. Must not be null.</param>
     /// <param name="log">Diagnostic log writer. Must not be null.</param>
     /// <param name="getString">Localization lookup. Null returns localization keys directly.</param>
-    public SettingsDiagnosticsViewModel(IWindowsDiagnosticsClient diagnostics, IDiagnosticsLog log, Func<string, string>? getString = null)
+    /// <param name="notifications">User-policy diagnostic outcome notifications.</param>
+    public SettingsDiagnosticsViewModel(IWindowsDiagnosticsClient diagnostics, IDiagnosticsLog log, Func<string, string>? getString = null,
+        IUserOperationNotifications? notifications = null)
     {
         _diagnostics = diagnostics ?? throw new ArgumentNullException(nameof(diagnostics));
         _log = log ?? throw new ArgumentNullException(nameof(log));
         _getString = getString ?? (key => key);
+        _notifications = notifications;
     }
 
     /// <summary>Executes a diagnostic command tag and returns the status that should be shown by the page.</summary>
@@ -69,6 +74,8 @@ internal sealed class SettingsDiagnosticsViewModel
             };
 
             _log.Append("Info", LogCategory, result.Message, result.Detail);
+            _notifications?.ReportOperation("Settings.WindowsNative.Title", result.IsHealthy
+                ? "Notification.Diagnostic.Completed" : "Application.UnexpectedError", !result.IsHealthy);
             return new SettingsDiagnosticStatus(result.Target, result.Message) { MessageResourceKey = result.MessageResourceKey };
         }
         catch (Exception exception) when (
@@ -79,6 +86,7 @@ internal sealed class SettingsDiagnosticsViewModel
             string key = GetFailureMessageKey(action);
             string message = _getString(key);
             _log.Append("Warning", LogCategory, message, exception.Message);
+            _notifications?.ReportOperation("Settings.WindowsNative.Title", key, true);
             return new SettingsDiagnosticStatus(target, message) { MessageResourceKey = key };
         }
     }

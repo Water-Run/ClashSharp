@@ -1,5 +1,4 @@
 using System;
-using ClashSharp.Model;
 using ClashSharp.Service;
 
 namespace ClashSharp.Tests.Unit.Services;
@@ -51,9 +50,9 @@ public sealed class MihomoProfileShapeValidatorTests
         MihomoProfileShapeValidator.Validate(Configuration);
     }
 
-    /// <summary>Verifies missing routing rules fail shape validation.</summary>
+    /// <summary>Verifies omitted optional routing rules remain importable.</summary>
     [Fact]
-    public void Validate_ProfileWithoutRules_Throws()
+    public void Validate_ProfileWithoutRules_IsAccepted()
     {
         const string Configuration = """
             proxies: []
@@ -64,9 +63,7 @@ public sealed class MihomoProfileShapeValidatorTests
                   - DIRECT
             """;
 
-        ProfileValidationException error = Assert.Throws<ProfileValidationException>(() => MihomoProfileShapeValidator.Validate(Configuration));
-        Assert.Equal(MissingProfileSections.Rules, error.MissingSections);
-        Assert.Equal("rules", error.GetMissingSectionNames());
+        MihomoProfileShapeValidator.Validate(Configuration);
     }
 
     /// <summary>Verifies indented pseudo sections are not accepted as top-level sections.</summary>
@@ -80,27 +77,28 @@ public sealed class MihomoProfileShapeValidatorTests
               rules: []
             """;
 
-        ProfileValidationException error = Assert.Throws<ProfileValidationException>(() => MihomoProfileShapeValidator.Validate(Configuration));
-        Assert.Equal(MissingProfileSections.ProxySource | MissingProfileSections.ProxyGroups | MissingProfileSections.Rules, error.MissingSections);
-        Assert.Equal("proxies / proxy-providers, proxy-groups, rules", error.GetMissingSectionNames());
+        Assert.Throws<ArgumentException>(() => MihomoProfileShapeValidator.Validate(Configuration));
     }
 
     [Fact]
-    public void Validate_ProfileWithoutGroups_ReportsOnlyMissingGroups()
+    public void Validate_ProfileWithoutGroups_IsAccepted()
     {
-        ProfileValidationException error = Assert.Throws<ProfileValidationException>(() =>
-            MihomoProfileShapeValidator.Validate("proxies: []\nrules:\n  - MATCH,DIRECT\n# private configuration content"));
-        Assert.Equal(MissingProfileSections.ProxyGroups, error.MissingSections);
-        Assert.Equal("proxy-groups", error.GetMissingSectionNames());
-        Assert.DoesNotContain("private", error.Message, StringComparison.Ordinal);
+        MihomoProfileShapeValidator.Validate("proxies: []\nrules:\n  - MATCH,DIRECT\n");
     }
 
     [Fact]
-    public void Validate_ProfileWithoutSource_DescribesAlternativeKeys()
+    public void Validate_DirectRoutingWithoutProxySource_IsAccepted()
     {
-        ProfileValidationException error = Assert.Throws<ProfileValidationException>(() =>
-            MihomoProfileShapeValidator.Validate("proxy-groups: []\nrules: []"));
-        Assert.Equal(MissingProfileSections.ProxySource, error.MissingSections);
-        Assert.Equal("proxies / proxy-providers", error.GetMissingSectionNames());
+        MihomoProfileShapeValidator.Validate("rules: ['MATCH,DIRECT']");
+    }
+
+    [Theory]
+    [InlineData("{}")]
+    [InlineData("<html>not a subscription</html>")]
+    [InlineData("outbounds: []")]
+    public void Validate_UnrelatedFormatsAreRejectedWithoutEchoingTheirContent(string content)
+    {
+        ArgumentException error = Assert.Throws<ArgumentException>(() => MihomoProfileShapeValidator.Validate(content));
+        Assert.DoesNotContain(content, error.Message, StringComparison.Ordinal);
     }
 }

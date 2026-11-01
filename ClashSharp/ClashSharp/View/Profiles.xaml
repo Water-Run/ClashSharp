@@ -6,6 +6,9 @@
     xmlns:converters="using:ClashSharp.Converters"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    AllowDrop="True"
+    DragOver="Page_DragOver"
+    Drop="Page_Drop"
     Loaded="Page_Loaded"
     Unloaded="Page_Unloaded"
     mc:Ignorable="d">
@@ -20,6 +23,7 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
         <StackPanel Spacing="4">
@@ -27,7 +31,26 @@
             <TextBlock x:Name="DescriptionText" Text="{Binding DescriptionText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
         </StackPanel>
 
-        <CommandBar Style="{StaticResource ClashPageCommandBarStyle}" x:Name="ProfileCommands" Grid.Row="1" Margin="0,12,0,0" DefaultLabelPosition="Right" Background="Transparent">
+        <Grid Grid.Row="1" Margin="0,12,0,0" ColumnSpacing="12" RowSpacing="8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="1*" />
+                <ColumnDefinition Width="2*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <TextBox x:Name="SubscriptionImportName" Header="{Binding ImportNameText}" Text="{Binding SubscriptionName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding CanImport}" />
+            <TextBox x:Name="SubscriptionImportUrl" Grid.Column="1" Header="{Binding ImportSubscriptionText}" PlaceholderText="{Binding ImportUrlPlaceholderText}" Text="{Binding SubscriptionUri, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding CanImport}" />
+            <Button x:Name="ImportSubscriptionButton" Grid.Column="2" Content="{Binding ImportActionText}" VerticalAlignment="Bottom" IsEnabled="{Binding CanImport}" Click="ImportSubscriptionButton_Click" />
+            <StackPanel Grid.Row="1" Grid.ColumnSpan="3" Spacing="4" Visibility="{Binding IsImporting, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <ProgressBar IsIndeterminate="{Binding IsImporting}" />
+                <TextBlock Text="{Binding ImportProgressText}" TextWrapping="Wrap" />
+            </StackPanel>
+        </Grid>
+
+        <CommandBar Style="{StaticResource ClashPageCommandBarStyle}" x:Name="ProfileCommands" Grid.Row="2" Margin="0,12,0,0" DefaultLabelPosition="Right" Background="Transparent">
             <AppBarButton x:Name="ImportProfileButton" Label="{Binding ImportProfileText}" Click="ImportProfileButton_Click">
                 <AppBarButton.Icon>
                     <FontIcon Glyph="&#xE8E5;" />
@@ -61,17 +84,21 @@
             </AppBarButton>
         </CommandBar>
 
-        <InfoBar Grid.Row="2" Margin="0,12,0,0" IsOpen="{Binding HasStatusText, Mode=OneWay}" IsClosable="False"
+        <InfoBar Grid.Row="3" Margin="0,12,0,0" IsOpen="{Binding HasStatusText, Mode=OneWay}" IsClosable="False"
                  Severity="{Binding StatusSeverity, Converter={StaticResource PageStatusSeverityConverter}}" Message="{Binding StatusText}"
-                 Visibility="{Binding HasStatusText, Converter={StaticResource BooleanToVisibilityConverter}}" />
-        <Grid Grid.Row="3" Margin="0,16,0,0" Style="{StaticResource ClashSectionGridStyle}">
+                 Visibility="{Binding HasStatusText, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <InfoBar.ActionButton>
+                <Button Content="{Binding SetActiveProfileText}" Click="SetActiveProfileButton_Click" Visibility="{Binding CanUseImportedProfile, Converter={StaticResource BooleanToVisibilityConverter}}" />
+            </InfoBar.ActionButton>
+        </InfoBar>
+        <Grid Grid.Row="4" Margin="0,16,0,0" Style="{StaticResource ClashSectionGridStyle}">
             <StackPanel Spacing="4">
                 <TextBlock x:Name="CurrentProfileTitleText" Text="{Binding CurrentProfileTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
                 <TextBlock x:Name="ActiveProfileText" Text="{Binding ActiveProfileText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
             </StackPanel>
         </Grid>
 
-        <ListView Grid.Row="4" Margin="0,16,0,0" x:Name="ProfilesList" Style="{StaticResource ClashDataListStyle}" ItemsSource="{Binding Profiles}" SelectedItem="{Binding SelectedProfile, Mode=TwoWay}" SelectionMode="Single">
+        <ListView Grid.Row="5" Margin="0,16,0,0" x:Name="ProfilesList" Style="{StaticResource ClashDataListStyle}" ItemsSource="{Binding Profiles}" SelectedItem="{Binding SelectedProfile, Mode=TwoWay}" SelectionMode="Single">
             <ListView.Header>
                 <Grid Padding="20,8" ColumnSpacing="12">
                     <Grid.ColumnDefinitions>

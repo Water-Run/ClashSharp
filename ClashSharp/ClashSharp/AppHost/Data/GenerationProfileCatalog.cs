@@ -3,15 +3,18 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using ClashSharp.ApplicationModel.Data;
+using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.Model;
 using ClashSharp.Service;
 
 namespace ClashSharp.Hosting.Data;
 
 /// <summary>Resolves the current repository for every call and retains its generation until that operation finishes.</summary>
-internal sealed class GenerationProfileCatalog(DataGenerationManager generations) : IProfileCatalog
+internal sealed class GenerationProfileCatalog(DataGenerationManager generations, IUserOperationNotifications? notifications = null) : IProfileCatalog
 {
     private readonly DataGenerationManager _generations = generations ?? throw new ArgumentNullException(nameof(generations));
+
+    private readonly OperationNotificationRunner _notifications = new(notifications);
 
     public void InvalidateCache()
     {
@@ -63,26 +66,34 @@ internal sealed class GenerationProfileCatalog(DataGenerationManager generations
 
     public Task<bool> TryUpdateSubscriptionLinkAsync(string linkId, string name, string uri, bool isEnabled, int updateIntervalHours, CancellationToken cancellationToken)
     {
-        return _generations.ExecuteAsync<IProfileCatalog, bool>(
-            (storage, _, token) => storage.TryUpdateSubscriptionLinkAsync(linkId, name, uri, isEnabled, updateIntervalHours, token), cancellationToken);
+        return _notifications.ExecuteAsync(
+            () => _generations.ExecuteAsync<IProfileCatalog, bool>(
+                (storage, _, token) => storage.TryUpdateSubscriptionLinkAsync(linkId, name, uri, isEnabled, updateIntervalHours, token), cancellationToken),
+            "Nav.Links", "Links.Status.Saved", "Links.Status.EditFailed", cancellationToken);
     }
 
     public Task<bool> TryDeleteSubscriptionLinkAsync(string linkId, CancellationToken cancellationToken)
     {
-        return _generations.ExecuteAsync<IProfileCatalog, bool>(
-            (storage, _, token) => storage.TryDeleteSubscriptionLinkAsync(linkId, token), cancellationToken);
+        return _notifications.ExecuteAsync(
+            () => _generations.ExecuteAsync<IProfileCatalog, bool>(
+                (storage, _, token) => storage.TryDeleteSubscriptionLinkAsync(linkId, token), cancellationToken),
+            "Nav.Links", "Links.Status.Deleted", "Links.Status.DeleteFailed", cancellationToken);
     }
 
     public Task<bool> TryRenameProfileAsync(string profileId, string name, CancellationToken cancellationToken)
     {
-        return _generations.ExecuteAsync<IProfileCatalog, bool>(
-            (storage, _, token) => storage.TryRenameProfileAsync(profileId, name, token), cancellationToken);
+        return _notifications.ExecuteAsync(
+            () => _generations.ExecuteAsync<IProfileCatalog, bool>(
+                (storage, _, token) => storage.TryRenameProfileAsync(profileId, name, token), cancellationToken),
+            "Nav.Profiles", "Profiles.Status.Renamed", "Profiles.Status.RenameFailed", cancellationToken);
     }
 
     public Task<bool> TryDeleteProfileAsync(string profileId, CancellationToken cancellationToken)
     {
-        return _generations.ExecuteAsync<IProfileCatalog, bool>(
-            (storage, _, token) => storage.TryDeleteProfileAsync(profileId, token), cancellationToken);
+        return _notifications.ExecuteAsync(
+            () => _generations.ExecuteAsync<IProfileCatalog, bool>(
+                (storage, _, token) => storage.TryDeleteProfileAsync(profileId, token), cancellationToken),
+            "Nav.Profiles", "Profiles.Status.Deleted", "Profiles.Status.DeleteFailed", cancellationToken);
     }
 
     public Task<bool> TryUpdateSubscriptionLinkStatusAsync(string linkId, string status, CancellationToken cancellationToken)
@@ -99,38 +110,50 @@ internal sealed class GenerationProfileCatalog(DataGenerationManager generations
 
     public Task<ProfileImportResult> ImportSubscriptionLinkAsync(ProfileSubscriptionLink link, CancellationToken cancellationToken)
     {
-        return _generations.ExecuteAsync<IProfileCatalog, ProfileImportResult>(
-            (storage, _, token) => storage.ImportSubscriptionLinkAsync(link, token), cancellationToken);
+        return _notifications.ExecuteAsync(
+            () => _generations.ExecuteAsync<IProfileCatalog, ProfileImportResult>(
+                (storage, _, token) => storage.ImportSubscriptionLinkAsync(link, token), cancellationToken),
+            "Nav.Links", "Links.Status.Updated", "Links.Status.UpdateFailed", cancellationToken);
     }
 
     public Task<ProfileImportResult?> ImportDueSubscriptionLinkAsync(ProfileSubscriptionLink link, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        return _generations.ExecuteAsync<IProfileCatalog, ProfileImportResult?>(
-            (storage, _, token) => storage.ImportDueSubscriptionLinkAsync(link, now, token), cancellationToken);
+        return _notifications.ExecuteAsync(
+            () => _generations.ExecuteAsync<IProfileCatalog, ProfileImportResult?>(
+                (storage, _, token) => storage.ImportDueSubscriptionLinkAsync(link, now, token), cancellationToken),
+            "Nav.Links", "Links.Status.Updated", "Links.Status.UpdateFailed", cancellationToken);
     }
 
     public Task<ProfileImportResult> ImportLocalProfileAsync(string filePath, CancellationToken cancellationToken)
     {
-        return _generations.ExecuteAsync<IProfileCatalog, ProfileImportResult>(
-            (storage, _, token) => storage.ImportLocalProfileAsync(filePath, token), cancellationToken);
+        return _notifications.ExecuteAsync(
+            () => _generations.ExecuteAsync<IProfileCatalog, ProfileImportResult>(
+                (storage, _, token) => storage.ImportLocalProfileAsync(filePath, token), cancellationToken),
+            "Nav.Profiles", "Profiles.Status.Imported", "Profiles.Status.ImportFailed", cancellationToken);
     }
 
     public Task<ProfileImportResult> RollbackProfileAsync(ProfileHistoryEntry historyEntry, CancellationToken cancellationToken)
     {
-        return _generations.ExecuteAsync<IProfileCatalog, ProfileImportResult>(
-            (storage, _, token) => storage.RollbackProfileAsync(historyEntry, token), cancellationToken);
+        return _notifications.ExecuteAsync(
+            () => _generations.ExecuteAsync<IProfileCatalog, ProfileImportResult>(
+                (storage, _, token) => storage.RollbackProfileAsync(historyEntry, token), cancellationToken),
+            "Nav.Profiles", "Profiles.Status.Restored", "Profiles.Status.RestoreFailed", cancellationToken);
     }
 
     public Task<ProfileImportResult> ValidateProfileAsync(ConfigurationProfile profile, CancellationToken cancellationToken)
     {
-        return _generations.ExecuteAsync<IProfileCatalog, ProfileImportResult>(
-            (storage, _, token) => storage.ValidateProfileAsync(profile, token), cancellationToken);
+        return _notifications.ExecuteAsync(
+            () => _generations.ExecuteAsync<IProfileCatalog, ProfileImportResult>(
+                (storage, _, token) => storage.ValidateProfileAsync(profile, token), cancellationToken),
+            "Nav.Profiles", "Profiles.Status.Validated", "Profiles.Status.ValidateFailed", cancellationToken);
     }
 
     public Task<bool> TryApplyActiveProfileAsync(string profileId, CancellationToken cancellationToken)
     {
-        return _generations.ExecuteAsync<IProfileCatalog, bool>(
-            (storage, _, token) => storage.TryApplyActiveProfileAsync(profileId, token), cancellationToken);
+        return _notifications.ExecuteAsync(
+            () => _generations.ExecuteAsync<IProfileCatalog, bool>(
+                (storage, _, token) => storage.TryApplyActiveProfileAsync(profileId, token), cancellationToken),
+            "Nav.Profiles", "Profiles.Status.Activated", "Profiles.Status.ActivateFailed", cancellationToken);
     }
 
     public Task RetryPendingProfileCleanupAsync(CancellationToken cancellationToken)
