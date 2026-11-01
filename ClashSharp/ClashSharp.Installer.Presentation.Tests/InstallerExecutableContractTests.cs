@@ -1,10 +1,37 @@
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
+using ClashSharp.Installer.Contracts;
+using ClashSharp.Installer.Runtime;
 
 namespace ClashSharp.Installer.Presentation.Tests;
 
 public sealed class InstallerExecutableContractTests
 {
+    [Fact]
+    public void InstallerNotificationNamesMatchTheChineseApplicationSettings()
+    {
+        string catalog = File.ReadAllText(SourcePath("ClashSharp", "Strings", "Catalogs",
+            "LocalizationResources.SimplifiedChinese.cs"));
+        using var model = new InstallerShellViewModel(new NamingRuntime());
+        string[] keys = ["Settings.Notification.Default", "Settings.Notification.CriticalOnly", "Settings.Notification.More"];
+        for (int index = 0; index < keys.Length; index++)
+        {
+            Match entry = Regex.Match(catalog, "\\[\"" + Regex.Escape(keys[index]) + "\"\\]\\s*=\\s*\"([^\"]+)\"");
+            Assert.True(entry.Success);
+            Assert.Equal(entry.Groups[1].Value, model.NotificationPresetOptions[index]);
+        }
+    }
+
+    private sealed class NamingRuntime : IInstallerRuntime
+    {
+        public Task<InstallerRuntimeReadiness> InspectReadinessAsync(CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("The naming contract must not inspect a machine.");
+
+        public Task<InstallerExecutionResult> ExecuteAsync(InstallerOperation operation,
+            IProgress<InstallerProgress> progress, CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("The naming contract must not execute an installation.");
+    }
+
     private const string Windows10And11SupportedOsId =
         "{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}";
 
