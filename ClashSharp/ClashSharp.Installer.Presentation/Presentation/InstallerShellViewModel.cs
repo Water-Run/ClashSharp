@@ -65,6 +65,8 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
         _runtime = runtime;
         CompletePreferencesCommand = new AsyncDelegateCommand(
             () => ExecuteOperationAsync(null, completePreferences: true), () => IsCompletePreferencesVisible, SetUnhandledCommandFailure);
+        ResetInstallPreferencesCommand = new DelegateCommand(ResetInstallPreferences,
+            () => CanEditInstallPreferences && HasCustomInstallPreferences);
         RefreshCommand = new AsyncDelegateCommand(
             RefreshAsync,
             () => CanStartOperation,
@@ -885,6 +887,7 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
         OwnerTransferCommand.NotifyCanExecuteChanged();
         RetiredUninstallCommand.NotifyCanExecuteChanged();
         CompletePreferencesCommand.NotifyCanExecuteChanged();
+        ResetInstallPreferencesCommand.NotifyCanExecuteChanged();
     }
 
     private void NotifyActionVisibility()

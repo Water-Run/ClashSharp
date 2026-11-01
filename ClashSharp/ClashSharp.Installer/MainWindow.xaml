@@ -4,7 +4,7 @@
   xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
   Title="Clash# 安装程序"
   Width="760"
-  Height="680"
+  Height="760"
   MaxHeight="{Binding Source={x:Static SystemParameters.WorkArea}, Path=Height}"
   MinWidth="640"
   MinHeight="420"
@@ -27,7 +27,7 @@
         Height="Auto" />
     </Grid.RowDefinitions>
     <Grid
-      Margin="32,24">
+      Margin="24,20">
       <Grid.ColumnDefinitions>
         <ColumnDefinition
           Width="Auto" />
@@ -87,10 +87,10 @@
       VerticalScrollBarVisibility="Auto"
       HorizontalScrollBarVisibility="Disabled"
       Focusable="False"
-      Margin="32,0,32,20">
+      Margin="24,0,24,20">
       <StackPanel
         x:Name="ContentBody"
-        Margin="0,0,24,0">
+        Margin="0,0,16,0">
         <StackPanel
           AutomationProperties.Name="Clash# 安装状态"
           Visibility="{Binding IsOperationSummaryVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
@@ -122,45 +122,61 @@
               AutomationProperties.LiveSetting="Polite" />
           </StackPanel>
         </StackPanel>
-        <Grid
-          Margin="0,24,0,0"
+        <StackPanel
+          x:Name="InstallPreferencesPanel"
+          Margin="0,20,0,0"
           Visibility="{Binding IsInstallPreferencesVisible, Converter={StaticResource BooleanToVisibilityConverter}}"
           IsEnabled="{Binding CanEditInstallPreferences}">
-          <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="*" />
-            <ColumnDefinition Width="*" />
-          </Grid.ColumnDefinitions>
-          <StackPanel Margin="0,0,24,0">
-            <TextBlock Text="快捷访问" FontWeight="SemiBold" Margin="0,0,0,8" />
-            <CheckBox Content="添加桌面快捷方式" IsChecked="{Binding CreateDesktopShortcut}" Margin="0,0,0,6" />
-            <TextBlock Text="开始菜单入口由 Windows 自动管理。" Style="{StaticResource MutedTextStyle}" FontSize="12" Margin="24,0,0,6" />
-            <CheckBox Content="添加到任务栏" IsChecked="{Binding RequestTaskbarPin}" />
-            <TextBlock Text="首次打开应用时，在 Windows 支持的情况下请求固定确认。" Style="{StaticResource MutedTextStyle}" FontSize="12" Margin="24,4,0,0" />
-            <TextBlock Text="启动与恢复" FontWeight="SemiBold" Margin="0,20,0,8" />
-            <CheckBox Content="开机自动启动" IsChecked="{Binding LaunchAtStartup}" Margin="0,0,0,6" />
-            <CheckBox Content="注册登录时代理恢复" IsChecked="{Binding RegisterProxyRecovery}" />
-            <TextBlock Text="登录时清理本程序留下的代理设置。" Style="{StaticResource MutedTextStyle}" FontSize="12" Margin="24,4,0,0" />
-          </StackPanel>
-          <StackPanel Grid.Column="1">
-            <TextBlock Text="网络组件" FontWeight="SemiBold" Margin="0,0,0,8" />
-            <CheckBox IsChecked="{Binding InstallTransparentProxyService}">
-              <TextBlock Text="安装透明代理服务" TextWrapping="Wrap" />
-            </CheckBox>
-            <TextBlock Text="缺省值预设" FontWeight="SemiBold" Margin="0,20,0,8" />
-            <CheckBox IsChecked="{Binding FollowSystemDefaults}">
-              <TextBlock Text="跟随系统环境" TextWrapping="Wrap" />
-            </CheckBox>
-            <TextBlock Text="初始化语言、12/24 小时制、单位及中国大陆功能；已有设置保留。" Style="{StaticResource MutedTextStyle}" FontSize="12" Margin="24,4,0,0" />
-            <TextBlock Text="系统通知级别" Margin="0,12,0,6" />
-            <ComboBox ItemsSource="{Binding NotificationPresetOptions}" SelectedIndex="{Binding NotificationPresetIndex}"
-                      HorizontalAlignment="Stretch" AutomationProperties.Name="系统通知级别" />
-            <TextBlock Text="Agent 集成" FontWeight="SemiBold" Margin="0,20,0,8" />
-            <CheckBox IsChecked="{Binding EnableMcpServer}">
-              <TextBlock Text="启用 MCP 服务器" TextWrapping="Wrap" />
-            </CheckBox>
-            <TextBlock Text="应用运行期间供 Agent 使用。初始仅允许读取状态，代理控制须单独授权。" Style="{StaticResource MutedTextStyle}" FontSize="12" Margin="24,4,0,0" />
-          </StackPanel>
-        </Grid>
+          <DockPanel Margin="0,0,0,6">
+            <TextBlock DockPanel.Dock="Right" VerticalAlignment="Center">
+              <Hyperlink Command="{Binding ResetInstallPreferencesCommand}"
+                         AutomationProperties.Name="恢复推荐安装选项">恢复推荐设置</Hyperlink>
+            </TextBlock>
+            <TextBlock Text="安装选项" FontSize="16" FontWeight="SemiBold"
+                       AutomationProperties.HeadingLevel="Level2" />
+          </DockPanel>
+          <TextBlock Text="按需选择。已有应用设置会保留，初始偏好仅用于新设置。"
+                     Style="{StaticResource MutedTextStyle}" FontSize="12" Margin="0,0,0,12" />
+
+          <TextBlock Text="快捷访问与启动" Style="{StaticResource InstallerSectionTitleStyle}" Margin="0,0,0,8" />
+          <HeaderedContentControl Style="{StaticResource InstallerSettingRowStyle}" Header="桌面快捷方式" Tag="在当前账户的桌面添加 Clash#；开始菜单入口由 Windows 自动管理。">
+              <CheckBox x:Name="DesktopShortcutToggle" Content="添加桌面快捷方式" IsChecked="{Binding CreateDesktopShortcut}"
+                        Style="{StaticResource InstallerToggleSwitchStyle}" />
+          </HeaderedContentControl>
+          <HeaderedContentControl Style="{StaticResource InstallerSettingRowStyle}" Header="添加到任务栏" Tag="首次打开应用时，由 Windows 提供固定确认；需要系统支持。">
+              <CheckBox x:Name="TaskbarPinToggle" Content="添加到任务栏" IsChecked="{Binding RequestTaskbarPin}"
+                        Style="{StaticResource InstallerToggleSwitchStyle}" />
+          </HeaderedContentControl>
+          <HeaderedContentControl Style="{StaticResource InstallerSettingRowStyle}" Header="登录时自动启动" Tag="登录 Windows 后运行 Clash#；代理启动行为由应用设置决定。">
+              <CheckBox x:Name="LaunchAtStartupToggle" Content="开机自动启动" IsChecked="{Binding LaunchAtStartup}"
+                        Style="{StaticResource InstallerToggleSwitchStyle}" />
+          </HeaderedContentControl>
+
+          <TextBlock Text="网络与恢复" Style="{StaticResource InstallerSectionTitleStyle}" />
+          <HeaderedContentControl Style="{StaticResource InstallerSettingRowStyle}" Header="透明代理服务" Tag="{Binding TransparentProxyServiceDescription}">
+              <CheckBox x:Name="TransparentProxyServiceToggle" Content="安装透明代理服务" IsChecked="{Binding InstallTransparentProxyService}"
+                        Style="{StaticResource InstallerToggleSwitchStyle}" />
+          </HeaderedContentControl>
+          <HeaderedContentControl Style="{StaticResource InstallerSettingRowStyle}" Header="登录时代理恢复" Tag="异常退出后，在下次登录时清理 Clash# 遗留的系统代理。">
+              <CheckBox x:Name="ProxyRecoveryToggle" Content="注册登录时代理恢复" IsChecked="{Binding RegisterProxyRecovery}"
+                        Style="{StaticResource InstallerToggleSwitchStyle}" />
+          </HeaderedContentControl>
+
+          <TextBlock Text="初始偏好与集成" Style="{StaticResource InstallerSectionTitleStyle}" />
+          <HeaderedContentControl Style="{StaticResource InstallerSettingRowStyle}" Header="跟随系统环境" Tag="{Binding SystemDefaultsDescription}">
+              <CheckBox x:Name="SystemDefaultsToggle" Content="跟随系统环境" IsChecked="{Binding FollowSystemDefaults}"
+                        Style="{StaticResource InstallerToggleSwitchStyle}" />
+          </HeaderedContentControl>
+          <HeaderedContentControl Style="{StaticResource InstallerSettingRowStyle}" Header="系统通知级别" Tag="{Binding NotificationPresetDescription}">
+              <ComboBox x:Name="NotificationPresetBox" ItemsSource="{Binding NotificationPresetOptions}"
+                        SelectedIndex="{Binding NotificationPresetIndex}" MinWidth="132" MinHeight="32"
+                        AutomationProperties.Name="系统通知级别" AutomationProperties.HelpText="{Binding NotificationPresetDescription}" />
+          </HeaderedContentControl>
+          <HeaderedContentControl Style="{StaticResource InstallerSettingRowStyle}" Header="MCP 服务器" Tag="{Binding McpServerDescription}">
+              <CheckBox x:Name="McpServerToggle" Content="启用 MCP 服务器" IsChecked="{Binding EnableMcpServer}"
+                        Style="{StaticResource InstallerToggleSwitchStyle}" AutomationProperties.HelpText="{Binding McpServerDescription}" />
+          </HeaderedContentControl>
+        </StackPanel>
         <Border
           Style="{StaticResource InstallerConfirmationStyle}"
           AutomationProperties.Name="切换账户确认"
@@ -358,20 +374,23 @@
     </ScrollViewer>
     <Border
       Grid.Row="2"
-      Padding="32,16"
+      Padding="24,12"
       BorderBrush="{DynamicResource ControlElevationBorderBrush}"
       BorderThickness="0,1,0,0">
       <Grid>
+        <Grid.RowDefinitions>
+          <RowDefinition Height="Auto" />
+          <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
           <ColumnDefinition
             Width="*" />
           <ColumnDefinition
             Width="Auto" />
-          <ColumnDefinition
-            Width="Auto" />
         </Grid.ColumnDefinitions>
         <TextBlock
-          Margin="0,0,24,0"
+          Grid.ColumnSpan="2"
+          Margin="0,0,0,10"
           VerticalAlignment="Center"
           Style="{StaticResource MutedTextStyle}"
           Text="系统将按需请求管理员权限。"
@@ -379,7 +398,7 @@
         <WrapPanel
           HorizontalAlignment="Right"
           AutomationProperties.Name="安装操作"
-          Grid.Column="1">
+          Grid.Row="1">
           <Button Margin="0,0,8,0" Content="完成安装选项"
                   Command="{Binding CompletePreferencesCommand}"
                   Visibility="{Binding IsCompletePreferencesVisible, Converter={StaticResource BooleanToVisibilityConverter}}"
@@ -414,7 +433,8 @@
             AutomationProperties.Name="取消当前操作" />
         </WrapPanel>
         <Button
-          Grid.Column="2"
+          Grid.Row="1"
+          Grid.Column="1"
           Content="关闭(_X)"
           Click="OnCloseClicked"
           AutomationProperties.Name="关闭安装器"

@@ -1,5 +1,7 @@
 using System.Diagnostics;
 using System.Windows;
+using System.Windows.Automation.Peers;
+using System.Windows.Automation.Provider;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Media;
@@ -19,6 +21,63 @@ internal static class InstallerWpfShellBehavior
         await VerifyConfirmationsAsync();
         await VerifyCloseAdmissionAsync();
         await VerifyDetailsLayoutAsync();
+        await VerifyPreferenceRowsAsync();
+    }
+
+    private static async Task VerifyPreferenceRowsAsync()
+    {
+#pragma warning disable WPF0001 // Exercise the production Fluent themes on the owning STA.
+        ThemeMode previous = Application.Current.ThemeMode;
+        try
+        {
+            foreach (ThemeMode theme in new[] { ThemeMode.Light, ThemeMode.Dark })
+            {
+                Application.Current.ThemeMode = theme;
+                foreach (Size size in new[] { new Size(760, 760), new Size(640, 420) })
+                {
+                    var runtime = new Runtime { Preferences = true };
+                    using var model = new InstallerShellViewModel(runtime);
+                    MainWindow window = new(model) { Width = size.Width, Height = size.Height, ShowInTaskbar = false };
+                    try
+                    {
+                        window.Show();
+                        await WaitUntilAsync(() => runtime.Inspections == 1 && !model.IsBusy);
+                        await window.Dispatcher.InvokeAsync(window.UpdateLayout, DispatcherPriority.ContextIdle);
+                        FrameworkElement panel = (FrameworkElement)window.FindName("InstallPreferencesPanel");
+                        HeaderedContentControl[] rows = Descendants(panel).OfType<HeaderedContentControl>().ToArray();
+                        Assert.Equal(8, rows.Length);
+                        foreach (HeaderedContentControl row in rows)
+                        {
+                            FrameworkElement text = (FrameworkElement)row.Template.FindName("OptionTextPanel", row);
+                            FrameworkElement action = (FrameworkElement)row.Template.FindName("OptionAction", row);
+                            Rect labelBounds = text.TransformToAncestor(row).TransformBounds(new Rect(text.RenderSize));
+                            Rect actionBounds = action.TransformToAncestor(row).TransformBounds(new Rect(action.RenderSize));
+                            Assert.True(labelBounds.Right <= actionBounds.Left - 12, "Setting text must not overlap its switch or selector.");
+                        }
+                        CheckBox desktop = (CheckBox)window.FindName("DesktopShortcutToggle");
+                        var peer = new CheckBoxAutomationPeer(desktop);
+                        Assert.Equal("添加桌面快捷方式", peer.GetName());
+                        Assert.IsAssignableFrom<IToggleProvider>(peer.GetPattern(PatternInterface.Toggle)).Toggle();
+                        Assert.False(model.CreateDesktopShortcut);
+                        model.ResetInstallPreferencesCommand.Execute(null);
+                        Assert.True(desktop.IsChecked);
+                        Assert.False(model.HasCustomInstallPreferences);
+                        ScrollViewer scroll = (ScrollViewer)window.FindName("MainContent");
+                        scroll.ScrollToBottom();
+                        await window.Dispatcher.InvokeAsync(window.UpdateLayout, DispatcherPriority.ContextIdle);
+                        Button primary = Descendants((DependencyObject)window.Content).OfType<Button>()
+                            .Single(button => ReferenceEquals(button.Command, model.PrimaryActionCommand));
+                        Rect primaryBounds = primary.TransformToAncestor((Visual)window.Content).TransformBounds(new Rect(primary.RenderSize));
+                        Assert.InRange(primaryBounds.Bottom, 0, ((FrameworkElement)window.Content).ActualHeight);
+                        Assert.True(primary.IsEnabled);
+                        Assert.Equal(0, runtime.Mutations);
+                    }
+                    finally { window.Close(); }
+                }
+            }
+        }
+        finally { Application.Current.ThemeMode = previous; }
+#pragma warning restore WPF0001
     }
 
     private static async Task VerifyDetailsLayoutAsync()
@@ -169,9 +228,10 @@ internal static class InstallerWpfShellBehavior
         }
     }
 
-    private sealed class Runtime : IInstallerRuntime, IInstallerOwnerTransferRuntime, IInstallerRetiredUninstallRuntime, IDisposable
+    private sealed class Runtime : IInstallerRuntime, IInstallerOwnerTransferRuntime, IInstallerRetiredUninstallRuntime, IInstallerPreferencesRuntime, IDisposable
     {
         internal bool HoldInspection { get; init; }
+        internal bool Preferences { get; init; }
         internal int Inspections { get; private set; }
         internal int Mutations { get; private set; }
         internal int Disposals { get; private set; }
@@ -179,6 +239,15 @@ internal static class InstallerWpfShellBehavior
         internal TaskCompletionSource ReleaseInspection { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public bool SupportsOwnerTransfer => true;
         public bool SupportsRetiredUninstall => true;
+        public bool SupportsInstallPreferences => Preferences;
+        public Task<InstallerExecutionResult> InstallWithPreferencesAsync(InstallerPreferences preferences, IProgress<InstallerProgress> progress, CancellationToken cancellationToken) =>
+            ExecuteAsync(InstallerOperation.Install, progress, cancellationToken);
+        public Task<InstallerExecutionResult> CompletePreferencesAsync(IProgress<InstallerProgress> progress, CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("The presentation test must never acquire installation authority.");
+        public Task<InstallerExecutionResult> TransferWithPreferencesAsync(InstallerPreferences preferences,
+            Func<InstallerOwnerTransferConfirmation, CancellationToken, Task<bool>> confirm,
+            IProgress<InstallerProgress> progress, CancellationToken cancellationToken) =>
+            TransferAndExecuteAsync(confirm, progress, cancellationToken);
 
         public async Task<InstallerRuntimeReadiness> InspectReadinessAsync(CancellationToken cancellationToken)
         {

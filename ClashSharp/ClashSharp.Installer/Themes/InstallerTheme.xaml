@@ -97,4 +97,109 @@
     <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
     <Setter Property="TextWrapping" Value="Wrap" />
   </Style>
+
+  <Style x:Key="InstallerSectionTitleStyle" TargetType="TextBlock">
+    <Setter Property="FontSize" Value="16" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="Margin" Value="0,20,0,8" />
+    <Setter Property="TextWrapping" Value="Wrap" />
+  </Style>
+
+  <!-- Match the application's flat setting rows and its text/action hierarchy. -->
+  <Style x:Key="InstallerSettingRowBorderStyle" TargetType="Border">
+    <Setter Property="Background" Value="{DynamicResource ButtonBackground}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource ControlElevationBorderBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="0" />
+    <Setter Property="Padding" Value="16,12" />
+    <Setter Property="MinHeight" Value="64" />
+    <Setter Property="Margin" Value="0,0,0,6" />
+  </Style>
+
+  <!-- Header is the title, Tag is the explanatory text, and Content remains the
+       logical child so native control names, bindings, and automation are retained. -->
+  <Style x:Key="InstallerSettingRowStyle" TargetType="HeaderedContentControl">
+    <Setter Property="Focusable" Value="False" />
+    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="HeaderedContentControl">
+          <Border Style="{StaticResource InstallerSettingRowBorderStyle}">
+            <Grid>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+              </Grid.ColumnDefinitions>
+              <StackPanel x:Name="OptionTextPanel" Margin="0,0,16,0" VerticalAlignment="Center">
+                <TextBlock Text="{TemplateBinding Header}" TextWrapping="Wrap" />
+                <TextBlock Text="{TemplateBinding Tag}" Margin="0,4,0,0"
+                           Style="{StaticResource MutedTextStyle}" FontSize="12" />
+              </StackPanel>
+              <ContentPresenter x:Name="OptionAction" Grid.Column="1" VerticalAlignment="Center"
+                                ContentSource="Content" />
+            </Grid>
+          </Border>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <!-- Keep CheckBox's native keyboard and Toggle automation contracts. Only its
+       presentation changes to the switch used by the application's setting rows. -->
+  <Style x:Key="InstallerToggleSwitchStyle" TargetType="CheckBox"
+         BasedOn="{StaticResource {x:Type CheckBox}}">
+    <Setter Property="MinWidth" Value="52" />
+    <Setter Property="MinHeight" Value="32" />
+    <Setter Property="AutomationProperties.Name" Value="{Binding Content, RelativeSource={RelativeSource Self}}" />
+    <Setter Property="AutomationProperties.HelpText" Value="{Binding Tag, RelativeSource={RelativeSource AncestorType=HeaderedContentControl}}" />
+    <Setter Property="FocusVisualStyle">
+      <Setter.Value>
+        <Style TargetType="Control">
+          <Setter Property="Template">
+            <Setter.Value>
+              <ControlTemplate>
+                <Rectangle Margin="1" StrokeThickness="2"
+                           Stroke="{DynamicResource AccentButtonBackground}" />
+              </ControlTemplate>
+            </Setter.Value>
+          </Setter>
+        </Style>
+      </Setter.Value>
+    </Setter>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="CheckBox">
+          <Grid Background="Transparent" Width="52" Height="32">
+            <Border x:Name="Track" Width="40" Height="20" CornerRadius="10"
+                    Background="Transparent" BorderThickness="1"
+                    BorderBrush="{DynamicResource TextFillColorSecondaryBrush}" />
+            <Ellipse x:Name="Thumb" Width="12" Height="12" Margin="10,0,0,0"
+                     HorizontalAlignment="Left" Fill="{DynamicResource TextFillColorSecondaryBrush}">
+            </Ellipse>
+          </Grid>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsChecked" Value="True">
+              <Setter TargetName="Track" Property="Background" Value="{DynamicResource AccentButtonBackground}" />
+              <Setter TargetName="Track" Property="BorderBrush" Value="{DynamicResource AccentButtonBackground}" />
+              <Setter TargetName="Thumb" Property="Fill" Value="{DynamicResource AccentButtonForeground}" />
+              <Setter TargetName="Thumb" Property="RenderTransform">
+                <Setter.Value><TranslateTransform X="20" /></Setter.Value>
+              </Setter>
+            </Trigger>
+            <Trigger Property="IsMouseOver" Value="True">
+              <Setter TargetName="Thumb" Property="Width" Value="14" />
+              <Setter TargetName="Thumb" Property="Height" Value="14" />
+              <Setter TargetName="Thumb" Property="Margin" Value="9,0,0,0" />
+            </Trigger>
+            <Trigger Property="IsPressed" Value="True">
+              <Setter TargetName="Thumb" Property="Opacity" Value="0.8" />
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+              <Setter Property="Opacity" Value="0.4" />
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
 </ResourceDictionary>

@@ -13,6 +13,7 @@ public sealed class InstallerWpfResourceTests
     [
         "WindowBackground", "WindowForeground", "ButtonBackground",
         "ControlElevationBorderBrush", "TextFillColorSecondaryBrush", "TextFillColorDisabledBrush",
+        "AccentButtonBackground", "AccentButtonForeground",
     ];
 
     [Fact]

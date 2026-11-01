@@ -56,6 +56,80 @@ public sealed class InstallerPreferencesPresentationTests
     }
 
     [Fact]
+    public async Task RestoreRecommendedResetsEveryDraftAndUpdatesDependentPresentationWithoutInstalling()
+    {
+        var runtime = new Runtime { TransferSupported = true };
+        using var model = new InstallerShellViewModel(runtime);
+        await model.InitializeAsync();
+        model.CreateDesktopShortcut = false;
+        model.RequestTaskbarPin = true;
+        model.LaunchAtStartup = true;
+        model.RegisterProxyRecovery = false;
+        model.InstallTransparentProxyService = false;
+        model.FollowSystemDefaults = false;
+        model.EnableMcpServer = true;
+        model.NotificationPresetIndex = (int)InstallerNotificationPreset.Disabled;
+        Assert.True(model.HasCustomInstallPreferences);
+        Assert.False(model.IsOwnerTransferActionVisible);
+        Assert.True(model.ResetInstallPreferencesCommand.CanExecute(null));
+        List<string?> changes = [];
+        model.PropertyChanged += (_, args) => changes.Add(args.PropertyName);
+
+        model.ResetInstallPreferencesCommand.Execute(null);
+
+        Assert.True(model.CreateDesktopShortcut);
+        Assert.False(model.RequestTaskbarPin);
+        Assert.False(model.LaunchAtStartup);
+        Assert.True(model.RegisterProxyRecovery);
+        Assert.True(model.InstallTransparentProxyService);
+        Assert.True(model.FollowSystemDefaults);
+        Assert.False(model.EnableMcpServer);
+        Assert.Equal(0, model.NotificationPresetIndex);
+        Assert.True(model.IsOwnerTransferActionVisible);
+        Assert.False(model.HasCustomInstallPreferences);
+        Assert.False(model.ResetInstallPreferencesCommand.CanExecute(null));
+        Assert.Contains(nameof(model.NotificationPresetDescription), changes);
+        Assert.Contains(nameof(model.McpServerDescription), changes);
+        Assert.Contains(nameof(model.InstallTransparentProxyService), changes);
+        Assert.Equal(0, runtime.LegacyCalls);
+        Assert.False(runtime.Accepted.Task.IsCompleted);
+    }
+
+    [Theory]
+    [InlineData(InstallerNotificationPreset.Default, "失败", "超时")]
+    [InlineData(InstallerNotificationPreset.CriticalOnly, "关键", "内核")]
+    [InlineData(InstallerNotificationPreset.All, "成功", "导入")]
+    [InlineData(InstallerNotificationPreset.Disabled, "不发送", "应用内")]
+    public async Task NotificationChoicesExplainTheirDifferentPolicies(InstallerNotificationPreset preset, string first, string second)
+    {
+        using var model = new InstallerShellViewModel(new Runtime());
+        await model.InitializeAsync();
+        model.NotificationPresetIndex = (int)preset;
+        Assert.Contains(first, model.NotificationPresetDescription);
+        Assert.Contains(second, model.NotificationPresetDescription);
+    }
+
+    [Fact]
+    public async Task RestoreRecommendedCannotChangeTheFrozenInstallationSnapshot()
+    {
+        var runtime = new Runtime();
+        using var model = new InstallerShellViewModel(runtime);
+        await model.InitializeAsync();
+        model.EnableMcpServer = true;
+        Task active = model.PrimaryActionCommand.ExecuteAsync();
+        try
+        {
+            InstallerPreferences accepted = await runtime.Accepted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.False(model.ResetInstallPreferencesCommand.CanExecute(null));
+            model.ResetInstallPreferencesCommand.Execute(null);
+            Assert.True(model.EnableMcpServer);
+            Assert.True(accepted.EnableMcpServer);
+        }
+        finally { runtime.Release.TrySetResult(); }
+        await active;
+    }
+
+    [Fact]
     public async Task PendingUserSetupUsesItsOwnRetryWithoutCallingInstallOrRepair()
     {
         var runtime = new Runtime { Maintenance = true, Pending = true };
