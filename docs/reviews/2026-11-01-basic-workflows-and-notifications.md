@@ -55,6 +55,10 @@
 
 补充了各级别、总开关、提交后才通知、取消与空结果静默、部分失败、通知传输故障不改变业务结果、注册释放，以及恢复期间策略读取等行为回归。页面反馈继续保留，通知传输失败不能使已提交的导入或设置回滚。
 
+蓝机原生验收发现，正常注册启动的内置 Administrator 账户仍运行于提升权限令牌；Windows App SDK 的 `IsSupported()` 对这类进程返回 false，`Show` 静默返回且 ID 为零。应用现在能够记录失败，不再误报发送成功，但初始候选仍不能在该会话送达通知。对照[微软的限制说明](https://learn.microsoft.com/en-us/windows/apps/develop/notifications/app-notifications/)与[实际支持判断](https://github.com/microsoft/WindowsAppSDK/blob/main/dev/AppNotifications/AppNotificationManager.cpp)，补充仅在 SDK 不支持当前进程时使用的 packaged WinRT toast 路径。同一蓝机会话中，兼容 API 已在 Windows 历史留下独立测试记录；不修改 UAC、系统通知策略或账户。
+
+兼容路径使用相同应用身份、清单激活、通知级别及稳定触发器身份，按主窗口生命周期释放回调。支持 SDK 的进程继续使用 SDK；SDK 发送失败不切换其他通道，以免绕过 Windows 设置。文本通过 XML 文本节点编码，不能成为 toast 标记。新增 4 项回归，验证选择、注册与回执一致、失败不跨通道重发和 XML 文本处理；通知测试 46 项通过。最终候选的原生通知回执仍须在重新构建后确认。
+
 ## Mihomo 固定输入
 
 升级至上游最新稳定版 [v1.19.33](https://github.com/MetaCubeX/mihomo/releases/tag/v1.19.33)，保持 Windows amd64 v1 兼容目标。归档 SHA-256 为 `fb0b960eff568459502d4ebe53e9cca203053d86ec9024fe935f19615d74d9aa`；内置程序为 61,304,320 字节，SHA-256 为 `a4fbf2b8bc2b5416ce2d0d392ac59f2e0a234ea4fcf635b66bd21e62ea9641b9`。

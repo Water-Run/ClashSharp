@@ -1,10 +1,11 @@
 extern alias ClashSharpUi;
-
 using ClashSharp.Model.Triggers;
+using CompatibleNotificationPlatform = ClashSharpUi::ClashSharp.Service.CompatibleNotificationPlatform;
 using ITriggerNotificationReceiptStore = ClashSharpUi::ClashSharp.Service.ITriggerNotificationReceiptStore;
 using ITriggerRuntimeEventPublisher = ClashSharpUi::ClashSharp.Service.ITriggerRuntimeEventPublisher;
 using IWin11NotificationPlatform = ClashSharpUi::ClashSharp.Service.IWin11NotificationPlatform;
 using NotificationLevel = ClashSharp.Model.NotificationLevel;
+using NotificationPayload = ClashSharpUi::ClashSharp.Service.NotificationPayload;
 using NotificationService = ClashSharpUi::ClashSharp.Service.NotificationService;
 using TriggerRuntimeEvent = ClashSharpUi::ClashSharp.Service.TriggerRuntimeEvent;
 
@@ -13,6 +14,74 @@ namespace ClashSharp.Tests.Unit.Services;
 /// <summary>Unit tests for notification policy and logging behavior.</summary>
 public sealed class NotificationServiceTests
 {
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task CompatibilityTransportKeepsRegistrationAndReceiptsOnTheSelectedPlatform(bool supported)
+    {
+        bool currentSupport = supported;
+        Transport modern = new();
+        Transport legacy = new();
+        using CompatibleNotificationPlatform platform = new(() => currentSupport, modern, legacy);
+        int activated = 0;
+        using IDisposable registration = platform.Register(() => activated++);
+        currentSupport = !supported;
+        platform.Show("Title", "Message", "stable-receipt");
+        Assert.True(await platform.ContainsAsync("stable-receipt", CancellationToken.None));
+        Transport selected = supported ? modern : legacy;
+        Transport unused = supported ? legacy : modern;
+        selected.Activated!();
+        Assert.Equal(1, activated);
+        Assert.Equal(1, selected.Shows);
+        Assert.Equal(0, unused.Shows);
+        Assert.Null(unused.Activated);
+        registration.Dispose();
+        Assert.Null(selected.Activated);
+    }
+
+    [Fact]
+    public void SupportedTransportFailureDoesNotBypassWindowsSettingsThroughAnotherTransport()
+    {
+        FakeWin11NotificationPlatform modern = new() { ExceptionToThrow = new InvalidOperationException("blocked") };
+        FakeWin11NotificationPlatform fallback = new();
+        using CompatibleNotificationPlatform platform = new(() => true, modern, fallback);
+        Assert.Throws<InvalidOperationException>(() => platform.Show("Title", "Message"));
+        Assert.Empty(fallback.Requests);
+    }
+
+    [Fact]
+    public void CompatibleToastTreatsMessageContentAsText()
+    {
+        const string title = "Import <configuration> & test";
+        const string message = "\"quoted\" </text><actions>用户配置";
+        System.Xml.Linq.XElement payload = System.Xml.Linq.XElement.Parse(NotificationPayload.Create(title, message));
+        Assert.Equal(new[] { title, message }, payload.Descendants("text").Select(element => element.Value));
+        Assert.Empty(payload.Descendants("actions"));
+        Assert.Equal("ToastGeneric", (string?)payload.Element("visual")?.Element("binding")?.Attribute("template"));
+    }
+
+    private sealed class Transport : IWin11NotificationPlatform, ClashSharpUi::ClashSharp.Service.IWin11NotificationRegistration
+    {
+        public Action? Activated { get; private set; }
+        public int Shows { get; private set; }
+        private string? _receipt;
+        public IDisposable Register(Action activated)
+        {
+            Activated = activated;
+            return new ClashSharpUi::ClashSharp.Service.NotificationRegistration(() => Activated = null);
+        }
+        public Task<bool> ContainsAsync(string idempotencyKey, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(_receipt == idempotencyKey);
+        }
+        public void Show(string title, string message, string? idempotencyKey = null)
+        {
+            Shows++;
+            _receipt = idempotencyKey;
+        }
+    }
+
     [Theory]
     [InlineData(NotificationLevel.CriticalOnly, false, false)]
     [InlineData(NotificationLevel.Default, false, false)]

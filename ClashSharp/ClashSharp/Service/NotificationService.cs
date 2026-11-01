@@ -6,6 +6,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Xml.Linq;
 using ClashSharp.ApplicationModel.Startup;
 using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.ApplicationModel.Diagnostics;
@@ -55,6 +56,48 @@ internal sealed class NotificationRegistration(Action release) : IDisposable
     public void Dispose() => Interlocked.Exchange(ref _release, null)?.Invoke();
 }
 
+/// <summary>Selects one supported transport for the complete notification registration lifetime.</summary>
+internal sealed class CompatibleNotificationPlatform : IWin11NotificationPlatform, IWin11NotificationRegistration, IDisposable
+{
+    private readonly Lazy<IWin11NotificationPlatform> _selected;
+
+    public CompatibleNotificationPlatform(Func<bool> supportsModern,
+        IWin11NotificationPlatform modern, IWin11NotificationPlatform fallback)
+    {
+        ArgumentNullException.ThrowIfNull(supportsModern);
+        ArgumentNullException.ThrowIfNull(modern);
+        ArgumentNullException.ThrowIfNull(fallback);
+        _selected = new(() => supportsModern() ? modern : fallback);
+    }
+
+    public IDisposable Register(Action activated)
+    {
+        ArgumentNullException.ThrowIfNull(activated);
+        return _selected.Value is IWin11NotificationRegistration registration
+            ? registration.Register(activated) : new NotificationRegistration(static () => { });
+    }
+
+    public Task<bool> ContainsAsync(string idempotencyKey, CancellationToken cancellationToken) =>
+        _selected.Value.ContainsAsync(idempotencyKey, cancellationToken);
+
+    public void Show(string title, string message, string? idempotencyKey = null) =>
+        _selected.Value.Show(title, message, idempotencyKey);
+
+    public void Dispose()
+    {
+        if (_selected.IsValueCreated && _selected.Value is IDisposable owned) { owned.Dispose(); }
+    }
+}
+
+/// <summary>Builds text-only toast XML without treating user-visible content as markup.</summary>
+internal static class NotificationPayload
+{
+    public static string Create(string title, string message) =>
+        new XElement("toast", new XElement("visual", new XElement("binding",
+            new XAttribute("template", "ToastGeneric"),
+            new XElement("text", title), new XElement("text", message)))).ToString(SaveOptions.DisableFormatting);
+}
+
 /// <summary>Durable receipt boundary used to bridge notification display and outbox commit.</summary>
 internal interface ITriggerNotificationReceiptStore
 {
@@ -83,7 +126,8 @@ internal sealed class Win11NotificationPlatform : IWin11NotificationPlatform, IW
     private readonly object _registrationGate = new();
     private IDisposable? _registration;
     private Action? _activated;
-    public static Win11NotificationPlatform Instance { get; } = new();
+    public static IWin11NotificationPlatform Instance { get; } = new CompatibleNotificationPlatform(
+        AppNotificationManager.IsSupported, new Win11NotificationPlatform(), new WindowsToastNotificationPlatform());
 
     private Win11NotificationPlatform()
     {
@@ -161,12 +205,98 @@ internal sealed class Win11NotificationPlatform : IWin11NotificationPlatform, IW
         }
     }
 
-    private static (string Tag, string Group) CreateIdentity(string idempotencyKey)
+    internal static (string Tag, string Group) CreateIdentity(string idempotencyKey)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(idempotencyKey);
         string hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(idempotencyKey)))
             .ToLowerInvariant();
         return (hash[..16], hash[16..32]);
+    }
+}
+
+/// <summary>Uses packaged WinRT toasts when Windows App SDK notifications do not support the process token.</summary>
+/// <remarks>The built-in Administrator account can remain elevated even after normal registered activation.
+/// This transport preserves Windows notification settings and the same manifest activation identity.</remarks>
+internal sealed class WindowsToastNotificationPlatform : IWin11NotificationPlatform, IWin11NotificationRegistration, IDisposable
+{
+    private readonly object _gate = new();
+    private readonly List<Windows.UI.Notifications.ToastNotification> _live = [];
+    private Action? _activated;
+
+    public IDisposable Register(Action activated)
+    {
+        ArgumentNullException.ThrowIfNull(activated);
+        Volatile.Write(ref _activated, activated);
+        return new NotificationRegistration(Dispose);
+    }
+
+    public Task<bool> ContainsAsync(string idempotencyKey, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        (string tag, string group) = Win11NotificationPlatform.CreateIdentity(idempotencyKey);
+        bool present = Windows.UI.Notifications.ToastNotificationManager.History.GetHistory()
+            .Any(notification => StringComparer.Ordinal.Equals(notification.Tag, tag)
+                && StringComparer.Ordinal.Equals(notification.Group, group));
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(present);
+    }
+
+    public void Show(string title, string message, string? idempotencyKey = null)
+    {
+        Windows.Data.Xml.Dom.XmlDocument document = new();
+        document.LoadXml(NotificationPayload.Create(title, message));
+        Windows.UI.Notifications.ToastNotification notification = new(document);
+        if (idempotencyKey is not null)
+        {
+            (notification.Tag, notification.Group) = Win11NotificationPlatform.CreateIdentity(idempotencyKey);
+        }
+        lock (_gate)
+        {
+            // Own a bounded set of callbacks while the main window is alive. Older retained toasts
+            // continue to use the packaged COM activation declared in the manifest.
+            while (_live.Count >= 128) { Release(_live[0]); }
+            _live.Add(notification);
+            notification.Activated += OnActivated;
+            notification.Dismissed += OnDismissed;
+            notification.Failed += OnFailed;
+            try { Windows.UI.Notifications.ToastNotificationManager.CreateToastNotifier().Show(notification); }
+            catch { Release(notification); throw; }
+        }
+    }
+
+    private void OnActivated(Windows.UI.Notifications.ToastNotification sender, object args)
+    {
+        Volatile.Read(ref _activated)?.Invoke();
+        lock (_gate) { Release(sender); }
+    }
+
+    private void OnDismissed(Windows.UI.Notifications.ToastNotification sender,
+        Windows.UI.Notifications.ToastDismissedEventArgs args)
+    {
+        lock (_gate) { Release(sender); }
+    }
+
+    private void OnFailed(Windows.UI.Notifications.ToastNotification sender,
+        Windows.UI.Notifications.ToastFailedEventArgs args)
+    {
+        lock (_gate) { Release(sender); }
+    }
+
+    private void Release(Windows.UI.Notifications.ToastNotification notification)
+    {
+        notification.Activated -= OnActivated;
+        notification.Dismissed -= OnDismissed;
+        notification.Failed -= OnFailed;
+        _live.Remove(notification);
+    }
+
+    public void Dispose()
+    {
+        Volatile.Write(ref _activated, null);
+        lock (_gate)
+        {
+            foreach (Windows.UI.Notifications.ToastNotification notification in _live.ToArray()) { Release(notification); }
+        }
     }
 }
 #endif
