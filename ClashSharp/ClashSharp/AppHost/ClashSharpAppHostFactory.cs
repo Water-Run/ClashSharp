@@ -80,6 +80,7 @@ internal static class ClashSharpAppHostFactory
                 {
                     // These boundaries already publish their actionable outcome once.
                     if (error.OperationName is "Mcp.Settings" or "settings-application-retry" or "Triggers.Replace"
+                        or "settings-connection-test-target"
                         || error.OperationName.StartsWith("startup-check", StringComparison.Ordinal)) { return; }
                     provider.GetRequiredService<NotificationService>().ReportOperation(
                         "Notification.Runtime.Title", "Application.UnexpectedError", true);

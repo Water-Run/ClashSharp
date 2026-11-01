@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using ClashSharp.ApplicationModel.Diagnostics;
 using ClashSharp.ApplicationModel.Settings;
 
@@ -6,6 +7,32 @@ namespace ClashSharp.ApplicationModel.Presentation;
 /// <summary>Reports completed operations once; cancellation and no-op results remain quiet.</summary>
 public sealed class OperationNotificationRunner(IUserOperationNotifications? notifications)
 {
+    private static readonly ConditionalWeakTable<Exception, object> ReportedFailures = new();
+
+    /// <summary>Checks whether every failure branch already belongs to an operation notification.</summary>
+    /// <param name="exception">Original or wrapped failure observed by an outer error boundary.</param>
+    /// <returns>True when a generic error toast would duplicate an owned outcome.</returns>
+    public static bool HasReportedFailure(Exception exception)
+    {
+        ArgumentNullException.ThrowIfNull(exception);
+        Stack<Exception> pending = new();
+        HashSet<Exception> visited = new(ReferenceEqualityComparer.Instance);
+        bool covered = false;
+        pending.Push(exception);
+        while (pending.TryPop(out Exception? current))
+        {
+            if (!visited.Add(current)) { continue; }
+            if (ReportedFailures.TryGetValue(current, out _)) { covered = true; continue; }
+            if (current is AggregateException { InnerExceptions.Count: > 0 } aggregate)
+            {
+                foreach (Exception inner in aggregate.InnerExceptions) { pending.Push(inner); }
+            }
+            else if (current.InnerException is { } inner) { pending.Push(inner); }
+            else { return false; }
+        }
+        return covered;
+    }
+
     /// <summary>Reports a completed operation without a result value.</summary>
     /// <param name="operation">Complete asynchronous operation.</param>
     /// <param name="titleResourceKey">Localized category key.</param>
@@ -84,6 +111,9 @@ public sealed class OperationNotificationRunner(IUserOperationNotifications? not
 
     private void ReportFailure(string title, string message, Exception exception)
     {
+        // Retain no exception strongly and change neither its identity nor its diagnostic data.
+        // A later explicit retry still reports its own outcome, even if a dependency reuses it.
+        if (notifications is not null) { _ = ReportedFailures.GetValue(exception, static _ => new()); }
         if (exception is not (SettingsDataReplacementRecoveryException or SettingsImportRecoveryException or SettingsResetRecoveryException))
         {
             TryReport(title, message, true);

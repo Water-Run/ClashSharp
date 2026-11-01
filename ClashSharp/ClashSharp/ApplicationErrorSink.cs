@@ -40,6 +40,7 @@ internal sealed class ApplicationErrorSink : IApplicationErrorSink
                 applicationError.Exception));
         // Command/session boundaries filter caller cancellation before reporting here. An
         // unexpected cancellation from a timed-out dependency still needs ordinary feedback.
+        if (!OperationNotificationRunner.HasReportedFailure(applicationError.Exception))
         {
             try { _notify?.Invoke(applicationError); }
             catch (Exception deliveryFailure) when (!ExceptionGraphClassifier.IsProcessFatal(deliveryFailure))

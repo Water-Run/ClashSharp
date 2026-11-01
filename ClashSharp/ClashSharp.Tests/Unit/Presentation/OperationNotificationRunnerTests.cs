@@ -1,9 +1,61 @@
+extern alias ClashSharpUi;
+
 using ClashSharp.ApplicationModel.Presentation;
 
 namespace ClashSharp.Tests.Unit.Presentation;
 
 public sealed class OperationNotificationRunnerTests
 {
+    [Theory]
+    [InlineData(0, 0)]
+    [InlineData(1, 0)]
+    [InlineData(2, 0)]
+    [InlineData(3, 1)]
+    public async Task OuterErrorBoundaryKeepsDiagnosticsAndOnlyNotifiesUncoveredFailures(int wrapping, int genericNotifications)
+    {
+        Recorder notifications = new();
+        IOException original = new("owned operation failure");
+        await Assert.ThrowsAsync<IOException>(() => new OperationNotificationRunner(notifications).ExecuteAsync(
+            () => Task.FromException<bool>(original), "Title", "Success", "Failure", CancellationToken.None));
+        Exception observed = wrapping switch
+        {
+            1 => new InvalidOperationException("outer boundary", original),
+            2 => new AggregateException(original, new InvalidOperationException("wrapper", original)),
+            3 => new AggregateException(original, new IOException("independent failure")),
+            _ => original,
+        };
+        int logs = 0;
+        int generic = 0;
+        ClashSharpUi::ClashSharp.ApplicationErrorSink sink = new((_, _, _, _) => logs++, key => key, _ => generic++);
+        await sink.ReportAsync(new ApplicationError("outer-command", observed), CancellationToken.None);
+        Assert.Single(notifications.Messages);
+        Assert.Equal(1, logs);
+        Assert.Equal(genericNotifications, generic);
+    }
+
+    [Fact]
+    public async Task MissingOperationNotificationBoundaryLeavesGenericErrorAvailable()
+    {
+        IOException failure = new("unreported");
+        await Assert.ThrowsAsync<IOException>(() => new OperationNotificationRunner(null).ExecuteAsync(
+            () => Task.FromException<bool>(failure), "Title", "Success", "Failure", CancellationToken.None));
+        Assert.False(OperationNotificationRunner.HasReportedFailure(failure));
+    }
+
+    [Fact]
+    public async Task ExplicitRetryReportsAgainWhenADependencyReusesItsException()
+    {
+        Recorder notifications = new();
+        OperationNotificationRunner runner = new(notifications);
+        IOException failure = new("retryable");
+        for (int i = 0; i < 2; i++)
+        {
+            await Assert.ThrowsAsync<IOException>(() => runner.ExecuteAsync(
+                () => Task.FromException<bool>(failure), "Title", "Success", "Failure", CancellationToken.None));
+        }
+        Assert.Equal(2, notifications.Messages.Count);
+    }
+
     [Fact]
     public async Task SuccessIsPublishedOnlyAfterTheOperationCommits()
     {
