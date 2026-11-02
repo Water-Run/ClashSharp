@@ -256,6 +256,23 @@ try {
     $validPath = Join-Path $validRoot 'notices.zip'
     $first = New-ClashSharpThirdPartyNotices -RepositoryRoot $validRoot -OutputPath $validPath
     $verified = Get-ClashSharpThirdPartyNoticesContract -LiteralPath $validPath
+    $assetRoot = New-TestFixture -Name 'offline-asset-licenses'
+    $assetCatalogPath = Join-Path $assetRoot 'ClashSharp/Installer/ThirdParty/catalog.json'
+    $assetCatalog = Get-Content -LiteralPath $assetCatalogPath -Raw | ConvertFrom-Json -AsHashtable -Depth 32
+    foreach ($name in @('flag-icons-license.txt', 'unicode-cldr-license.txt')) {
+        $bytes = $utf8.GetBytes('Synthetic offline asset license: ' + $name)
+        [IO.File]::WriteAllBytes((Join-Path (Split-Path -Parent $assetCatalogPath) $name), $bytes)
+        $assetCatalog.documents += @{
+            file = $name; sourceUrl = 'https://example.invalid/pinned-asset/' + $name
+            length = $bytes.Length; sha256 = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes)).ToLowerInvariant()
+        }
+    }
+    Write-TestJson -Path $assetCatalogPath -Value $assetCatalog
+    $assetPath = Join-Path $assetRoot 'notices.zip'
+    $assetNotice = New-ClashSharpThirdPartyNotices -RepositoryRoot $assetRoot -OutputPath $assetPath
+    $assetVerified = Get-ClashSharpThirdPartyNoticesContract -LiteralPath $assetPath
+    Assert-TestCondition ($assetNotice.DocumentCount -eq $first.DocumentCount + 2 -and $assetVerified.DocumentCount -eq $assetNotice.DocumentCount) 'Offline asset licenses must be referenced by the shipped notices inventory.'
+    $script:scenarios.Add('offline-asset-licenses')
     Assert-TestCondition ($verified.PackageCount -eq 2 -and $verified.Sha256 -ceq $first.Sha256) 'The valid two-package inventory was not preserved.'
     Assert-TestCondition ($verified.BomComponentCount -eq 7 -and $verified.BomSha256 -cmatch '^[0-9a-f]{64}$') 'The BOM must include two NuGet packages, mihomo and four data assets.'
     Assert-TestCondition ($first.BomComponentCount -eq $verified.BomComponentCount -and $first.BomSha256 -ceq $verified.BomSha256 -and $first.DocumentCount -eq $verified.DocumentCount) 'Producer and archive verifier must agree on BOM identity and original document count.'

@@ -433,6 +433,11 @@ function New-ClashSharpThirdPartyNotices {
         $bytes = Read-ClashSharpNoticeFile -LiteralPath (Join-Path $root $relative)
         $bundled.Add((Add-ClashSharpNoticeDocument -Documents $documents -Bytes $bytes -Name $relative -Source 'ClashSharp repository'))
     }
+    # Offline flags and region names are source assets rather than NuGet packages.
+    # Keep their verified original license references in the shipped inventory too.
+    foreach ($name in @('flag-icons-license.txt', 'unicode-cldr-license.txt')) {
+        if ($supplements.ContainsKey($name)) { $bundled.Add($supplements[$name]) }
+    }
     $releaseBytes = Read-ClashSharpNoticeFile -LiteralPath (Join-Path $root 'ClashSharp/Installer/release-inputs.json')
     $release = [Text.Encoding]::UTF8.GetString($releaseBytes) | ConvertFrom-Json -AsHashtable -Depth 16
     $coreBytes = Read-ClashSharpNoticeFile -LiteralPath (Join-Path $root 'ClashSharp/ClashSharp/Binaries/mihomo-manifest.json')
