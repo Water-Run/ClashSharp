@@ -28,4 +28,20 @@
 
 初版01b1557的[CI41378115521](https://github.com/Water-Run/ClashSharp/actions/runs/41378115521)四原始报告7547／0／0及双次匹配元数据已核验，证据 `fd99ed553f30d5f6ae634f171ad76216d86ec82e2801453777b089142289fe31`；[内部签名41379804311](https://github.com/Water-Run/ClashSharp/actions/runs/41379804311)的生产与独立消费均通过。它是补查时间戳语义之前的阶段记录，不作为本轮最终交付包。
 
-最终同一源码的完整 CI、内部签名候选及蓝机无临时 Auth 根的首次界面／安装／卸载验收随后绑定并追加。Windows 信任结果使用[WinVerifyTrust](https://learn.microsoft.com/en-us/windows/win32/api/wintrust/nf-wintrust-winverifytrust)分类，验证时间来自[CRYPT_PROVIDER_SGNR](https://learn.microsoft.com/en-us/windows/win32/api/wintrust/ns-wintrust-crypt_provider_sgnr)；内部候选的明确锚定证书仅用于内存自定义根链，正式配置的系统信任策略不变。
+Windows 信任结果使用[WinVerifyTrust](https://learn.microsoft.com/en-us/windows/win32/api/wintrust/nf-wintrust-winverifytrust)分类，验证时间来自[CRYPT_PROVIDER_SGNR](https://learn.microsoft.com/en-us/windows/win32/api/wintrust/ns-wintrust-crypt_provider_sgnr)；内部候选的明确锚定证书仅用于内存自定义根链，正式配置的系统信任策略不变。
+
+## 最终同一候选实机通过与交付
+
+产品源码 **`cdfd83593e0121113c7e806d6b1dbefb6d26878b`** 已推送主线。[CI41382282138](https://github.com/Water-Run/ClashSharp/actions/runs/41382282138) 两作业成功，四原始归档和双次匹配元数据独立核验，四份 TRX 为 4805／1141／226／1382，合计 **7554 通过、0 失败、0 跳过**。证据 SHA-256 `070e5821245d56ae23f999a625dabc2984920caca964aac3c895fab7d489aa93`。
+
+[内部签名41384194494](https://github.com/Water-Run/ClashSharp/actions/runs/41384194494) 的生产与独立 Server 消费通过，两个临时证书、私钥、密钥槽及签名文件均清理确认。候选身份 `dc3bf078e019fa42bc6dc7f84647409e26957aeabcebe746d437336fbf576f57`，原 ZIP435432051 字节／`f65919fe610437396254eb6d7d328f3b8ffc7ae0e42a603a97e8d3c21217f329`；原蓝机只读载荷审计收据 `a92ce22c0e23155059d875e1677e6311ff71a3eadc93be9861b8458c5c72f036`。原始生产归档、内 ZIP 及独立消费回执逐项一致。
+
+蓝机从“程序未安装、无当前内部 Auth 根证书”的状态，通过真实签名 Setup 正常安装 **18196／0**，版本和“内部测试版”标签可见，推荐恢复七开关通过，首次直接完成，无补救重试。Setup 自行处理安装和所需系统配置，没有手动证书操作。完整已装内容与服务身份审计通过，服务 Running，应用产品版本 `1.0.0+cdfd83593e0121113c7e806d6b1dbefb6d26878b`；收据 `797b53974b76bd8f8f1d43edc976394c13241ac3ad59ff530a23ed7d7aac1928`。随后同一 Setup 正常卸载 **79048／0**，未启动主程序扩展测试范围。
+
+安装前、安装后及卸载后系统 Root 存储逐项保持，Auth 根始终不存在；代理摘要保持 `C4CB7760`。MSIX 安装证书由 Setup 的既有事务负责，正常卸载后产品证书为 0。用户的活动 RDP 会话未变，没有使用本地 RDP 或本地产品窗口。
+
+实际生产 MainWindow 及合成运行端另外完成八个深浅主题、默认／最小窗口的错误指引、版本、禁用、重新检查和固定关闭按钮场景，均无绑定错误或产品变更。原 RenderTargetBitmap 截图的透明背景不作为视觉证据；改用只截本进程窗口的原生 PrintWindow 后，已查看深浅主题与实际签名窗口。预览宿主的默认小图标来自缺少 ApplicationIcon，已绑定生产的 LogoInstaller.ico 并单独看图；真实签名 Setup 原本使用正确 Logo。没有因此改动实际安装器图标或任务栏行为。
+
+最终保留蓝机桌面唯一的 **Clash#.zip**，完整 11 成员且原始签名字节不变，第一层恰为 **Setup.exe／LICENSE／README.md**。旧 ZIP 与逐项匹配的旧解压目录清理；正常卸载后的新数据目录、七个可归属提取缓存、九个本轮任务、注册表历史及整个验收工作目录已移除，未恢复任何历史备份。产品服务／注册／进程／任务／证书与相关残留复核为 0。
+
+27 份公开身份及计数回执为19508字节 ZIP，SHA-256 `8c6361492b7f063704ec564c15874baace13d9a2a53ecd3b0acce85b5a6cf6ca`，本地逐成员核验；最终删除工作目录后的状态另存 `artifacts/verification/installer-clean-start-20261102/final/final-handoff-state.json`。包内含原生操作回执；没有下载用户配置、真实订阅、私钥或备份。用户可继续从唯一 ZIP 解压后运行 Setup 手验，不把本轮结果当作公开发行授权。
