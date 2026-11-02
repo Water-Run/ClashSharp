@@ -23,3 +23,7 @@
 蓝机桌面 `Clash#.zip` 保持同一原始签名字节，`Clash#` 解压目录11文件逐项匹配，根恰为Setup.exe／LICENSE／README.md。旧6971 ZIP和目录可逆保留。五个合成预览／资源测试任务与三个实际维护任务均退出0、导出后移除，临时任务0；自己的会话恢复原断开状态，没有使用本地RDP或新建账户。旧A74公开Auth根按原租约及DER摘要清理，其他根及正常MSIX信任保留；当前8F431B1B公开根仅按本轮安装器手验租约保留，无私钥，用户完成安装器手验且Setup全部退出后再按租约清理。当前BAC925B8 MSIX信任属于正常安装。
 
 用户计划11月2日继续外观、真实节点／代理和通知点击等手验；不代替用户确认，也不公开发布内部候选。Fluent强调色采用[WPF官方资源语义](https://github.com/dotnet/dotnet/blob/main/src/wpf/Documentation/docs/using-fluent.md)，实际字典加载和深浅主题检查均通过。
+
+## 11 月 2 日后续实机回归
+
+用户授权继续部署测试后，同一976f93e候选通过17项实际导入／分级通知回归，以及真实签名安装器修复和完整安装审计。当前最新42文件关闭备份改为 `deployment-acceptance-20261102/after-tests`／`BDAE2C38`；本页D54F2927为当时历史快照。详见[本轮部署记录](2026-11-02-blue-deployment-acceptance.md)。
