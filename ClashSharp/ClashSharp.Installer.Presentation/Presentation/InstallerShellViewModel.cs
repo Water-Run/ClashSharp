@@ -815,8 +815,8 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
         else if (diagnosticCode == "installer.elevation.certificate_untrusted")
         {
             StatusTitle = "安装包签名尚未受信任";
-            StatusDetail = "此电脑尚未信任安装包的签名证书。请向安装包提供者获取受信任签名的版本，"
-                + "或核对其内部测试包说明。更换安装包后再重新检查。";
+            StatusDetail = "Windows 未能确认此安装包的来源。请从项目的 GitHub Release 重新下载完整压缩包，"
+                + "完整解压后运行 Setup.exe。若仍失败，请向提供者反馈诊断代码。";
         }
         else if (diagnosticCode == "installer.elevation.certificate_expired")
         {
@@ -851,11 +851,18 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
             StatusDetail = "文件可能已损坏或与此安装器不匹配。请重新获取同一版本的完整安装包，"
                 + "完整解压后运行其中的安装器，并保留全部随附文件。";
         }
-        else if (diagnosticCode == "installer.release.payload_file_set_invalid")
+        else if (diagnosticCode is "installer.release.payload_file_set_invalid"
+            or "installer.release.payload_directory_set_invalid" or "installer.release.payload_reparse_rejected")
         {
             StatusTitle = "安装文件不完整或不匹配";
             StatusDetail = "请重新获取同一版本的完整安装包，完整解压后运行其中的安装器，"
                 + "并保留全部随附文件，不要混用其他版本的文件。";
+        }
+        else if (diagnosticCode is "installer.release.payload_lock_failed" or "installer.elevation.executable_lock_failed")
+        {
+            StatusTitle = "无法读取安装文件";
+            StatusDetail = "请关闭正在使用这份安装包的其他程序，将完整压缩包解压到新的本机文件夹，"
+                + "再从该目录运行 Setup.exe。";
         }
         else if (diagnosticCode == "installer.concurrent_action_rejected")
         {

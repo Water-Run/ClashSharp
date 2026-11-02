@@ -271,12 +271,12 @@ internal sealed class WindowsAuthenticodeVerifier : IWindowsAuthenticodeVerifier
             }
 
             cancellationToken.ThrowIfCancellationRequested();
-            using X509Certificate2 certificate = ReadSignerCertificate(trustData.StateData, out uint chainCount);
+            using X509Certificate2 certificate = ReadSignerCertificate(trustData.StateData, out uint chainCount, out DateTime verifiedAsOf);
             // Internal candidates use a short-lived self-signed certificate. Windows still verifies
             // the image digest and signature above; only an absent system root may be replaced by
             // this in-memory chain. The outer verifier must then match the exact embedded signer
             // thumbprint before granting a lease. No OS certificate store is changed here.
-            if (status == UntrustedRoot && (chainCount != 1 || !IsValidInternalCertificate(certificate)))
+            if (status == UntrustedRoot && (chainCount != 1 || !IsValidInternalCertificate(certificate, verifiedAsOf)))
             {
                 throw new InstallerProtocolException("installer.elevation.certificate_untrusted");
             }
@@ -312,7 +312,9 @@ internal sealed class WindowsAuthenticodeVerifier : IWindowsAuthenticodeVerifier
         _ => "installer.elevation.authenticode_invalid",
     };
 
-    private static bool IsValidInternalCertificate(X509Certificate2 certificate)
+    // The time is selected by WinVerifyTrust: a validated timestamp or current time. Never use
+    // an unauthenticated signing-time attribute or accept a time from a caller or manifest.
+    internal static bool IsValidInternalCertificate(X509Certificate2 certificate, DateTime verifiedAsOf)
     {
         const string prefix = "CN=ClashSharp Internal Candidate ";
         if (!certificate.Subject.StartsWith(prefix, StringComparison.Ordinal)
@@ -329,11 +331,12 @@ internal sealed class WindowsAuthenticodeVerifier : IWindowsAuthenticodeVerifier
         chain.ChainPolicy.CustomTrustStore.Add(certificate);
         chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
         chain.ChainPolicy.DisableCertificateDownloads = true;
+        chain.ChainPolicy.VerificationTime = verifiedAsOf;
         chain.ChainPolicy.ApplicationPolicy.Add(new Oid("1.3.6.1.5.5.7.3.3"));
         return chain.Build(certificate);
     }
 
-    private static X509Certificate2 ReadSignerCertificate(nint stateData, out uint chainCount)
+    private static X509Certificate2 ReadSignerCertificate(nint stateData, out uint chainCount, out DateTime verifiedAsOf)
     {
         nint providerData = WTHelperProvDataFromStateData(stateData);
         nint providerSigner = providerData == 0
@@ -352,6 +355,14 @@ internal sealed class WindowsAuthenticodeVerifier : IWindowsAuthenticodeVerifier
         CryptProviderSigner signer = Marshal.PtrToStructure<CryptProviderSigner>(
             providerSigner);
         chainCount = signer.CertificateChainCount;
+        try
+        {
+            verifiedAsOf = DateTime.FromFileTimeUtc(((long)signer.VerifyAsOf.HighDateTime << 32) | signer.VerifyAsOf.LowDateTime);
+        }
+        catch (ArgumentOutOfRangeException exception)
+        {
+            throw new InstallerProtocolException("installer.elevation.authenticode_signer_invalid", exception);
+        }
         if (signer.CertificateChainCount == 0 || signer.CertificateChain == 0)
         {
             throw new InstallerProtocolException(

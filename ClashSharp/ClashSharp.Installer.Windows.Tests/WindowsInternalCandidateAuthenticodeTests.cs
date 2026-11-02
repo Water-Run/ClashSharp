@@ -11,6 +11,22 @@ namespace ClashSharp.Installer.Windows.Tests;
 
 public sealed class WindowsInternalCandidateAuthenticodeTests
 {
+    [Theory]
+    [InlineData(-60, true)]
+    [InlineData(0, false)]
+    [InlineData(-96, false)]
+    public void InternalChainUsesTheWindowsVerifiedTimeInsteadOfDownloadTime(int hoursFromNow, bool accepted)
+    {
+        using RSA rsa = RSA.Create(2048);
+        var request = new CertificateRequest("CN=ClashSharp Internal Candidate " + Guid.NewGuid().ToString("N"), rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        request.CertificateExtensions.Add(new X509KeyUsageExtension(X509KeyUsageFlags.DigitalSignature, true));
+        request.CertificateExtensions.Add(new X509EnhancedKeyUsageExtension(new OidCollection { new("1.3.6.1.5.5.7.3.3") }, true));
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        using X509Certificate2 certificate = request.CreateSelfSigned(now.AddDays(-3), now.AddDays(-2));
+
+        Assert.Equal(accepted, WindowsAuthenticodeVerifier.IsValidInternalCertificate(certificate, now.AddHours(hoursFromNow).UtcDateTime));
+    }
+
     [Fact]
     public async Task PinnedInternalCandidateWorksWithoutInstallingItsRoot()
     {

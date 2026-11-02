@@ -55,6 +55,10 @@ public sealed class InstallerStartupGuidanceTests
     [InlineData("installer.elevation.certificate_untrusted", "安装包签名尚未受信任", "提供者")]
     [InlineData("installer.elevation.certificate_expired", "安装包签名证书已过期", "新版本")]
     [InlineData("installer.elevation.authenticode_missing", "安装包缺少有效签名", "完整安装包")]
+    [InlineData("installer.release.payload_lock_failed", "无法读取安装文件", "本机文件夹")]
+    [InlineData("installer.elevation.executable_lock_failed", "无法读取安装文件", "本机文件夹")]
+    [InlineData("installer.release.payload_directory_set_invalid", "安装文件不完整或不匹配", "完整解压")]
+    [InlineData("installer.release.payload_reparse_rejected", "安装文件不完整或不匹配", "完整解压")]
     [InlineData("installer.release.payload_file_set_invalid", "安装文件不完整或不匹配", "完整解压")]
     [InlineData("installer.release.locked_file_hash_mismatch", "安装文件校验失败", "重新获取")]
     public async Task InspectionFailureExplainsTheCauseAndConcreteNextStep(
