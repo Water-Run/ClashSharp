@@ -1148,7 +1148,8 @@ internal sealed partial class MasterControlViewModel : ObservableObject, ILocali
     {
         _heroStatusItems.Clear();
         _heroStatusSlots.Clear();
-        ApplyHeroStatusLayout(_heroStatusLayout.GetLayout());
+        // The overview is fixed. Retain persisted legacy layout data without applying it.
+        ApplyHeroStatusLayout(_heroStatusLayout.GetDefaultLayout());
     }
 
     private void ApplyHeroStatusLayout(IReadOnlyList<MasterHeroStatusItemKind> layout)

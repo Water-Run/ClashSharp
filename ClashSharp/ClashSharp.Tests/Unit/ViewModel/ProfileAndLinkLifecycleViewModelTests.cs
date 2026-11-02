@@ -156,7 +156,7 @@ public sealed partial class ProfileAndLinkLifecycleViewModelTests
             : Task.FromResult(false);
         FakeProfileManagementCatalog catalog = new()
         {
-            Profiles = [CreateProfile("retained", isActive: true)],
+            Profiles = [CreateProfile("retained", isActive: operation != "activate")],
             SetActiveProfile = (_, _) => Reject(),
             RenameProfile = (_, _, _) => Reject(),
             DeleteProfile = (_, _) => Reject(),
@@ -392,7 +392,10 @@ public sealed partial class ProfileAndLinkLifecycleViewModelTests
         await viewModel.SetSelectedProfileActiveAsync(CancellationToken.None);
 
         Assert.True(Assert.Single(viewModel.Profiles).IsActive);
-        Assert.Equal("Profiles.Status.Activated", viewModel.StatusText);
+        Assert.Equal("Profiles.Activation.Success.Format", viewModel.StatusText);
+        Assert.False(viewModel.CanActivateSelectedProfile);
+        Assert.Equal("Profiles.Current.Badge", viewModel.SetActiveProfileText);
+        Assert.False(viewModel.IsActivating);
         Assert.Equal(2, catalog.GetProfilesCallCount);
     }
 

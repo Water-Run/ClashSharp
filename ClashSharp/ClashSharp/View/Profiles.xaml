@@ -61,7 +61,7 @@
                     <FontIcon Glyph="&#xE73E;" />
                 </AppBarButton.Icon>
             </AppBarButton>
-            <AppBarButton x:Name="SetActiveProfileButton" IsEnabled="{Binding HasSelectedProfile}" Label="{Binding SetActiveProfileText}" Click="SetActiveProfileButton_Click">
+            <AppBarButton x:Name="SetActiveProfileButton" IsEnabled="{Binding CanActivateSelectedProfile}" Label="{Binding SetActiveProfileText}" Click="SetActiveProfileButton_Click">
                 <AppBarButton.Icon>
                     <FontIcon Glyph="&#xE73E;" />
                 </AppBarButton.Icon>
@@ -129,6 +129,7 @@
                         <StackPanel Spacing="2">
                             <TextBlock Text="{Binding NameDisplay}" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding NameDisplay}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
                             <TextBlock Text="{Binding SourceNameDisplay}" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding SourceNameDisplay}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock Text="{Binding ActiveLabelDisplay}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" Visibility="{Binding IsActive, Converter={StaticResource BooleanToVisibilityConverter}}" />
                         </StackPanel>
 
                         <TextBlock Grid.Column="1" Text="{Binding StatusDisplay}" TextWrapping="Wrap" ToolTipService.ToolTip="{Binding StatusDisplay}" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />

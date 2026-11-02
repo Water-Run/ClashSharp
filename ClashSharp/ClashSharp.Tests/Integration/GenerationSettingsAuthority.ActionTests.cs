@@ -18,6 +18,7 @@ using Lifecycle = ClashSharpUi::ClashSharp.Service.ApplicationLifecycleService;
 using Notifications = ClashSharpUi::ClashSharp.Service.NotificationService;
 using NotificationSink = ClashSharpUi::ClashSharp.Service.IApplicationNotificationSink;
 using Sampling = ClashSharpUi::ClashSharp.Service.ConnectionSamplingService;
+using SettingsActionFailedException = ClashSharpUi::ClashSharp.Service.SettingsActionFailedException;
 using Startup = ClashSharpUi::ClashSharp.Service.StartupLaunchService;
 using TriggerRuntime = ClashSharpUi::ClashSharp.Service.TriggerActionRuntimeAdapter;
 
@@ -251,6 +252,36 @@ public sealed partial class GenerationSettingsAuthorityTests
             key => key, lifecycle ?? Unused<Lifecycle>(), Unused<RuntimeLifecycleCoordinator>(), Unused<Startup>(),
             new ActionCredential(), installAsPrimaryInstance: false, dataClearOperations: removal);
 
+    [Fact]
+    public async Task TransparentProxyDispatchNotifiesCommittedPreferenceAndKeepsNoOpQuiet()
+    {
+        await using Fixture fixture = await Fixture.CreateAsync();
+        _ = await fixture.Authority.OpenAsync(CancellationToken.None);
+        RecordedNotifications notifications = new();
+        Actions actions = CreateActions(fixture, new ActionObserver(fixture), notifications);
+
+        await actions.DispatchAsync(ActionKind.SetTransparentProxy, "false", CancellationToken.None);
+        await actions.DispatchAsync(ActionKind.SetTransparentProxy, "true", CancellationToken.None);
+        await actions.DispatchAsync(ActionKind.SetTransparentProxy, "true", CancellationToken.None);
+
+        Assert.Equal([(false, false), (true, false)], notifications.TransparentProxyChanges);
+        Assert.Empty(notifications.Modes);
+    }
+
+    [Fact]
+    public async Task TransparentProxyDoesNotReportSuccessWhenIndependentObservationFails()
+    {
+        await using Fixture fixture = await Fixture.CreateAsync();
+        _ = await fixture.Authority.OpenAsync(CancellationToken.None);
+        RecordedNotifications notifications = new();
+        ActionObserver observer = new(fixture) { Transform = state => state with { IsKnown = false } };
+
+        await Assert.ThrowsAsync<SettingsActionFailedException>(() => CreateActions(fixture, observer, notifications)
+            .DispatchAsync(ActionKind.SetTransparentProxy, "false", CancellationToken.None));
+
+        Assert.Empty(notifications.TransparentProxyChanges);
+    }
+
     private static TriggerRuntime CreateTriggerRuntime(Fixture fixture) =>
         new(fixture.Authority, Unused<Startup>(), Unused<Sampling>(), Unused<Connections>(),
             new ActionObserver(fixture), Unused<Notifications>(), new UnusedActionHandoff());
@@ -294,6 +325,8 @@ public sealed partial class GenerationSettingsAuthorityTests
     private sealed class RecordedNotifications : NotificationSink
     {
         public List<ClashSharpMode> Modes { get; } = [];
+        public List<(bool Enabled, bool Effective)> TransparentProxyChanges { get; } = [];
+        public void NotifyTransparentProxyChanged(bool enabled, bool effective) => TransparentProxyChanges.Add((enabled, effective));
         public void NotifyProxyModeChanged(ClashSharpMode mode) => Modes.Add(mode);
         public void NotifyCustom(string message) => throw new NotSupportedException();
     }

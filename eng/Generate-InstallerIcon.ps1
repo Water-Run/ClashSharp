@@ -116,7 +116,7 @@ function New-InstallerIconBitmap {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)][Windows.Media.DrawingGroup]$Master,
-        [Parameter(Mandatory)][ValidateRange(16, 256)][int]$Size,
+        [Parameter(Mandatory)][ValidateRange(16, 1024)][int]$Size,
         [switch]$Unhinted
     )
 

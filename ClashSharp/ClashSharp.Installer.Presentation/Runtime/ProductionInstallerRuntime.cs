@@ -7,7 +7,7 @@ namespace ClashSharp.Installer.Runtime;
 /// constructing a target SID, release hash, package identity, or privileged command.
 /// </summary>
 public sealed class ProductionInstallerRuntime : IInstallerRuntime, IInstallerOwnerTransferRuntime, IInstallerRetiredUninstallRuntime,
-    IInstallerOriginalRestorationRuntime, IInstallerPreferencesRuntime, IDisposable
+    IInstallerOriginalRestorationRuntime, IInstallerPreferencesRuntime, IInstallerApplicationLaunchRuntime, IDisposable
 {
     private readonly IInstallerRuntimeBackend _backend;
     private bool _disposed;
@@ -111,6 +111,20 @@ public sealed class ProductionInstallerRuntime : IInstallerRuntime, IInstallerOw
 
     /// <inheritdoc />
     public bool SupportsOriginalRestoration => _backend is IInstallerOriginalRestorationRuntimeBackend { SupportsOriginalRestoration: true };
+
+    /// <inheritdoc />
+    public bool SupportsApplicationLaunch => _backend is IInstallerApplicationLaunchBackend { SupportsApplicationLaunch: true };
+
+    /// <inheritdoc />
+    public Task LaunchApplicationAsync(CancellationToken cancellationToken)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (_backend is not IInstallerApplicationLaunchBackend { SupportsApplicationLaunch: true } launcher)
+        {
+            throw new InstallerProtocolException("installer.launch.unavailable");
+        }
+        return Task.Run(() => launcher.LaunchApplicationAsync(cancellationToken), cancellationToken);
+    }
 
     /// <inheritdoc />
     public bool SupportsInstallPreferences => _backend is IInstallerPreferencesRuntimeBackend { SupportsInstallPreferences: true };

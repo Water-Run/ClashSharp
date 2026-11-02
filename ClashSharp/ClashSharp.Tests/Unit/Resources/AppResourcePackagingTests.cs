@@ -2073,9 +2073,9 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("ReorderThemeTransition", masterControlXaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"HeroStatusItemGrid\"", masterControlXaml, StringComparison.Ordinal);
         Assert.Contains("ItemsSource=\"{Binding HeroStatusItems}\"", masterControlXaml, StringComparison.Ordinal);
-        Assert.Contains("x:Name=\"SetHeroStatusDisplayButton\"", masterControlXaml, StringComparison.Ordinal);
-        Assert.Contains("Content=\"{Binding SetHeroStatusDisplayText}\"", masterControlXaml, StringComparison.Ordinal);
-        Assert.Contains("Click=\"SetHeroStatusDisplayButton_Click\"", masterControlXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("x:Name=\"SetHeroStatusDisplayButton\"", masterControlXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Content=\"{Binding SetHeroStatusDisplayText}\"", masterControlXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Click=\"SetHeroStatusDisplayButton_Click\"", masterControlXaml, StringComparison.Ordinal);
         Assert.Contains("x:Key=\"MasterHeroStatusOptionTemplate\"", masterControlXaml, StringComparison.Ordinal);
         Assert.Contains("Text=\"{Binding Title}\"", masterControlXaml, StringComparison.Ordinal);
         Assert.Contains("ThemedContentDialog dialog = new()", masterControlCode, StringComparison.Ordinal);

@@ -32,7 +32,8 @@ public sealed partial class MasterControlViewModelTests
         Assert.Equal("2", Tile(viewModel, "profile-count").Value);
         Assert.Equal(2, runtime.SnapshotCount);
         Assert.Equal(2, core.VersionProbeCount);
-        Assert.Equal(2, hero.GetLayoutCount);
+        Assert.Equal(0, hero.GetLayoutCount);
+        Assert.Equal(2, hero.GetDefaultLayoutCount);
         Assert.Equal(2, tiles.GetLayoutCount);
     }
 

@@ -12,9 +12,27 @@ internal interface IWindowsPackagedSetupLauncher
     Task RunAsync(string applicationId, string expectedExecutable, string requestId, CancellationToken cancellationToken);
 }
 
-/// <summary>Activates the exact registered package for a bounded, user-only setup handoff.</summary>
-internal sealed class WindowsPackagedSetupLauncher : IWindowsPackagedSetupLauncher
+internal interface IWindowsPackagedApplicationLauncher
 {
+    Task LaunchAsync(string applicationId, CancellationToken cancellationToken);
+}
+
+/// <summary>Activates the exact registered package for a bounded, user-only setup handoff.</summary>
+internal sealed class WindowsPackagedSetupLauncher : IWindowsPackagedSetupLauncher, IWindowsPackagedApplicationLauncher
+{
+    public Task LaunchAsync(string applicationId, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        object native = new ApplicationActivationManager();
+        try
+        {
+            ((IApplicationActivationManager)native).ActivateApplication(applicationId, string.Empty, 0, out uint processId);
+            if (processId == 0) { throw new InstallerProtocolException("installer.launch.activation_unconfirmed"); }
+        }
+        finally { Marshal.FinalReleaseComObject(native); }
+        return Task.CompletedTask;
+    }
+
     public async Task RunAsync(string applicationId, string expectedExecutable, string requestId, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();

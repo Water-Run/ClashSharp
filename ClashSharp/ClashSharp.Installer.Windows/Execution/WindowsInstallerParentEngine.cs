@@ -64,7 +64,8 @@ internal interface IWindowsInstallerParentInspector
 /// coordinator/helper session per operation.
 /// </summary>
 public sealed class WindowsInstallerParentEngine : IInstallerRuntimeBackend, IInstallerOwnerTransferRuntimeBackend,
-    IInstallerRetiredUninstallRuntimeBackend, IInstallerOriginalRestorationRuntimeBackend, IInstallerPreferencesRuntimeBackend
+    IInstallerRetiredUninstallRuntimeBackend, IInstallerOriginalRestorationRuntimeBackend, IInstallerPreferencesRuntimeBackend,
+    IInstallerApplicationLaunchBackend
 {
     private readonly object _lifetimeSync = new();
     private readonly InstallerReleaseManifest _manifest;
@@ -73,6 +74,7 @@ public sealed class WindowsInstallerParentEngine : IInstallerRuntimeBackend, IIn
     private readonly IWindowsInstallerParentInspector _inspector;
     private readonly IWindowsInstallerApplicationLock _applicationLock;
     private readonly WindowsInstallerPreferencesCoordinator? _preferences;
+    private readonly IWindowsPackagedApplicationLauncher _applicationLauncher;
     private bool _usesServiceProfile = true;
     private bool _active;
     private bool _disposed;
@@ -83,7 +85,8 @@ public sealed class WindowsInstallerParentEngine : IInstallerRuntimeBackend, IIn
         IWindowsInstallerExecutionSessionFactory sessionFactory,
         IWindowsInstallerParentInspector inspector,
         IWindowsInstallerApplicationLock applicationLock,
-        WindowsInstallerPreferencesCoordinator? preferences = null)
+        WindowsInstallerPreferencesCoordinator? preferences = null,
+        IWindowsPackagedApplicationLauncher? applicationLauncher = null)
     {
         ArgumentNullException.ThrowIfNull(manifest);
         ArgumentNullException.ThrowIfNull(sessionFactory);
@@ -92,6 +95,7 @@ public sealed class WindowsInstallerParentEngine : IInstallerRuntimeBackend, IIn
         manifest.Validate();
         InstallerProtocolValidation.ValidateTargetSid(targetSid);
         _manifest = manifest;
+        _applicationLauncher = applicationLauncher ?? new WindowsPackagedSetupLauncher();
         _targetSid = targetSid;
         _sessionFactory = sessionFactory;
         _inspector = inspector;
@@ -140,6 +144,27 @@ public sealed class WindowsInstallerParentEngine : IInstallerRuntimeBackend, IIn
 
     /// <summary>Gets the release version derived from the embedded manifest.</summary>
     public string ReleaseVersion => _manifest.ExpectedPackageVersion;
+
+    /// <inheritdoc />
+    public bool SupportsApplicationLaunch => true;
+
+    /// <inheritdoc />
+    public async Task LaunchApplicationAsync(CancellationToken cancellationToken)
+    {
+        if (!TryEnter()) { throw new InstallerProtocolException("installer.concurrent_action_rejected"); }
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (WindowsInstallerCurrentUser.GetSid() != _targetSid) { throw new InstallerProtocolException("installer.launch.target_user_mismatch"); }
+            InstallerInstalledPackage? installed = WindowsPackageRegistrationInspector.Inspect(new WindowsPackageManagerFacade(), _targetSid, _manifest);
+            if (installed is not { IsHealthy: true } || installed.Version != _manifest.ExpectedPackageVersion)
+            {
+                throw new InstallerProtocolException("installer.launch.installed_release_unconfirmed");
+            }
+            await _applicationLauncher.LaunchAsync(_manifest.PackageIdentity.PackageFamilyName + "!App", cancellationToken).ConfigureAwait(false);
+        }
+        finally { Exit(); }
+    }
 
     /// <inheritdoc />
     public bool SupportsOwnerTransfer => _usesServiceProfile && _sessionFactory is IWindowsInstallerOwnerTransferSessionFactory;

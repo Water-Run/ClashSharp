@@ -20,6 +20,7 @@ public sealed class RegionDisplayService
     private readonly Func<MainlandChinaFeatureMode> _getFeatureMode;
 
     private readonly Func<string, string> _getString;
+    private readonly Func<AppLanguage> _getLanguage;
 
     /// <summary>Immutable default region resource-key map keyed by uppercase region code.</summary>
     private static readonly FrozenDictionary<string, string> DefaultRegionKeys = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -51,9 +52,15 @@ public sealed class RegionDisplayService
     /// <param name="getFeatureMode">Provider for the active mainland China display policy. Must not be null.</param>
     /// <param name="getString">Localized string resolver. Must not be null.</param>
     internal RegionDisplayService(Func<MainlandChinaFeatureMode> getFeatureMode, Func<string, string> getString)
+        : this(getFeatureMode, getString, () => AppLanguage.English)
+    {
+    }
+
+    internal RegionDisplayService(Func<MainlandChinaFeatureMode> getFeatureMode, Func<string, string> getString, Func<AppLanguage> getLanguage)
     {
         _getFeatureMode = getFeatureMode ?? throw new ArgumentNullException(nameof(getFeatureMode));
         _getString = getString ?? throw new ArgumentNullException(nameof(getString));
+        _getLanguage = getLanguage ?? throw new ArgumentNullException(nameof(getLanguage));
     }
 
     /// <summary>Resolves display metadata for <paramref name="regionCode"/>.</summary>
@@ -72,8 +79,8 @@ public sealed class RegionDisplayService
 
         string displayName = DefaultRegionKeys.TryGetValue(normalizedCode, out string? knownNameKey)
             ? _getString(knownNameKey)
-            : normalizedCode;
-        string flagAssetKey = normalizedCode;
+            : RegionCatalog.GetDisplayName(normalizedCode, _getLanguage());
+        string flagAssetKey = normalizedCode == "UN" || RegionCatalog.Contains(normalizedCode) ? normalizedCode : "UN";
         MainlandChinaFeatureMode featureMode = _getFeatureMode();
 
         if (featureMode >= MainlandChinaFeatureMode.FlagReplacementOnly

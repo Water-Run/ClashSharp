@@ -25,7 +25,7 @@ public sealed class SettingsAuthorityArchitectureTests
             .Select(element => (string)element.Attribute(xaml + "Name")!)
             .Order(StringComparer.Ordinal).ToArray();
         string[] expected = ["LaunchAtStartupToggle", "TransparentProxyToggle", "MixedPortBox", "ConnectionSamplingToggle", "ConnectionSamplingIntervalBox",
-            "McpEnabledToggle", "McpPortBox", "McpScopeToggle"];
+            "McpEnabledToggle", "McpPortBox", "McpScopeCheckBox"];
         Assert.Equal(expected.Order(StringComparer.Ordinal), actual);
     }
 

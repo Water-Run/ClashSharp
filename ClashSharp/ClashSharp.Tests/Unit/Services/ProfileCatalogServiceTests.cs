@@ -12,6 +12,40 @@ namespace ClashSharp.Tests.Unit.Services;
 /// <summary>Unit tests for profile catalog composition.</summary>
 public sealed class ProfileCatalogServiceTests
 {
+    [Theory]
+    [InlineData("", "Provider", true)]
+    [InlineData("My profile", "My profile", false)]
+    public async Task SubscriptionProviderNameCommitsWithTheProfileAndManualRenameSurvivesUpdates(
+        string requestedName, string expectedName, bool automatic)
+    {
+        using TempFile file = new();
+        await using ProfileCatalogService service = CreateService(file.Path, new FakeProfileCatalogSettings());
+        using TcpListener listener = new(IPAddress.Loopback, 0);
+        listener.Start();
+        int port = ((IPEndPoint)listener.LocalEndpoint).Port;
+        ProfileSubscriptionLink link = await service.AddSubscriptionLinkAsync(requestedName,
+            $"http://127.0.0.1:{port}/opaque?token=synthetic", CancellationToken.None);
+        await ExchangeSubscriptionAsync(listener, async token =>
+        {
+            ProfileImportResult result = await service.ImportSubscriptionLinkAsync(link, token);
+            Assert.Equal(expectedName, result.ProfileName);
+        }, extraHeaders: "Content-Disposition: attachment; filename*=UTF-8''Provider.yaml\r\n");
+        ProfileSubscriptionLink updated = Assert.Single(service.GetSubscriptionLinks());
+        Assert.Equal(expectedName, updated.Name);
+        Assert.Equal(automatic, updated.UseProviderName);
+        ConfigurationProfile profile = Assert.Single(service.GetProfiles(), row => row.Id == "subscription-" + link.Id);
+        Assert.Equal(expectedName, profile.Name);
+        Assert.True(await service.TryRenameProfileAsync(profile.Id, "Manual", CancellationToken.None));
+        ProfileSubscriptionLink renamed = Assert.Single(service.GetSubscriptionLinks());
+        Assert.False(renamed.UseProviderName);
+        Assert.Equal("Manual", renamed.Name);
+        await ExchangeSubscriptionAsync(listener, async token =>
+        {
+            Assert.Equal("Manual", (await service.ImportSubscriptionLinkAsync(renamed, token)).ProfileName);
+        }, extraHeaders: "profile-title: Changed provider\r\n");
+        Assert.Equal("Manual", Assert.Single(service.GetSubscriptionLinks()).Name);
+    }
+
     [Fact]
     public async Task SuccessfulSubscriptionCheck_ReturnsCurrentLanguageAndPersistsStableIdentity()
     {
@@ -467,10 +501,11 @@ public sealed class ProfileCatalogServiceTests
     }
 
     private static async Task ExchangeSubscriptionAsync(
-        TcpListener listener, Func<CancellationToken, Task> operation, string? userInfo = null, int statusCode = 200)
+        TcpListener listener, Func<CancellationToken, Task> operation, string? userInfo = null, int statusCode = 200,
+        string extraHeaders = "")
     {
         using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(10));
-        Task response = ServeSubscriptionAsync(listener, timeout.Token, userInfo, statusCode);
+        Task response = ServeSubscriptionAsync(listener, timeout.Token, userInfo, statusCode, extraHeaders: extraHeaders);
         try
         {
             await operation(timeout.Token);
@@ -539,7 +574,7 @@ public sealed class ProfileCatalogServiceTests
 
     private static async Task ServeSubscriptionAsync(
         TcpListener listener, CancellationToken cancellationToken, string? userInfo = null, int statusCode = 200,
-        TaskCompletionSource? headersSent = null)
+        TaskCompletionSource? headersSent = null, string extraHeaders = "")
     {
         using TcpClient client = await listener.AcceptTcpClientAsync(cancellationToken);
         await using NetworkStream stream = client.GetStream();
@@ -548,7 +583,7 @@ public sealed class ProfileCatalogServiceTests
         const string body = "rules:\n  - MATCH,DIRECT\n";
         string metadata = userInfo is null ? string.Empty : $"Subscription-Userinfo: {userInfo}\r\n";
         byte[] reply = Encoding.UTF8.GetBytes(
-            $"HTTP/1.1 {statusCode} Test\r\n{metadata}Content-Type: text/yaml\r\nContent-Length: {Encoding.UTF8.GetByteCount(body)}\r\nConnection: close\r\n\r\n{(headersSent is null ? body : string.Empty)}");
+            $"HTTP/1.1 {statusCode} Test\r\n{metadata}{extraHeaders}Content-Type: text/yaml\r\nContent-Length: {Encoding.UTF8.GetByteCount(body)}\r\nConnection: close\r\n\r\n{(headersSent is null ? body : string.Empty)}");
         await stream.WriteAsync(reply, cancellationToken);
         if (headersSent is not null)
         {

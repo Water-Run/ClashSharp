@@ -24,7 +24,7 @@ internal static class SubscriptionImportWorkflow
             Uri.TryCreate(link.Uri, UriKind.Absolute, out Uri? saved) && saved.Equals(parsed))
             .Select(static link => (ProfileSubscriptionLink?)link).FirstOrDefault();
         ProfileSubscriptionLink link = existing ?? await catalog.AddSubscriptionLinkAsync(
-            string.IsNullOrWhiteSpace(name) ? parsed.Host : name.Trim(), input, cancellationToken);
+            name.Trim(), input, cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
         // Keep a failed newly saved link available for editing/retry; never activate it implicitly.
         ProfileImportResult profile = await catalog.ImportSubscriptionLinkAsync(link, cancellationToken);

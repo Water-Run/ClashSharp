@@ -12,6 +12,8 @@ public sealed class SubscriptionImportWorkflowTests
         Catalog catalog = new();
         var result = await SubscriptionImportWorkflow.ImportAsync(catalog, "", " https://example.com/sub.yaml ", CancellationToken.None);
         Assert.Equal("example.com", result.Link.Name);
+        Assert.Equal(string.Empty, catalog.LastAddedName);
+        Assert.True(result.Link.UseProviderName);
         Assert.Equal(1, catalog.ImportCount);
         Assert.Equal(result.Link.Id, result.Profile.ProfileId);
         Assert.Single(catalog.Links);
@@ -69,10 +71,20 @@ public sealed class SubscriptionImportWorkflowTests
         public int ImportCount { get; private set; }
         public bool FailDownload { get; set; }
         public Action? OnAdded { get; init; }
+        public string? LastAddedName { get; private set; }
         public IReadOnlyList<ProfileSubscriptionLink> GetSubscriptionLinks() => Links;
         public Task<ProfileSubscriptionLink> AddSubscriptionLinkAsync(string name, string uri, CancellationToken cancellationToken)
         {
-            ProfileSubscriptionLink link = new() { Id = Guid.NewGuid().ToString("N"), Name = name, Uri = uri, Status = "Saved", IsEnabled = true };
+            LastAddedName = name;
+            ProfileSubscriptionLink link = new()
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                Name = string.IsNullOrWhiteSpace(name) ? new Uri(uri).Host : name,
+                Uri = uri,
+                Status = "Saved",
+                IsEnabled = true,
+                UseProviderName = string.IsNullOrWhiteSpace(name)
+            };
             Links.Add(link);
             OnAdded?.Invoke();
             return Task.FromResult(link);

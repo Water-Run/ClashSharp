@@ -19,11 +19,16 @@ internal sealed class ConfigurationProfileDisplay(
 
     public string StatusDisplay { get; private set; } = statusDisplay;
 
+    /// <summary>Gets the localized current-profile badge.</summary>
+    public string ActiveLabelDisplay { get; private set; } = string.Empty;
+
     internal Func<Func<string, string>, string>? StatusTextFactory { get; set; }
 
     /// <summary>Relocalizes application-owned labels without replacing provider data or the selected row.</summary>
     public void RefreshLocalization(Func<string, string> getString, Func<string, string> filter)
     {
+        ActiveLabelDisplay = getString("Profiles.Current.Badge");
+        OnPropertyChanged(nameof(ActiveLabelDisplay));
         if (StatusTextFactory is not null)
         {
             string status = StatusTextFactory(getString);
@@ -63,6 +68,8 @@ internal sealed class ConfigurationProfileDisplay(
         SourceNameDisplay = updated.SourceNameDisplay;
         StatusDisplay = updated.StatusDisplay;
         StatusTextFactory = updated.StatusTextFactory;
+        ActiveLabelDisplay = updated.ActiveLabelDisplay;
+        OnPropertyChanged(nameof(ActiveLabelDisplay));
         OnPropertyChanged(nameof(Model));
         OnPropertyChanged(nameof(NameDisplay));
         OnPropertyChanged(nameof(SourceNameDisplay));

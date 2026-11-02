@@ -359,41 +359,7 @@ internal static partial class MihomoProfilePreviewParser
     private static string InferRegionCode(string text)
     {
         ArgumentNullException.ThrowIfNull(text);
-
-        string lower = text.ToLowerInvariant();
-        string namedRegion = lower switch
-        {
-            _ when ContainsAny(lower, "hk", "hong kong", "hongkong", "香港") => "HK",
-            _ when ContainsAny(lower, "mo", "macao", "macau", "澳门", "澳門") => "MO",
-            _ when ContainsAny(lower, "tw", "taiwan", "taipei", "台湾", "台灣", "臺灣", "台北", "臺北") => "TW",
-            _ when ContainsAny(lower, "jp", "japan", "tokyo", "osaka", "日本", "东京", "東京", "大阪") => "JP",
-            _ when ContainsAny(lower, "kr", "korea", "seoul", "韩国", "韓國", "首尔", "首爾") => "KR",
-            _ when ContainsAny(lower, "sg", "singapore", "新加坡") => "SG",
-            _ when ContainsAny(lower, "us", "usa", "united states", "america", "los angeles", "new york", "美国", "美國", "洛杉矶", "洛杉磯", "纽约", "紐約") => "US",
-            _ when ContainsAny(lower, "gb", "uk", "united kingdom", "london", "英国", "英國", "伦敦", "倫敦") => "GB",
-            _ when ContainsAny(lower, "de", "germany", "frankfurt", "德国", "德國", "法兰克福", "法蘭克福") => "DE",
-            _ when ContainsAny(lower, "fr", "france", "paris", "法国", "法國", "巴黎") => "FR",
-            _ when ContainsAny(lower, "cn", "china", "mainland", "中国", "中國", "内地", "內地", "大陆", "大陸") => "CN",
-            _ => "UN",
-        };
-        if (namedRegion != "UN") { return namedRegion; }
-
-        // Providers may use a broad flag for several locations; an explicit name takes precedence.
-        return text switch
-        {
-            _ when text.Contains("🇭🇰", StringComparison.Ordinal) => "HK",
-            _ when text.Contains("🇲🇴", StringComparison.Ordinal) => "MO",
-            _ when text.Contains("🇹🇼", StringComparison.Ordinal) => "TW",
-            _ when text.Contains("🇯🇵", StringComparison.Ordinal) => "JP",
-            _ when text.Contains("🇰🇷", StringComparison.Ordinal) => "KR",
-            _ when text.Contains("🇸🇬", StringComparison.Ordinal) => "SG",
-            _ when text.Contains("🇺🇸", StringComparison.Ordinal) => "US",
-            _ when text.Contains("🇬🇧", StringComparison.Ordinal) => "GB",
-            _ when text.Contains("🇩🇪", StringComparison.Ordinal) => "DE",
-            _ when text.Contains("🇫🇷", StringComparison.Ordinal) => "FR",
-            _ when text.Contains("🇨🇳", StringComparison.Ordinal) => "CN",
-            _ => "UN",
-        };
+        return RegionCatalog.Infer(text);
     }
 
     /// <summary>Parses a TCP port value from YAML scalar text.</summary>

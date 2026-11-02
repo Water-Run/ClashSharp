@@ -10,6 +10,16 @@ internal static partial class LocalizationResources
     {
         return new ReadOnlyDictionary<string, string>(new Dictionary<string, string>
         {
+            ["Notification.TransparentProxy.Title"] = "پراکسی شفاف",
+            ["Notification.TransparentProxy.Disabled"] = "پراکسی شفاف خاموش است.",
+            ["Notification.TransparentProxy.Enabled"] = "پراکسی شفاف روشن و تأیید شده است.",
+            ["Notification.TransparentProxy.Pending"] = "تنظیم ذخیره شد؛ پس از فعال شدن کنترل پراکسی اعمال می‌شود.",
+            ["Notification.NetworkSettings.Applied"] = "درگاه پراکسی به‌روز و تأیید شد.",
+            ["Profiles.Current.Badge"] = "پیکربندی فعال",
+            ["Profiles.Activation.Progress"] = "در حال تغییر پیکربندی…",
+            ["Profiles.Activation.Success.Format"] = "«{0}» اکنون پیکربندی جاری است. کلید پراکسی و حالت کنترل روی انتخاب فعلی باقی می‌مانند.",
+
+            ["Notification.Subscription.Checked"] = "بررسی پیوند اشتراک انجام شد.",
             ["Profiles.Import.Subscription"] = "وارد کردن نشانی اشتراک",
             ["Profiles.Import.File"] = "وارد کردن از پرونده",
             ["Profiles.Import.Name"] = "نام (اختیاری)",
@@ -892,7 +902,7 @@ internal static partial class LocalizationResources
             ["Settings.MainlandChinaUrlBlocking.Title"] = "پوشاندن URLهای علامت‌خورده در متن نمایش‌داده‌شده",
             ["Settings.MainlandChinaUrlBlocking.Description"] = "متن URL علامت‌خورده را با پوشش جایگزین می‌کند؛ دسترسی شبکه را مسدود نمی‌کند.",
             ["Settings.Notification.Title"] = "اعلان‌های سیستم",
-            ["Settings.Notification.Description"] = "اعلان‌های Win11 برای حالت پروکسی، محرک‌ها، زمان‌پایان آزمایش اتصال و رویدادهای مرتبط را کنترل می‌کند.",
+            ["Settings.Notification.Description"] = "مهم: توقف هسته، بررسی راه‌اندازی و شکست بازیابی. پیش‌فرض: تغییر مسیریابی، شکست عملیات و پایان مهلت آزمون را نیز شامل می‌شود. مفصل: ورود، اعتبارسنجی، ذخیره و آزمون موفق را هم نشان می‌دهد. خاموش کردن اعلان‌ها همه اعلان‌های سیستم را متوقف می‌کند.",
             ["Settings.Notification.Default"] = "پیش‌فرض",
             ["Settings.Notification.CriticalOnly"] = "فقط بحرانی",
             ["Settings.Notification.More"] = "بیشتر",

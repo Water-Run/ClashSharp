@@ -149,7 +149,30 @@ internal sealed partial class ProfilesViewModel : ObservableObject, ILocalizedPr
 
     /// <summary>Gets the set-active command label.</summary>
     /// <value>Localized command label.</value>
-    public string SetActiveProfileText => _getString("Command.SetActive");
+    public string SetActiveProfileText => _getString(IsActivating ? "Profiles.Activation.Progress"
+        : SelectedProfile?.IsActive == true ? "Profiles.Current.Badge" : "Command.SetActive");
+
+    private bool _isActivating;
+
+    /// <summary>Gets whether a verified profile activation is in progress.</summary>
+    public bool IsActivating
+    {
+        get => _isActivating;
+        private set
+        {
+            if (SetProperty(ref _isActivating, value)) { RefreshActivationState(); }
+        }
+    }
+
+    /// <summary>Gets whether the selected profile can become the current configuration.</summary>
+    public bool CanActivateSelectedProfile => !IsActivating && SelectedProfile is { IsActive: false };
+
+    private void RefreshActivationState()
+    {
+        OnPropertyChanged(nameof(CanActivateSelectedProfile));
+        OnPropertyChanged(nameof(CanUseImportedProfile));
+        OnPropertyChanged(nameof(SetActiveProfileText));
+    }
 
     /// <summary>Gets the rename command label.</summary>
     public string RenameProfileText => _getString("Command.Rename");
@@ -252,6 +275,7 @@ internal sealed partial class ProfilesViewModel : ObservableObject, ILocalizedPr
                 OnPropertyChanged(nameof(HasSelectedProfile));
                 OnPropertyChanged(nameof(CanUseImportedProfile));
                 OnPropertyChanged(nameof(CanModifySelectedProfile));
+                RefreshActivationState();
             }
         }
     }
@@ -405,6 +429,7 @@ internal sealed partial class ProfilesViewModel : ObservableObject, ILocalizedPr
     /// <returns>A task that completes after activation and reloading finish.</returns>
     public async Task SetSelectedProfileActiveAsync(CancellationToken cancellationToken)
     {
+        if (!CanActivateSelectedProfile) { return; }
         if (SelectedProfile is not ConfigurationProfileDisplay selectedProfile)
         {
             _log.Append("Info", "Profiles", "No profile selected.", null);
@@ -413,6 +438,8 @@ internal sealed partial class ProfilesViewModel : ObservableObject, ILocalizedPr
 
         ConfigurationProfile profile = selectedProfile.Model;
         ClearStatus();
+        IsActivating = true;
+        SetStatus("Profiles.Activation.Progress", PageStatusSeverity.Informational);
         try
         {
             bool activated = await _profiles.TrySetActiveProfileAsync(
@@ -427,7 +454,15 @@ internal sealed partial class ProfilesViewModel : ObservableObject, ILocalizedPr
 
             _log.Append("Info", "Profiles", $"Active profile changed to {profile.Name}.", profile.Id);
             await LoadAsync(cancellationToken);
-            SetStatus("Profiles.Status.Activated", PageStatusSeverity.Success);
+            StatusSeverity = PageStatusSeverity.Success;
+            _statusTextFactory = () => string.Format(CultureInfo.CurrentCulture,
+                _getString("Profiles.Activation.Success.Format"), selectedProfile.NameDisplay);
+            StatusText = _statusTextFactory();
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            ClearStatus();
+            throw;
         }
         catch (Exception exception) when (
             exception is ArgumentException
@@ -442,6 +477,7 @@ internal sealed partial class ProfilesViewModel : ObservableObject, ILocalizedPr
             _log.Append("Warning", "Profiles", "Active profile could not be changed.", exception.Message);
             SetStatus("Profiles.Status.ActivateFailed", PageStatusSeverity.Error);
         }
+        finally { IsActivating = false; }
     }
 
     /// <summary>Returns current history previews, or null when the request failed or its data scope changed.</summary>
@@ -615,7 +651,9 @@ internal sealed partial class ProfilesViewModel : ObservableObject, ILocalizedPr
         List<ConfigurationProfileDisplay> rows = new(profiles.Count);
         foreach (ConfigurationProfile profile in profiles)
         {
-            rows.Add(_displayMapper.Map(profile));
+            ConfigurationProfileDisplay row = _displayMapper.Map(profile);
+            row.RefreshLocalization(_getString, _displayMapper.MapText);
+            rows.Add(row);
         }
 
         string? selectedProfileId = SelectedProfile?.Model.Id;
@@ -653,6 +691,7 @@ internal sealed partial class ProfilesViewModel : ObservableObject, ILocalizedPr
             selectedProfileId,
             StringComparison.Ordinal));
         ActiveProfileText = ResolveActiveProfileDisplayText(_profilesRows, fallbackProfileId);
+        RefreshActivationState();
     }
 
     private Task ImportLocalProfileFromCommandAsync(

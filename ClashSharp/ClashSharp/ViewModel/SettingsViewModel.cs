@@ -2567,8 +2567,8 @@ internal sealed partial class SettingsViewModel : ObservableObject
                 ObservedElapsedMilliseconds = Math.Max(0, (int)Math.Round(stopwatch.Elapsed.TotalMilliseconds)),
             };
         }
-        catch (OperationCanceledException exception) when (
-            !ExceptionGraphClassifier.IsProcessFatal(exception)
+        catch (Exception exception) when (exception is OperationCanceledException or TimeoutException
+            && !ExceptionGraphClassifier.IsProcessFatal(exception)
             && !ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
         {
             stopwatch.Stop();
@@ -2592,6 +2592,9 @@ internal sealed partial class SettingsViewModel : ObservableObject
             && !ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
         {
             stopwatch.Stop();
+            // This batch publishes one aggregate outcome. Keep per-target diagnostics
+            // while preventing the general error boundary from raising extra toasts.
+            if (_userNotifications is not null) { OperationNotificationRunner.MarkFailureReported(exception); }
             await ReportUnexpectedAsync("settings-connection-test-target", exception);
             return new ConnectionTestTargetResult(
                 label,

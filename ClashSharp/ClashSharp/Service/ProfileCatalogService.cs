@@ -388,11 +388,6 @@ public sealed partial class ProfileCatalogService : IProfileCatalog, IAsyncDispo
         ArgumentNullException.ThrowIfNull(name);
         ArgumentNullException.ThrowIfNull(uri);
 
-        if (string.IsNullOrWhiteSpace(name))
-        {
-            throw new ArgumentException("Subscription link name must not be whitespace.", nameof(name));
-        }
-
         Uri parsedUri = ParseSubscriptionUri(uri);
 
         lock (_syncLock)
@@ -408,13 +403,14 @@ public sealed partial class ProfileCatalogService : IProfileCatalog, IAsyncDispo
 
             ProfileSubscriptionLink link = new(
                 Guid.NewGuid().ToString("N"),
-                name.Trim(),
+                string.IsNullOrWhiteSpace(name) ? parsedUri.Host : name.Trim(),
                 parsedUri.ToString(),
                 true,
                 24,
                 DateTimeOffset.MinValue,
                 GetString("ProfileCatalog.Status.Added"),
-                Revision: 1);
+                Revision: 1,
+                UseProviderName: string.IsNullOrWhiteSpace(name));
 
             document.Links.Add(link);
             document.SubscriptionSchedules.Add(new ProfileSubscriptionScheduleState
@@ -491,6 +487,8 @@ public sealed partial class ProfileCatalogService : IProfileCatalog, IAsyncDispo
             document.Links[targetIndex] = existingLink with
             {
                 Name = name.Trim(),
+                UseProviderName = string.Equals(name.Trim(), existingLink.Name, StringComparison.Ordinal)
+                    ? existingLink.UseProviderName : false,
                 Uri = parsedUri.ToString(),
                 IsEnabled = isEnabled,
                 UpdateIntervalHours = updateIntervalHours,
@@ -601,6 +599,12 @@ public sealed partial class ProfileCatalogService : IProfileCatalog, IAsyncDispo
                 }
 
                 document.Profiles[index] = profile with { Name = name.Trim() };
+                int linkIndex = document.Links.FindIndex(link => string.Equals(profileId, "subscription-" + link.Id, StringComparison.Ordinal));
+                if (linkIndex >= 0)
+                {
+                    ProfileSubscriptionLink link = document.Links[linkIndex];
+                    document.Links[linkIndex] = link with { Name = name.Trim(), UseProviderName = false, Revision = checked(link.Revision + 1) };
+                }
                 SaveDocument(document);
                 return true;
             }
@@ -1014,8 +1018,10 @@ public sealed partial class ProfileCatalogService : IProfileCatalog, IAsyncDispo
             EnsureLinkHasHttpUri(link);
             TryUpdateSubscriptionLinkStatus(link.Id, GetString("ProfileCatalog.Subscription.Downloading"));
 
-            (string configurationText, SubscriptionUsage? usage) = await ReadSubscriptionConfigurationAsync(
+            (string configurationText, SubscriptionUsage? usage, string? providerName) = await ReadSubscriptionConfigurationAsync(
                 new Uri(link.Uri), cancellationToken).ConfigureAwait(false);
+            bool automaticName = link.UseProviderName ?? string.Equals(link.Name, new Uri(link.Uri).Host, StringComparison.OrdinalIgnoreCase);
+            string resolvedName = automaticName && providerName is not null ? providerName : link.Name;
             string profileId = $"subscription-{link.Id}";
             bool isActive = StringComparer.Ordinal.Equals(GetActiveProfileId(), profileId);
             string? previousConfiguration = await _coreConfiguration
@@ -1037,7 +1043,7 @@ public sealed partial class ProfileCatalogService : IProfileCatalog, IAsyncDispo
                     ProfileCatalogRuntimeImportResult runtimeResult = await _runtime
                         .ImportAndApplyProfileAsync(
                             profileId,
-                            link.Name,
+                            resolvedName,
                             configurationText,
                             cancellationToken)
                         .ConfigureAwait(false);
@@ -1052,7 +1058,7 @@ public sealed partial class ProfileCatalogService : IProfileCatalog, IAsyncDispo
                 else
                 {
                     importResult = await _coreConfiguration
-                        .ImportProfileConfigurationAsync(profileId, link.Name, configurationText, cancellationToken)
+                        .ImportProfileConfigurationAsync(profileId, resolvedName, configurationText, cancellationToken)
                         .ConfigureAwait(false);
                 }
             }
@@ -1067,12 +1073,17 @@ public sealed partial class ProfileCatalogService : IProfileCatalog, IAsyncDispo
                 lock (_syncLock)
                 {
                     ProfileCatalogDocument document = CloneDocument(LoadDocument());
-                    UpsertImportedProfile(document, importResult, link.Name);
+                    UpsertImportedProfile(document, importResult, resolvedName);
+                    int linkIndex = document.Links.FindIndex(candidate => candidate.Id == link.Id);
+                    if (linkIndex >= 0)
+                    {
+                        document.Links[linkIndex] = document.Links[linkIndex] with { Name = resolvedName, UseProviderName = automaticName };
+                    }
                     ProfileHistoryCommit historyCommit = FinalizeProfileHistory(
                         document,
                         pendingHistory,
                         importResult,
-                        link.Name,
+                        resolvedName,
                         isActive ? ProfileHistoryApplyOutcome.Applied : ProfileHistoryApplyOutcome.Stored);
                     UpdateLinkStatus(
                         document,
@@ -1640,7 +1651,7 @@ public sealed partial class ProfileCatalogService : IProfileCatalog, IAsyncDispo
     }
 
     /// <summary>Bounds response headers and streamed content by one deadline and a hard byte limit.</summary>
-    private async Task<(string ConfigurationText, SubscriptionUsage? Usage)> ReadSubscriptionConfigurationAsync(
+    private async Task<(string ConfigurationText, SubscriptionUsage? Usage, string? ProviderName)> ReadSubscriptionConfigurationAsync(
         Uri uri, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(uri);
@@ -1676,7 +1687,7 @@ public sealed partial class ProfileCatalogService : IProfileCatalog, IAsyncDispo
             buffer.Write(chunk, 0, bytesRead);
         }
 
-        return (DecodeStrictUtf8(buffer.ToArray()), ReadSubscriptionUsage(response));
+        return (DecodeStrictUtf8(buffer.ToArray()), ReadSubscriptionUsage(response), SubscriptionProfileName.Read(response));
     }
 
     private static SubscriptionUsage? ReadSubscriptionUsage(HttpResponseMessage response)

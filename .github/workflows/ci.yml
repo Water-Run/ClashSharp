@@ -123,6 +123,11 @@ jobs:
         shell: powershell
         run: ./eng/Generate-InstallerIcon.ps1 -Verify
 
+      - name: Verify application icon scale and target-size variants
+        if: steps.scope.outputs.product != 'false'
+        shell: powershell
+        run: ./eng/Generate-ApplicationAssets.ps1 -Verify
+
       - name: Verify offline .NET package contract
         if: steps.scope.outputs.product != 'false'
         shell: pwsh

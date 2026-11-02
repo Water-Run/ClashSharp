@@ -1,3 +1,4 @@
+using System.Globalization;
 using ClashSharp.Model;
 
 namespace ClashSharp.Service;
@@ -9,7 +10,8 @@ internal static class RegionDisplayServiceFactory
     /// <returns>A region display service wired to app settings and localization resources.</returns>
     public static RegionDisplayService CreateDefault()
     {
-        return new RegionDisplayService(GetFeatureMode, LocalizationService.Instance.GetString);
+        return new RegionDisplayService(GetFeatureMode, LocalizationService.Instance.GetString,
+            () => LocalizationService.ResolveEffectiveLanguage(LocalizationService.Instance.CurrentLanguage, CultureInfo.CurrentUICulture));
     }
 
     private static MainlandChinaFeatureMode GetFeatureMode()

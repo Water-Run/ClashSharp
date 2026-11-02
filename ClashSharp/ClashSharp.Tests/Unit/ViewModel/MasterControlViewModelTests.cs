@@ -66,7 +66,8 @@ public sealed partial class MasterControlViewModelTests
 
         Assert.Same(firstTile, viewModel.InfoTiles[0]);
         Assert.Same(firstHeroItem, viewModel.HeroStatusItems[0]);
-        Assert.Equal(1, heroLayout.GetLayoutCount);
+        Assert.Equal(0, heroLayout.GetLayoutCount);
+        Assert.Equal(1, heroLayout.GetDefaultLayoutCount);
         Assert.Equal(1, heroLayout.GetCandidatesCount);
         Assert.Equal(1, infoLayout.GetLayoutCount);
     }
@@ -170,9 +171,11 @@ public sealed partial class MasterControlViewModelTests
     }
 
     [Fact]
-    public async Task LoadAsync_BuildsEightConfigurableHeroStatusItems()
+    public async Task LoadAsync_BuildsEightFixedHeroStatusItemsAndIgnoresLegacyCustomization()
     {
         FakeMasterHeroStatusLayoutService layoutService = new();
+        MasterHeroStatusItemKind[] legacy = MasterHeroStatusLayoutService.DefaultLayout.Reverse().ToArray();
+        await layoutService.SaveLayoutAsync(legacy, CancellationToken.None);
         MasterControlViewModel viewModel = CreateViewModel(heroStatusLayout: layoutService);
         await viewModel.LoadAsync(CancellationToken.None);
 
@@ -192,6 +195,8 @@ public sealed partial class MasterControlViewModelTests
         Assert.Equal(14, viewModel.HeroStatusOptions.Select(option => option.Kind).Distinct().Count());
         Assert.Equal("Set display", viewModel.SetHeroStatusDisplayText);
         Assert.Equal("Restore default", viewModel.RestoreDefaultHeroStatusLayoutText);
+        Assert.Equal(legacy, layoutService.SavedLayout);
+        Assert.Equal(0, layoutService.GetLayoutCount);
     }
 
     [Fact]
@@ -1699,6 +1704,8 @@ public sealed partial class MasterControlViewModelTests
 
         public int GetLayoutCount { get; private set; }
 
+        public int GetDefaultLayoutCount { get; private set; }
+
         public int GetCandidatesCount { get; private set; }
 
         public IReadOnlyList<MasterHeroStatusItemKind> GetLayout()
@@ -1709,6 +1716,7 @@ public sealed partial class MasterControlViewModelTests
 
         public IReadOnlyList<MasterHeroStatusItemKind> GetDefaultLayout()
         {
+            GetDefaultLayoutCount++;
             return MasterHeroStatusLayoutService.DefaultLayout;
         }
 

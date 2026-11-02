@@ -8,6 +8,30 @@ namespace ClashSharp.ApplicationModel.Presentation;
 public sealed class OperationNotificationRunner(IUserOperationNotifications? notifications)
 {
     private static readonly ConditionalWeakTable<Exception, object> ReportedFailures = new();
+    private static readonly AsyncLocal<OutcomeScope?> CurrentScope = new();
+
+    // One admitted command may pass several decorated ports (for example an automatic
+    // subscription update). Share its receipt only within that call chain, never across retries.
+    private sealed class OutcomeScope
+    {
+        public int SuccessReported;
+        public int FailureReported;
+    }
+
+    /// <summary>Records an availability failure already reported by a specialized operation boundary.</summary>
+    /// <param name="exception">Original failure retained by the caller; its contents are not modified.</param>
+    public static void MarkFailureReported(Exception exception)
+    {
+        ArgumentNullException.ThrowIfNull(exception);
+        _ = ReportedFailures.GetValue(exception, static _ => new());
+        if (CurrentScope.Value is { } scope) { Interlocked.Exchange(ref scope.FailureReported, 1); }
+    }
+
+    /// <summary>Records a verified state-change notification within the current command.</summary>
+    public static void MarkSuccessReported()
+    {
+        if (CurrentScope.Value is { } scope) { Interlocked.Exchange(ref scope.SuccessReported, 1); }
+    }
 
     /// <summary>Checks whether every failure branch already belongs to an operation notification.</summary>
     /// <param name="exception">Original or wrapped failure observed by an outer error boundary.</param>
@@ -55,15 +79,21 @@ public sealed class OperationNotificationRunner(IUserOperationNotifications? not
     public T Execute<T>(Func<T> operation, string titleResourceKey, string successResourceKey, string failureResourceKey)
     {
         ArgumentNullException.ThrowIfNull(operation);
-        T result;
-        try { result = operation(); }
-        catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
+        OutcomeScope? previous = CurrentScope.Value;
+        CurrentScope.Value ??= new();
+        try
         {
-            ReportFailure(titleResourceKey, failureResourceKey, exception);
-            throw;
+            T result;
+            try { result = operation(); }
+            catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
+            {
+                ReportFailure(titleResourceKey, failureResourceKey, exception);
+                throw;
+            }
+            if (result is not null) { TryReport(titleResourceKey, result is false ? failureResourceKey : successResourceKey, result is false); }
+            return result;
         }
-        if (result is not null) { TryReport(titleResourceKey, result is false ? failureResourceKey : successResourceKey, result is false); }
-        return result;
+        finally { CurrentScope.Value = previous; }
     }
 
     /// <summary>Reports a completed synchronous operation.</summary>
@@ -87,21 +117,30 @@ public sealed class OperationNotificationRunner(IUserOperationNotifications? not
         Func<T, bool?>? classifyResult = null)
     {
         ArgumentNullException.ThrowIfNull(operation);
-        T result;
-        try { result = await operation().ConfigureAwait(false); }
-        catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception)
-            && !ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
+        OutcomeScope? previous = CurrentScope.Value;
+        CurrentScope.Value ??= new();
+        try
         {
-            ReportFailure(titleResourceKey, failureResourceKey, exception);
-            throw;
+            T result;
+            try { result = await operation().ConfigureAwait(false); }
+            catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception)
+                && !ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
+            {
+                ReportFailure(titleResourceKey, failureResourceKey, exception);
+                throw;
+            }
+            bool? succeeded = classifyResult is null ? result is null ? null : result is not false : classifyResult(result);
+            if (succeeded is { } completed) { TryReport(titleResourceKey, completed ? successResourceKey : failureResourceKey, !completed); }
+            return result;
         }
-        bool? succeeded = classifyResult is null ? result is null ? null : result is not false : classifyResult(result);
-        if (succeeded is { } completed) { TryReport(titleResourceKey, completed ? successResourceKey : failureResourceKey, !completed); }
-        return result;
+        finally { CurrentScope.Value = previous; }
     }
 
     private void TryReport(string title, string message, bool failed)
     {
+        if (notifications is null) { return; }
+        if (CurrentScope.Value is { } scope
+            && Interlocked.Exchange(ref (failed ? ref scope.FailureReported : ref scope.SuccessReported), 1) != 0) { return; }
         try { notifications?.ReportOperation(title, message, failed); }
         catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
         {
@@ -119,7 +158,8 @@ public sealed class OperationNotificationRunner(IUserOperationNotifications? not
             TryReport(title, message, true);
             return;
         }
-        try { notifications?.ReportAvailability(title, "Settings.DataReplacement.RecoveryRequired.Description", true); }
+        if (notifications is null || CurrentScope.Value is { } scope && Interlocked.Exchange(ref scope.FailureReported, 1) != 0) { return; }
+        try { notifications.ReportAvailability(title, "Settings.DataReplacement.RecoveryRequired.Description", true); }
         catch (Exception deliveryFailure) when (!ExceptionGraphClassifier.IsProcessFatal(deliveryFailure))
         {
             // Preserve the original durable recovery failure if the notification platform is unavailable.

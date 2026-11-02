@@ -10,6 +10,16 @@ internal static partial class LocalizationResources
     {
         return new ReadOnlyDictionary<string, string>(new Dictionary<string, string>
         {
+            ["Notification.TransparentProxy.Title"] = "Прозрачный прокси",
+            ["Notification.TransparentProxy.Disabled"] = "Прозрачный прокси выключен.",
+            ["Notification.TransparentProxy.Enabled"] = "Прозрачный прокси включён и проверен.",
+            ["Notification.TransparentProxy.Pending"] = "Настройка сохранена; она вступит в силу после включения перехвата прокси.",
+            ["Notification.NetworkSettings.Applied"] = "Порт прокси обновлён и проверен.",
+            ["Profiles.Current.Badge"] = "Текущая конфигурация",
+            ["Profiles.Activation.Progress"] = "Переключение конфигурации…",
+            ["Profiles.Activation.Success.Format"] = "«{0}» теперь текущая конфигурация. Переключатель прокси и режим перехвата сохраняют текущие значения.",
+
+            ["Notification.Subscription.Checked"] = "Проверка подписки завершена.",
             ["Profiles.Import.Subscription"] = "Импорт URL подписки",
             ["Profiles.Import.File"] = "Импорт из файла",
             ["Profiles.Import.Name"] = "Имя (необязательно)",
@@ -894,7 +904,7 @@ internal static partial class LocalizationResources
             ["Settings.MainlandChinaUrlBlocking.Title"] = "Маскировать отмеченные URL в отображаемом тексте",
             ["Settings.MainlandChinaUrlBlocking.Description"] = "Заменяет текст отмеченных URL маской и не блокирует сетевой доступ.",
             ["Settings.Notification.Title"] = "Системные уведомления",
-            ["Settings.Notification.Description"] = "Управляет уведомлениями Win11 для режима прокси, триггеров, тайм-аутов проверки URL и связанных событий.",
+            ["Settings.Notification.Description"] = "Важные: остановка ядра, проверки запуска и ошибки восстановления. По умолчанию также: изменения маршрутизации, ошибки операций и тайм-ауты тестов. Подробные также включают успешный импорт, проверку, сохранение и тестирование. Выключение уведомлений блокирует все системные уведомления.",
             ["Settings.Notification.Default"] = "По умолчанию",
             ["Settings.Notification.CriticalOnly"] = "Только важные",
             ["Settings.Notification.More"] = "Больше",

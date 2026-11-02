@@ -46,7 +46,7 @@ internal sealed class WindowsInstallerShellIntegration : IWindowsInstallerShellI
                 if (enabled) { throw Failure("shortcut_name_conflict"); }
                 return;
             }
-            if (!enabled) { File.Delete(destination); return; }
+            if (!enabled) { File.Delete(destination); NotifyShortcutChanged(destination, removed: true); return; }
         }
         else if (!enabled) { return; }
         cancellationToken.ThrowIfCancellationRequested();
@@ -75,6 +75,7 @@ internal sealed class WindowsInstallerShellIntegration : IWindowsInstallerShellI
             if (File.Exists(destination) && !IsOwned(destination, applicationId)) { throw Failure("shortcut_changed"); }
             File.Move(temporary, destination, overwrite: true);
             if (!IsOwned(destination, applicationId)) { throw Failure("shortcut_verification_failed"); }
+            NotifyShortcutChanged(destination, removed: false);
         }
         finally
         {
@@ -126,6 +127,15 @@ internal sealed class WindowsInstallerShellIntegration : IWindowsInstallerShellI
     }
 
     private static InstallerProtocolException Failure(string code) => new("installer.preferences." + code);
+
+    private static void NotifyShortcutChanged(string path, bool removed) =>
+        // Notify Explorer after the final name is committed, not while the temporary link exists.
+        // SHCNF_PATHW | SHCNF_FLUSH completes delivery before installation is reported complete.
+        SHChangeNotify(removed ? 0x0000_0004u : 0x0000_0002u, 0x0000_1005, path, 0);
+
+    [DllImport("shell32.dll", ExactSpelling = true)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    private static extern void SHChangeNotify(uint eventId, uint flags, [MarshalAs(UnmanagedType.LPWStr)] string item, nint secondItem);
 
     [StructLayout(LayoutKind.Sequential)]
     private struct PropertyKey(Guid format, uint id)

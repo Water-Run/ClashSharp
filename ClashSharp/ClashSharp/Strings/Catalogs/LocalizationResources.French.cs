@@ -10,6 +10,16 @@ internal static partial class LocalizationResources
     {
         return new ReadOnlyDictionary<string, string>(new Dictionary<string, string>
         {
+            ["Notification.TransparentProxy.Title"] = "Proxy transparent",
+            ["Notification.TransparentProxy.Disabled"] = "Le proxy transparent est désactivé.",
+            ["Notification.TransparentProxy.Enabled"] = "Le proxy transparent est activé et vérifié.",
+            ["Notification.TransparentProxy.Pending"] = "Préférence enregistrée ; elle prendra effet avec la prise en charge du proxy.",
+            ["Notification.NetworkSettings.Applied"] = "Le port du proxy a été mis à jour et vérifié.",
+            ["Profiles.Current.Badge"] = "Configuration active",
+            ["Profiles.Activation.Progress"] = "Changement de configuration…",
+            ["Profiles.Activation.Success.Format"] = "« {0} » est maintenant la configuration active. Le commutateur proxy et le mode de prise en charge conservent leurs choix actuels.",
+
+            ["Notification.Subscription.Checked"] = "Vérification du lien terminée.",
             ["Profiles.Import.Subscription"] = "Importer une URL d’abonnement",
             ["Profiles.Import.File"] = "Importer un fichier",
             ["Profiles.Import.Name"] = "Nom (facultatif)",
@@ -894,7 +904,7 @@ internal static partial class LocalizationResources
             ["Settings.MainlandChinaUrlBlocking.Title"] = "Masquer les URL marquées dans le texte affiché",
             ["Settings.MainlandChinaUrlBlocking.Description"] = "Remplace le texte des URL marquées par un masque sans bloquer l’accès réseau.",
             ["Settings.Notification.Title"] = "Notifications système",
-            ["Settings.Notification.Description"] = "Contrôle les notifications Win11 pour le mode proxy, les déclencheurs, les délais de test d'URL et les événements associés.",
+            ["Settings.Notification.Description"] = "Important : arrêt du moteur, vérifications au démarrage et échecs de récupération. Par défaut ajoute les changements de routage, échecs et délais de test dépassés. Détaillé ajoute les imports, validations, enregistrements et tests réussis. Désactiver les notifications supprime toutes les notifications système.",
             ["Settings.Notification.Default"] = "Par défaut",
             ["Settings.Notification.CriticalOnly"] = "Critiques uniquement",
             ["Settings.Notification.More"] = "Plus",

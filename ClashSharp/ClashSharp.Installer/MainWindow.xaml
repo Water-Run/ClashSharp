@@ -405,6 +405,11 @@
                   Command="{Binding CompletePreferencesCommand}"
                   Visibility="{Binding IsCompletePreferencesVisible, Converter={StaticResource BooleanToVisibilityConverter}}"
                   AutomationProperties.Name="完成当前账户的安装选项" />
+          <Button Margin="0,0,8,0" Content="启动 Clash#(_L)"
+                  Command="{Binding LaunchApplicationCommand}" IsDefault="True"
+                  Visibility="{Binding IsLaunchApplicationVisible, Converter={StaticResource BooleanToVisibilityConverter}}"
+                  Style="{StaticResource InstallerPrimaryButtonStyle}"
+                  AutomationProperties.Name="启动 Clash#" />
           <Button
             Margin="0,0,8,0"
             Content="保留原安装(_K)"

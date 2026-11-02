@@ -10,6 +10,16 @@ internal static partial class LocalizationResources
     {
         return new ReadOnlyDictionary<string, string>(new Dictionary<string, string>
         {
+            ["Notification.TransparentProxy.Title"] = "透明代理",
+            ["Notification.TransparentProxy.Disabled"] = "透明代理已關閉。",
+            ["Notification.TransparentProxy.Enabled"] = "透明代理已啟用並生效。",
+            ["Notification.TransparentProxy.Pending"] = "透明代理偏好已儲存；啟用代理接管後生效。",
+            ["Notification.NetworkSettings.Applied"] = "代理監聽連接埠已更新並驗證。",
+            ["Profiles.Current.Badge"] = "目前使用",
+            ["Profiles.Activation.Progress"] = "正在切換設定…",
+            ["Profiles.Activation.Success.Format"] = "已將「{0}」設為目前設定。代理開關和接管模式維持目前選擇。",
+
+            ["Notification.Subscription.Checked"] = "訂閱連結檢查完成。",
             ["Profiles.Import.Subscription"] = "從訂閱連結匯入",
             ["Profiles.Import.File"] = "從檔案匯入",
             ["Profiles.Import.Name"] = "名稱（選填）",
@@ -894,7 +904,7 @@ internal static partial class LocalizationResources
             ["Settings.MainlandChinaUrlBlocking.Title"] = "遮罩顯示文字中的已標記 URL",
             ["Settings.MainlandChinaUrlBlocking.Description"] = "將已標記的 URL 文字替換為遮罩，不阻擋網路存取。",
             ["Settings.Notification.Title"] = "系統通知",
-            ["Settings.Notification.Description"] = "選擇系統通知級別；預設包含失敗與逾時，詳細級別增加成功回饋。",
+            ["Settings.Notification.Description"] = "重要：執行中斷、啟動檢查和復原失敗。預設：增加代理狀態變化、操作失敗及測試逾時。詳細：再增加匯入、驗證、儲存和測試成功等結果。關閉通知會封鎖所有系統通知。",
             ["Settings.Notification.Default"] = "預設",
             ["Settings.Notification.CriticalOnly"] = "僅重要",
             ["Settings.Notification.More"] = "詳細",

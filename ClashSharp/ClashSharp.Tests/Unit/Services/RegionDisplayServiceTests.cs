@@ -8,6 +8,29 @@ namespace ClashSharp.Tests.Unit.Services;
 public sealed class RegionDisplayServiceTests
 {
     [Theory]
+    [InlineData("FI Basic-芬兰-BGP-01|v202605", "FI")]
+    [InlineData("NL Amsterdam 01", "NL")]
+    [InlineData("加拿大 Toronto", "CA")]
+    [InlineData("🇧🇷 Premium 02", "BR")]
+    [InlineData("HK 香港 🇨🇳", "HK")]
+    [InlineData("ordinary backbone", "UN")]
+    public void RegionInferenceCoversThePackagedCatalogWithoutMatchingPartialWords(string name, string code)
+    {
+        Assert.Equal(code, RegionCatalog.Infer(name));
+    }
+
+    [Fact]
+    public void FinlandHasLocalizedMetadataAndAPackagedFlag()
+    {
+        RegionDisplayService service = new(() => MainlandChinaFeatureMode.Disabled, key => key, () => AppLanguage.SimplifiedChinese);
+        RegionMetadata metadata = service.Resolve("FI");
+        Assert.Equal("芬兰", metadata.DisplayName);
+        Assert.Equal("FI", metadata.FlagAssetKey);
+        Assert.Equal(251, RegionCatalog.Codes.Count);
+        Assert.Equal("UN", service.Resolve("not-a-region").FlagAssetKey);
+    }
+
+    [Theory]
     [InlineData("")]
     [InlineData("   ")]
     [InlineData("UN")]

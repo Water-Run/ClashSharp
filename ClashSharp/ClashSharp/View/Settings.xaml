@@ -445,20 +445,31 @@
                                 </components:SettingRow.ActionContent>
                             </components:SettingRow>
                             <TextBlock Text="{Binding Endpoint}" IsTextSelectionEnabled="True" TextWrapping="Wrap" Margin="12,0" />
-                            <TextBlock Text="{Binding PermissionsText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Margin="0,8,0,0" />
-                            <TextBlock Text="{Binding PermissionsDescriptionText}" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                            <ItemsControl ItemsSource="{Binding Scopes}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <components:SettingRow Title="{Binding Title}" Description="{Binding Description}" Margin="0,0,0,8">
-                                            <components:SettingRow.ActionContent>
-                                                <ToggleSwitch x:Name="McpScopeToggle" IsOn="{Binding IsGranted, Mode=TwoWay}" OnContent="{x:Null}" OffContent="{x:Null}"
-                                                              MinWidth="0" AutomationProperties.Name="{Binding Title}" />
-                                            </components:SettingRow.ActionContent>
-                                        </components:SettingRow>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
+                            <Expander x:Name="McpPermissionsExpander" Header="{Binding PermissionsText}"
+                                      HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                                      AutomationProperties.Name="{Binding PermissionsText}">
+                                <StackPanel Spacing="12">
+                                    <TextBlock Text="{Binding PermissionsDescriptionText}" TextWrapping="Wrap"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                    <ItemsControl ItemsSource="{Binding Scopes}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <CheckBox x:Name="McpScopeCheckBox" IsChecked="{Binding IsGranted, Mode=TwoWay}"
+                                                          HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                                                          AutomationProperties.Name="{Binding Title}" AutomationProperties.HelpText="{Binding Description}"
+                                                          Margin="0,0,0,10">
+                                                    <StackPanel Spacing="3">
+                                                        <TextBlock Text="{Binding Title}" TextWrapping="Wrap" />
+                                                        <TextBlock Text="{Binding Description}" TextWrapping="Wrap"
+                                                                   Style="{ThemeResource CaptionTextBlockStyle}"
+                                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                                    </StackPanel>
+                                                </CheckBox>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </Expander>
                             <Button Content="{Binding ApplyText}" Click="McpApply_Click" HorizontalAlignment="Right" Style="{StaticResource AccentButtonStyle}" />
                             <components:SettingRow Title="{Binding ClientText}" Description="{Binding ClientDescriptionText}">
                                 <components:SettingRow.ActionContent>

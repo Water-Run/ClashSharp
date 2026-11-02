@@ -10,6 +10,16 @@ internal static partial class LocalizationResources
     {
         return new ReadOnlyDictionary<string, string>(new Dictionary<string, string>
         {
+            ["Notification.TransparentProxy.Title"] = "투명 프록시",
+            ["Notification.TransparentProxy.Disabled"] = "투명 프록시가 꺼졌습니다.",
+            ["Notification.TransparentProxy.Enabled"] = "투명 프록시가 켜졌으며 확인되었습니다.",
+            ["Notification.TransparentProxy.Pending"] = "설정을 저장했습니다. 프록시 인계를 켜면 적용됩니다.",
+            ["Notification.NetworkSettings.Applied"] = "프록시 수신 포트를 변경하고 확인했습니다.",
+            ["Profiles.Current.Badge"] = "현재 사용 중",
+            ["Profiles.Activation.Progress"] = "구성 전환 중…",
+            ["Profiles.Activation.Success.Format"] = "“{0}”을(를) 현재 구성으로 설정했습니다. 프록시 스위치와 인계 모드는 현재 선택을 유지합니다.",
+
+            ["Notification.Subscription.Checked"] = "구독 링크를 확인했습니다.",
             ["Profiles.Import.Subscription"] = "구독 URL 가져오기",
             ["Profiles.Import.File"] = "파일에서 가져오기",
             ["Profiles.Import.Name"] = "이름(선택)",
@@ -892,7 +902,7 @@ internal static partial class LocalizationResources
             ["Settings.MainlandChinaUrlBlocking.Title"] = "표시 텍스트에서 표시된 URL 가리기",
             ["Settings.MainlandChinaUrlBlocking.Description"] = "표시된 URL 텍스트를 가림 처리할 뿐, 네트워크 접속은 막지 않습니다.",
             ["Settings.Notification.Title"] = "시스템 알림",
-            ["Settings.Notification.Description"] = "프록시 모드, 트리거, 연결 테스트 시간 초과 등 Win11 알림의 양을 조절합니다.",
+            ["Settings.Notification.Description"] = "중요: 코어 중단, 시작 점검 및 복구 실패. 기본: 라우팅 변경, 작업 실패 및 테스트 시간 초과도 포함합니다. 상세: 가져오기, 검증, 저장 및 테스트 성공도 포함합니다. 알림을 끄면 모든 시스템 알림이 차단됩니다.",
             ["Settings.Notification.Default"] = "기본",
             ["Settings.Notification.CriticalOnly"] = "중요한 알림만",
             ["Settings.Notification.More"] = "더 많이",

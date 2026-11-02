@@ -28,7 +28,7 @@ internal sealed partial class ProfilesViewModel
     /// <summary>Gets whether another import may start.</summary>
     public bool CanImport => !IsImporting;
     /// <summary>Gets whether the imported, currently selected profile can be explicitly activated.</summary>
-    public bool CanUseImportedProfile => _lastImportedProfileId is not null
+    public bool CanUseImportedProfile => CanActivateSelectedProfile && _lastImportedProfileId is not null
         && SelectedProfile?.Model.Id == _lastImportedProfileId && _getActiveProfileId() != _lastImportedProfileId;
     /// <summary>Gets the subscription input title.</summary>
     public string ImportSubscriptionText => _getString("Profiles.Import.Subscription");

@@ -104,8 +104,9 @@ internal sealed class GenerationProfileCatalog(DataGenerationManager generations
 
     public Task<string> CheckSubscriptionLinkAsync(ProfileSubscriptionLink link, CancellationToken cancellationToken)
     {
-        return _generations.ExecuteAsync<IProfileCatalog, string>(
-            (storage, _, token) => storage.CheckSubscriptionLinkAsync(link, token), cancellationToken);
+        return _notifications.ExecuteAsync(() => _generations.ExecuteAsync<IProfileCatalog, string>(
+            (storage, _, token) => storage.CheckSubscriptionLinkAsync(link, token), cancellationToken),
+            "Nav.Links", "Notification.Subscription.Checked", "Links.Status.CheckFailed", cancellationToken);
     }
 
     public Task<ProfileImportResult> ImportSubscriptionLinkAsync(ProfileSubscriptionLink link, CancellationToken cancellationToken)

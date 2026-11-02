@@ -15,6 +15,49 @@ namespace ClashSharp.Tests.Unit.Services;
 public sealed class NotificationServiceTests
 {
     [Theory]
+    [InlineData(false, NotificationLevel.More, 0, 0, 0)]
+    [InlineData(true, NotificationLevel.CriticalOnly, 0, 0, 1)]
+    [InlineData(true, NotificationLevel.Default, 2, 1, 1)]
+    [InlineData(true, NotificationLevel.More, 2, 2, 1)]
+    public void VerifiedRoutingAndManagementOutcomesUseDistinctPolicies(bool enabled, NotificationLevel level,
+        int routingCount, int managementCount, int importantCount)
+    {
+        FakeWin11NotificationPlatform routing = new();
+        NotificationService service = CreateService(enabled, level, routing, new(), new());
+        service.ReportOperation("Profiles", "Profiles.Status.Activated", false);
+        service.ReportOperation("Nodes", "ProxyNodes.Status.SelectionApplied", false);
+        Assert.Equal(routingCount, routing.Requests.Count);
+        FakeWin11NotificationPlatform management = new();
+        service = CreateService(enabled, level, management, new(), new());
+        service.ReportOperation("Profiles", "Profiles.Status.Imported", false);
+        service.ReportOperation("Profiles", "Profiles.Status.ImportFailed", true);
+        Assert.Equal(managementCount, management.Requests.Count);
+        FakeWin11NotificationPlatform important = new();
+        service = CreateService(enabled, level, important, new(), new());
+        service.ReportOperation("Runtime", "Notification.Startup.Attention", true);
+        Assert.Equal(importantCount, important.Requests.Count);
+    }
+
+    [Theory]
+    [InlineData(false, NotificationLevel.Default, 0)]
+    [InlineData(true, NotificationLevel.CriticalOnly, 0)]
+    [InlineData(true, NotificationLevel.Default, 1)]
+    [InlineData(true, NotificationLevel.More, 1)]
+    public void TransparentProxyStateChangeUsesTheStandardLevel(bool enabled, NotificationLevel level, int count)
+    {
+        FakeWin11NotificationPlatform platform = new();
+        NotificationService service = CreateService(enabled, level, platform, new(), new());
+
+        service.NotifyTransparentProxyChanged(true, false);
+
+        Assert.Equal(count, platform.Requests.Count);
+        if (count != 0)
+        {
+            Assert.Contains("Pending", platform.Requests[0].Message, StringComparison.Ordinal);
+        }
+    }
+
+    [Theory]
     [InlineData(true)]
     [InlineData(false)]
     public async Task CompatibilityTransportKeepsRegistrationAndReceiptsOnTheSelectedPlatform(bool supported)

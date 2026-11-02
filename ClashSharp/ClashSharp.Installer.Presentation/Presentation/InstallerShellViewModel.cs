@@ -75,6 +75,8 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
             _displayVersion = packageVersion;
         }
         ReleaseChannelText = isInternalCandidate ? " · 内部测试版" : string.Empty;
+        LaunchApplicationCommand = new AsyncDelegateCommand(LaunchInstalledApplicationAsync,
+            () => IsLaunchApplicationVisible, SetUnhandledCommandFailure);
         CompletePreferencesCommand = new AsyncDelegateCommand(
             () => ExecuteOperationAsync(null, completePreferences: true), () => IsCompletePreferencesVisible, SetUnhandledCommandFailure);
         ResetInstallPreferencesCommand = new DelegateCommand(ResetInstallPreferences,
@@ -415,6 +417,8 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
             }
 
             ValidateReadiness(readiness);
+            _canLaunchApplication = readiness.ProductState == InstallerProductState.Installed
+                && _runtime is IInstallerApplicationLaunchRuntime { SupportsApplicationLaunch: true };
             _accountActionsBlocked = false;
             _canRestoreOriginal = readiness.CanRestoreOriginal;
             _hasPendingUserPreferences = readiness.PendingUserPreferences && readiness.CanExecute && readiness.ProductState == InstallerProductState.Installed;
@@ -563,6 +567,8 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
             }
             ApplyExecutionResult(result);
             ApplyPreferencesWarnings(result, requestedOperation);
+            OfferInstalledApplication(result, !originalRestore && !retiredUninstall
+                && (ownerTransfer || completePreferences || requestedOperation is InstallerOperation.Install or InstallerOperation.Repair));
             if (retiredUninstall)
             {
                 ApplyRetiredUninstallResult(result);
@@ -926,6 +932,7 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
 
     private void InvalidateReadiness()
     {
+        _canLaunchApplication = false;
         _canRestoreOriginal = false;
         Capabilities = Array.Empty<InstallerCapabilityStatus>();
         CanExecuteMutations = false;
@@ -937,6 +944,7 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
 
     private void NotifyCommandAvailability()
     {
+        LaunchApplicationCommand.NotifyCanExecuteChanged();
         RefreshCommand.NotifyCanExecuteChanged();
         PrimaryActionCommand.NotifyCanExecuteChanged();
         SecondaryActionCommand.NotifyCanExecuteChanged();
@@ -950,6 +958,7 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
 
     private void NotifyActionVisibility()
     {
+        OnPropertyChanged(nameof(IsLaunchApplicationVisible));
         OnPropertyChanged(nameof(IsPrimaryActionVisible));
         OnPropertyChanged(nameof(IsSecondaryActionVisible));
         OnPropertyChanged(nameof(IsOriginalRestoreActionVisible));

@@ -63,13 +63,6 @@
                             <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4">
                                 <TextBlock Text="Clash#" TextWrapping="NoWrap" Style="{ThemeResource TitleTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
                                 <TextBlock Text="{Binding BasicStatusText}" Style="{ThemeResource SubtitleTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-                                <HyperlinkButton
-                                    x:Name="SetHeroStatusDisplayButton"
-                                    IsEnabled="{Binding CanEditTileLayout}"
-                                    Content="{Binding SetHeroStatusDisplayText}"
-                                    Padding="0"
-                                    HorizontalAlignment="Left"
-                                    Click="SetHeroStatusDisplayButton_Click" />
                             </StackPanel>
                         </Grid>
 

@@ -152,6 +152,8 @@
     <Compile Include="..\ClashSharp\Service\MihomoProfileParserServiceFactory.cs" Link="Service\MihomoProfileParserServiceFactory.cs" />
     <Compile Include="..\ClashSharp\Service\MihomoProfileShapeValidator.cs" Link="Service\MihomoProfileShapeValidator.cs" />
     <Compile Include="..\ClashSharp\Service\RegionDisplayService.cs" Link="Service\RegionDisplayService.cs" />
+    <Compile Include="..\ClashSharp\Service\RegionCatalog.cs" Link="Service\RegionCatalog.cs" />
+    <Compile Include="..\ClashSharp\Service\RegionCatalog.Data.cs" Link="Service\RegionCatalog.Data.cs" />
     <Compile Include="..\ClashSharp\Service\RegionDisplayServiceFactory.cs" Link="Service\RegionDisplayServiceFactory.cs" />
     <Compile Include="..\ClashSharp\Service\MihomoControllerClient.cs" Link="Service\MihomoControllerClient.cs" />
     <Compile Include="..\ClashSharp\Service\MihomoControllerEndpoint.cs" Link="Service\MihomoControllerEndpoint.cs" />
@@ -186,6 +188,7 @@
     <Compile Include="..\ClashSharp\Service\ProfileCatalogMutationCoordinator.cs" Link="Service\ProfileCatalogMutationCoordinator.cs" />
     <Compile Include="..\ClashSharp\Service\ProfileCatalogMutationCanceledException.cs" Link="Service\ProfileCatalogMutationCanceledException.cs" />
     <Compile Include="..\ClashSharp\Service\ProfileCatalogService.cs" Link="Service\ProfileCatalogService.cs" />
+    <Compile Include="..\ClashSharp\Service\SubscriptionProfileName.cs" Link="Service\SubscriptionProfileName.cs" />
     <Compile Include="..\ClashSharp\Service\ProfileCatalogService.Agent.cs" Link="Service\ProfileCatalogService.Agent.cs" />
     <Compile Include="..\ClashSharp\Service\ProfileCatalogService.HistoryPreview.cs" Link="Service\ProfileCatalogService.HistoryPreview.cs" />
     <Compile Include="..\ClashSharp\Service\IProfileCatalog.cs" Link="Service\IProfileCatalog.cs" />

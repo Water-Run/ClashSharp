@@ -8,6 +8,7 @@ using ClashSharp.ApplicationModel.Diagnostics;
 using ClashSharp.ApplicationModel.Lifecycle;
 using ClashSharp.ApplicationModel.Mutations;
 using ClashSharp.ApplicationModel.Network;
+using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.ApplicationModel.Security;
 using ClashSharp.ApplicationModel.Settings;
 using ClashSharp.Diagnostics;
@@ -33,6 +34,7 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
     private readonly IConnectionSamplingRuntime _sampling;
     private readonly MihomoConnectionService _connections;
     private readonly IApplicationNotificationSink _notifications;
+    private readonly OperationNotificationRunner _operationNotifications;
     private readonly ITriggerRuntimeEventPublisher _triggerEvents;
     private readonly Action<string, string, string, string?> _appendLog;
     private readonly Func<string, string> _getString;
@@ -69,6 +71,7 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
         _sampling = sampling ?? throw new ArgumentNullException(nameof(sampling));
         _connections = connections ?? throw new ArgumentNullException(nameof(connections));
         _notifications = notifications ?? throw new ArgumentNullException(nameof(notifications));
+        _operationNotifications = new(notifications as IUserOperationNotifications);
         _triggerEvents = triggerEvents ?? throw new ArgumentNullException(nameof(triggerEvents));
         _appendLog = appendLog ?? throw new ArgumentNullException(nameof(appendLog));
         _getString = getString ?? throw new ArgumentNullException(nameof(getString));
@@ -112,7 +115,8 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
                 await PublishProxyModeAppliedAsync(result.Mode, CancellationToken.None).ConfigureAwait(false);
                 break;
             case ApplicationActionKind.CloseConnections:
-                await _connections.CloseAllConnectionsAsync(cancellationToken).ConfigureAwait(false);
+                await _operationNotifications.ExecuteAsync(() => _connections.CloseAllConnectionsAsync(cancellationToken),
+                    "Nav.Connections", "Connections.Status.ClosedAll", "Application.UnexpectedError", cancellationToken).ConfigureAwait(false);
                 break;
             case ApplicationActionKind.SendNotification:
                 _notifications.NotifyCustom(value);
@@ -197,7 +201,8 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
         catch (Exception failure) when (!ExceptionGraphClassifier.IsProcessFatal(failure)
             && !ExceptionGraphClassifier.IsCallerCancellation(failure, cancellationToken))
         {
-            _notifications.NotifyProxyFailure();
+            TryNotify(_notifications.NotifyProxyFailure);
+            OperationNotificationRunner.MarkFailureReported(failure);
             throw;
         }
     }
@@ -207,6 +212,7 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
         CancellationToken cancellationToken)
     {
         using MutationAdmissionLease lease = await _admissionBarrier.AcquireOrdinaryAsync(cancellationToken).ConfigureAwait(false);
+        SettingsEnvelope before = _settings.CaptureSnapshot().Envelope;
         SettingsAuthorityResult command = await _settings.ApplyRuntimeChangesAdmittedAsync(
             changes, Guid.NewGuid(), lease, cancellationToken).ConfigureAwait(false);
         SettingsEnvelope committed = RequireApplied(command);
@@ -240,6 +246,19 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
             : tunRequested
                 ? MihomoCoreOwner.Service
                 : MihomoCoreOwner.App;
+        if (changes.Any(change => change.Key == SettingsRegistry.Keys.TransparentProxyEnabled
+            && !before.Desired[change.Key].Value.Equals(change.Value)))
+        {
+            TryNotify(() => _notifications.NotifyTransparentProxyChanged(
+                committed.Applied[SettingsRegistry.Keys.TransparentProxyEnabled].Value!.Get<bool>(), state.TransparentProxyEnabled));
+            OperationNotificationRunner.MarkSuccessReported();
+        }
+        else if (changes.Any(change => change.Key == SettingsRegistry.Keys.MixedPort
+            && !before.Desired[change.Key].Value.Equals(change.Value)))
+        {
+            TryNotify(_notifications.NotifyNetworkSettingsChanged);
+            OperationNotificationRunner.MarkSuccessReported();
+        }
         return new NetworkTakeoverResult(
             state.Mode,
             state.CoreRunning,
@@ -255,6 +274,15 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
         CancellationToken cancellationToken)
     {
         return ApplySettingsAsync([Change(SettingsRegistry.Keys.LaunchAtStartupEnabled, isEnabled)], cancellationToken);
+    }
+
+    private static void TryNotify(Action publish)
+    {
+        try { publish(); }
+        catch (Exception failure) when (!ExceptionGraphClassifier.IsProcessFatal(failure))
+        {
+            // Presentation transport cannot replace an independently verified transaction outcome.
+        }
     }
 
     /// <summary>Applies the settings page's complete sampling choice through the shared coordinator.</summary>
@@ -296,7 +324,8 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
     public Task PublishProxyModeAppliedAsync(ClashSharpMode mode, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        _notifications.NotifyProxyModeChanged(mode);
+        TryNotify(() => _notifications.NotifyProxyModeChanged(mode));
+        OperationNotificationRunner.MarkSuccessReported();
         if (mode is ClashSharpMode.RuleTakeover or ClashSharpMode.FullTakeover)
         {
             _triggerEvents.Publish(new TriggerRuntimeEvent(TriggerEventKind.ProxyStarted));
@@ -352,10 +381,13 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
             : ClashSharpMode.Disabled;
     }
 
-    private async Task ApplySettingsAsync(IReadOnlyList<SettingValueChange> changes, CancellationToken cancellationToken)
-    {
-        _ = RequireApplied(await _settings.ApplyRuntimeChangesAsync(changes, Guid.NewGuid(), cancellationToken).ConfigureAwait(false));
-    }
+    private Task ApplySettingsAsync(IReadOnlyList<SettingValueChange> changes, CancellationToken cancellationToken) =>
+        _operationNotifications.ExecuteAsync(async () =>
+        {
+            SettingsEnvelope before = _settings.CaptureSnapshot().Envelope;
+            _ = RequireApplied(await _settings.ApplyRuntimeChangesAsync(changes, Guid.NewGuid(), cancellationToken).ConfigureAwait(false));
+            return changes.Any(change => !before.Desired[change.Key].Value.Equals(change.Value)) ? true : (bool?)null;
+        }, "Nav.Settings", "Notification.Settings.Saved", "Application.UnexpectedError", cancellationToken);
 
     private static SettingsEnvelope RequireApplied(SettingsAuthorityResult result) => result.IsSucceeded && result.Envelope is not null
         ? result.Envelope : throw new SettingsActionFailedException(result.Status, result.Code ?? "settings.action.failed");

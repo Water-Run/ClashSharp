@@ -150,7 +150,11 @@ public sealed class InstallerExecutableContractTests
             static element => (string?)element.Attribute("AutomationProperties.Name") == "安装操作");
         Assert.DoesNotContain(actions.Ancestors(), element => element.Name == presentation + "ScrollViewer");
         XElement[] buttons = actions.Descendants(presentation + "Button").ToArray();
-        Assert.Equal(5, buttons.Length);
+        Assert.Equal(6, buttons.Length);
+        XElement launch = Assert.Single(buttons,
+            static button => (string?)button.Attribute("Command") == "{Binding LaunchApplicationCommand}");
+        Assert.Equal("{Binding IsLaunchApplicationVisible, Converter={StaticResource BooleanToVisibilityConverter}}",
+            (string?)launch.Attribute("Visibility"));
         XElement userSetup = Assert.Single(buttons,
             static button => (string?)button.Attribute("Command") == "{Binding CompletePreferencesCommand}");
         Assert.Equal("{Binding IsCompletePreferencesVisible, Converter={StaticResource BooleanToVisibilityConverter}}",

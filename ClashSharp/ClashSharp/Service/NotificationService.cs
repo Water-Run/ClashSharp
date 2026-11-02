@@ -26,6 +26,12 @@ internal interface IApplicationNotificationSink
     /// <summary>Sends a notification after the proxy mode changes.</summary>
     void NotifyProxyModeChanged(ClashSharpMode mode);
 
+    /// <summary>Reports a committed TUN preference and whether it is currently effective.</summary>
+    void NotifyTransparentProxyChanged(bool enabled, bool effective) { }
+
+    /// <summary>Reports a verified change to the proxy listener configuration.</summary>
+    void NotifyNetworkSettingsChanged() { }
+
     /// <summary>Sends a custom user-visible notification.</summary>
     void NotifyCustom(string message);
 
@@ -357,13 +363,20 @@ internal sealed class NotificationService :
             string.Format(CultureInfo.CurrentCulture, GetString("Notification.ProxyMode.Message.Format"), GetModeLabel(mode)));
     }
 
+    public void NotifyTransparentProxyChanged(bool enabled, bool effective) => Show(NotificationLevel.Default,
+        GetString("Notification.TransparentProxy.Title"), GetString(!enabled ? "Notification.TransparentProxy.Disabled"
+            : effective ? "Notification.TransparentProxy.Enabled" : "Notification.TransparentProxy.Pending"));
+
+    public void NotifyNetworkSettingsChanged() => Show(NotificationLevel.Default,
+        GetString("Notification.ProxyMode.Title"), GetString("Notification.NetworkSettings.Applied"));
+
     /// <summary>Uses detailed verbosity for success and the standard policy for actionable failures.</summary>
     public void ReportOperation(string titleResourceKey, string messageResourceKey, bool failed, params object[] arguments)
     {
         try
         {
             ArgumentNullException.ThrowIfNull(arguments);
-            Show(failed ? NotificationLevel.Default : NotificationLevel.More,
+            Show(GetOperationLevel(messageResourceKey, failed),
                 GetString(titleResourceKey), arguments.Length == 0 ? GetString(messageResourceKey)
                     : string.Format(CultureInfo.CurrentCulture, GetString(messageResourceKey), arguments));
         }
@@ -372,6 +385,17 @@ internal sealed class NotificationService :
             TryAppendNotificationLog("Warning", "Operation notification failed", titleResourceKey, messageResourceKey, exception.GetType().Name);
         }
     }
+
+    // Availability loss/recovery uses ReportAvailability. These are verified changes
+    // to the user's active routing; routine successful management remains detailed.
+    internal static NotificationLevel GetOperationLevel(string messageResourceKey, bool failed) =>
+        messageResourceKey switch
+        {
+            "Notification.Startup.Attention" => NotificationLevel.CriticalOnly,
+            _ when failed => NotificationLevel.Default,
+            "Profiles.Status.Activated" or "ProxyNodes.Status.SelectionApplied" => NotificationLevel.Default,
+            _ => NotificationLevel.More,
+        };
 
     public void ReportAvailability(string titleResourceKey, string messageResourceKey, bool failed) =>
         Show(failed ? NotificationLevel.CriticalOnly : NotificationLevel.Default, GetString(titleResourceKey), GetString(messageResourceKey));

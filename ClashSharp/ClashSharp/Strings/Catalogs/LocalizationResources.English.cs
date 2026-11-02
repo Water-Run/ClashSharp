@@ -10,6 +10,16 @@ internal static partial class LocalizationResources
     {
         return new ReadOnlyDictionary<string, string>(new Dictionary<string, string>
         {
+            ["Notification.TransparentProxy.Title"] = "Transparent proxy",
+            ["Notification.TransparentProxy.Disabled"] = "Transparent proxy is off.",
+            ["Notification.TransparentProxy.Enabled"] = "Transparent proxy is on and verified.",
+            ["Notification.TransparentProxy.Pending"] = "Transparent-proxy preference saved; it takes effect when proxy takeover is enabled.",
+            ["Notification.NetworkSettings.Applied"] = "Proxy listener port updated and verified.",
+            ["Profiles.Current.Badge"] = "Currently active",
+            ["Profiles.Activation.Progress"] = "Switching configuration…",
+            ["Profiles.Activation.Success.Format"] = "“{0}” is now the current configuration. Your proxy switch and takeover mode keep their current choices.",
+
+            ["Notification.Subscription.Checked"] = "Subscription link checked.",
             ["Profiles.Import.Subscription"] = "Import subscription URL",
             ["Profiles.Import.File"] = "Import from file",
             ["Profiles.Import.Name"] = "Name (optional)",
@@ -892,7 +902,7 @@ internal static partial class LocalizationResources
             ["Settings.MainlandChinaUrlBlocking.Title"] = "Mask marked URLs in displayed text",
             ["Settings.MainlandChinaUrlBlocking.Description"] = "Replaces marked URL text with a mask; it does not block network access.",
             ["Settings.Notification.Title"] = "System notifications",
-            ["Settings.Notification.Description"] = "Controls Win11 notifications for proxy mode, triggers, connection-test timeouts, and related events.",
+            ["Settings.Notification.Description"] = "Important: runtime loss, startup checks and recovery failures. Default adds routing changes, failed operations and test timeouts. Detailed also includes successful imports, validation, saves and tests. Turning notifications off suppresses every system notification.",
             ["Settings.Notification.Default"] = "Default",
             ["Settings.Notification.CriticalOnly"] = "Critical only",
             ["Settings.Notification.More"] = "More",

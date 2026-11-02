@@ -10,6 +10,16 @@ internal static partial class LocalizationResources
     {
         return new ReadOnlyDictionary<string, string>(new Dictionary<string, string>
         {
+            ["Notification.TransparentProxy.Title"] = "Transparenter Proxy",
+            ["Notification.TransparentProxy.Disabled"] = "Der transparente Proxy ist ausgeschaltet.",
+            ["Notification.TransparentProxy.Enabled"] = "Der transparente Proxy ist eingeschaltet und geprüft.",
+            ["Notification.TransparentProxy.Pending"] = "Einstellung gespeichert; sie gilt, sobald die Proxy-Übernahme aktiv ist.",
+            ["Notification.NetworkSettings.Applied"] = "Proxy-Port wurde aktualisiert und geprüft.",
+            ["Profiles.Current.Badge"] = "Aktuell aktiv",
+            ["Profiles.Activation.Progress"] = "Konfiguration wird gewechselt…",
+            ["Profiles.Activation.Success.Format"] = "„{0}“ ist jetzt die aktuelle Konfiguration. Proxy-Schalter und Übernahmemodus behalten ihre aktuelle Auswahl.",
+
+            ["Notification.Subscription.Checked"] = "Abonnement-Link geprüft.",
             ["Profiles.Import.Subscription"] = "Abonnement-URL importieren",
             ["Profiles.Import.File"] = "Aus Datei importieren",
             ["Profiles.Import.Name"] = "Name (optional)",
@@ -894,7 +904,7 @@ internal static partial class LocalizationResources
             ["Settings.MainlandChinaUrlBlocking.Title"] = "Markierte URLs in angezeigten Texten maskieren",
             ["Settings.MainlandChinaUrlBlocking.Description"] = "Ersetzt markierten URL-Text durch eine Maske; der Netzwerkzugriff wird nicht blockiert.",
             ["Settings.Notification.Title"] = "Systembenachrichtigungen",
-            ["Settings.Notification.Description"] = "Steuert Win11-Benachrichtigungen für Proxy-Modus, Auslöser, URL-Test-Timeouts und zugehörige Ereignisse.",
+            ["Settings.Notification.Description"] = "Wichtig: Laufzeitunterbrechungen, Startprüfungen und fehlgeschlagene Wiederherstellung. Standard ergänzt Routing-Änderungen, fehlgeschlagene Vorgänge und Test-Zeitüberschreitungen. Detailliert enthält auch erfolgreiche Importe, Prüfungen, Speichervorgänge und Tests. Aus unterdrückt alle Systembenachrichtigungen.",
             ["Settings.Notification.Default"] = "Standard",
             ["Settings.Notification.CriticalOnly"] = "Nur kritisch",
             ["Settings.Notification.More"] = "Mehr",

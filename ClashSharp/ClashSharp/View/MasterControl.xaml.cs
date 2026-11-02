@@ -95,6 +95,7 @@ public sealed partial class MasterControl : Page
     private DispatcherQueueTimer? _infoTileHoldTimer;
     private Point _infoTilePressPoint;
     private string? _infoTileDragTileId;
+    private string? _infoTilePressTileId;
     private bool _infoTileOrderChanged;
     // The grid owns capture only after a hold wins over the tile's ordinary button action.
     private Pointer? _infoTilePointer;
@@ -1090,13 +1091,15 @@ public sealed partial class MasterControl : Page
         }
 
         PointerPoint point = e.GetCurrentPoint(InfoTileGrid);
-        if (!point.Properties.IsLeftButtonPressed
+        if (!(e.Pointer.PointerDeviceType == PointerDeviceType.Mouse
+                ? point.Properties.IsLeftButtonPressed : e.Pointer.IsInContact)
             || FindInfoTileAt(point.Position) is not MasterControlInfoTileViewModel tile)
         {
             return;
         }
 
         _infoTilePressPoint = point.Position;
+        _infoTilePressTileId = tile.Id;
         _infoTilePointer = e.Pointer;
         _infoTileGestureEpoch++;
         DispatcherQueueTimer timer = DispatcherQueue.CreateTimer();
@@ -1118,16 +1121,28 @@ public sealed partial class MasterControl : Page
     {
         if (_infoTilePointer?.PointerId != e.Pointer.PointerId) { return; }
         if (!_viewModel.CanEditTileLayout) { EndInfoTileGesture(restoreOrder: true); return; }
-        Point position = e.GetCurrentPoint(InfoTileGrid).Position;
+        PointerPoint point = e.GetCurrentPoint(InfoTileGrid);
+        Point position = point.Position;
         if (_infoTileDragTileId is null)
         {
             if (_infoTileHoldTimer is not null
                 && Distance(position, _infoTilePressPoint) > InfoTileHoldTolerance)
             {
-                EndInfoTileGesture(restoreOrder: false);
+                if (e.Pointer.PointerDeviceType == PointerDeviceType.Mouse && point.Properties.IsLeftButtonPressed
+                    && _infoTilePressTileId is string pressedTileId)
+                {
+                    // Desktop users can drag immediately after crossing the movement threshold.
+                    // Touch movement still cancels the hold so ordinary scrolling keeps working.
+                    CancelInfoTileHold();
+                    BeginInfoTileDrag(pressedTileId);
+                }
+                else
+                {
+                    EndInfoTileGesture(restoreOrder: false);
+                }
             }
 
-            return;
+            if (_infoTileDragTileId is null) { return; }
         }
 
         if (FindInfoTileAt(position) is MasterControlInfoTileViewModel target
@@ -1195,7 +1210,8 @@ public sealed partial class MasterControl : Page
     private void BeginInfoTileDrag(string tileId)
     {
         _infoTileHoldTimer = null;
-        if (_infoTilePointer is not Pointer pointer || !pointer.IsInContact || !_viewModel.CanEditTileLayout
+        if (_infoTilePointer is not Pointer pointer
+            || pointer.PointerDeviceType != PointerDeviceType.Mouse && !pointer.IsInContact || !_viewModel.CanEditTileLayout
             || FindInfoTileById(tileId) is not MasterControlInfoTileViewModel tile
             || InfoTileGrid.ContainerFromItem(tile) is not GridViewItem container
             || container.ContentTemplateRoot is not MasterInfoTile control)
@@ -1234,6 +1250,7 @@ public sealed partial class MasterControl : Page
         _infoTilePointer = null;
         _infoTileDragControl = null;
         _infoTileDragTileId = null;
+        _infoTilePressTileId = null;
         _infoTileOrderChanged = false;
         _infoTileGestureEpoch++;
         CancelInfoTileHold();

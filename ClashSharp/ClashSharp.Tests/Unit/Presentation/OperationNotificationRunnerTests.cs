@@ -7,6 +7,42 @@ namespace ClashSharp.Tests.Unit.Presentation;
 public sealed class OperationNotificationRunnerTests
 {
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task NestedPortsReportOnceAndAnExplicitRetryStillReports(bool fails)
+    {
+        Recorder notifications = new();
+        OperationNotificationRunner outer = new(notifications);
+        OperationNotificationRunner inner = new(notifications);
+        IOException failure = new("shared failure");
+        for (int i = 0; i < 2; i++)
+        {
+            Task<bool> command = outer.ExecuteAsync(() => inner.ExecuteAsync(
+                () => fails ? Task.FromException<bool>(failure) : Task.FromResult(true),
+                "Inner", "Succeeded", "Failed", CancellationToken.None),
+                "Outer", "Succeeded", "Failed", CancellationToken.None);
+            if (fails) { await Assert.ThrowsAsync<IOException>(() => command); }
+            else { Assert.True(await command); }
+        }
+        Assert.Equal(2, notifications.Messages.Count);
+    }
+
+    [Fact]
+    public async Task SpecializedAvailabilityFailureDoesNotAlsoProduceAGenericOperationFailure()
+    {
+        Recorder notifications = new();
+        IOException failure = new("verified network failure");
+        await Assert.ThrowsAsync<IOException>(() => new OperationNotificationRunner(notifications).ExecuteAsync<bool>(() =>
+        {
+            ((IUserOperationNotifications)notifications).ReportAvailability("Runtime", "Unavailable", true);
+            OperationNotificationRunner.MarkFailureReported(failure);
+            return Task.FromException<bool>(failure);
+        }, "Outer", "Succeeded", "Failed", CancellationToken.None));
+        Assert.Equal(("Unavailable", true), Assert.Single(notifications.Messages));
+        Assert.True(OperationNotificationRunner.HasReportedFailure(failure));
+    }
+
+    [Theory]
     [InlineData(0, 0)]
     [InlineData(1, 0)]
     [InlineData(2, 0)]
