@@ -45,3 +45,9 @@ Windows 信任结果使用[WinVerifyTrust](https://learn.microsoft.com/en-us/win
 最终保留蓝机桌面唯一的 **Clash#.zip**，完整 11 成员且原始签名字节不变，第一层恰为 **Setup.exe／LICENSE／README.md**。旧 ZIP 与逐项匹配的旧解压目录清理；正常卸载后的新数据目录、七个可归属提取缓存、九个本轮任务、注册表历史及整个验收工作目录已移除，未恢复任何历史备份。产品服务／注册／进程／任务／证书与相关残留复核为 0。
 
 27 份公开身份及计数回执为19508字节 ZIP，SHA-256 `8c6361492b7f063704ec564c15874baace13d9a2a53ecd3b0acce85b5a6cf6ca`，本地逐成员核验；最终删除工作目录后的状态另存 `artifacts/verification/installer-clean-start-20261102/final/final-handoff-state.json`。包内含原生操作回执；没有下载用户配置、真实订阅、私钥或备份。用户可继续从唯一 ZIP 解压后运行 Setup 手验，不把本轮结果当作公开发行授权。
+
+## 解压目录手验起点
+
+用户随后要求回到最干净状态，并直接保留解压目录继续手验。复核蓝机产品注册、服务、进程、任务、防火墙、产品证书、数据与注册表残留均为空，原f65919fe ZIP仍与生产摘要一致。将11个完整成员解压到 `C:\Users\Administrator\Desktop\Clash#`，每个文件的长度和SHA-256与原ZIP内对应成员逐项一致，候选身份仍为dc3bf078。第一层恰为Setup.exe／LICENSE／README.md；Setup摘要 `A22CC70CD815C1A50DAACC24E03A0B2C21CAC102292F12E6625FA0AB6B43B69A`。完成校验后删除ZIP，桌面仅保留此解压目录。
+
+未启动Setup、未导入证书、未创建任何蓝机验收任务或工作目录，用户当前活动会话未变。源程序及已完成的7554项CI和真实安装／卸载验证不变，用户首次启动和后续反馈仍待其手验。逐文件回执SHA-256 `5E7AC3F19C57ACA4BD3F0DFBFB7C75DAD58ADD2F1F72C41B7A71202FCFBD601B`及最终干净状态保留本地忽略目录 `artifacts/verification/manual-clean-extracted-20261102/`。

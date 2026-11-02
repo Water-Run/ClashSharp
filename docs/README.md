@@ -1,10 +1,10 @@
 # ClashSharp 开发文档
 
-ClashSharp 当前交付为 `cdfd835`／`dc3bf078` 内部候选，已修复干净环境下 Setup 启动阻断、版本空白和通用错误提示，完整 CI7554 项及无预装产品证书的实际安装／卸载通过。蓝机当前未安装，仅保留桌面原始完整 ZIP，Setup.exe 在第一层；用户下载解压后由 Setup 完成校验和安装。开发状态与后续工作从下列入口阅读。
+ClashSharp 当前交付为 `cdfd835`／`dc3bf078` 内部候选，已修复干净环境下 Setup 启动阻断、版本空白和通用错误提示，完整 CI7554 项及无预装产品证书的实际安装／卸载通过。蓝机当前未安装，按用户最新要求仅保留桌面 `Clash#` 解压目录，Setup.exe 在第一层；原 ZIP 已移除，用户可直接开始安装手验。开发状态与后续工作从下列入口阅读。
 
 | 入口 | 用途 |
 | --- | --- |
-| [干净环境 Setup 启动与指引](reviews/2026-11-02-installer-clean-start-and-guidance.md) | 当前修正版、无证书准备的实际安装及唯一完整 ZIP |
+| [干净环境 Setup 启动与指引](reviews/2026-11-02-installer-clean-start-and-guidance.md) | 当前修正版、无证书准备的实际安装及干净解压目录交接 |
 | [蓝机卸载与空间清理](reviews/2026-11-02-blue-uninstall-and-cleanup.md) | 当前未安装状态、唯一原始安装包及 C 盘空间 |
 | [蓝机部署与实机回归](reviews/2026-11-02-blue-deployment-acceptance.md) | 清理前的 17 项实机检查、真实修复与历史数据保护 |
 | [安装选项风格统一](reviews/2026-11-01-installer-options-style.md) | 最新安装器布局、通知名称、推荐设置恢复与实机交付 |
