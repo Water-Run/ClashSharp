@@ -9,7 +9,18 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <WarningsAsErrors>$(WarningsAsErrors);CS1591</WarningsAsErrors>
+    <ClashSharpInstallerInternalCandidate Condition="'$(ClashSharpInstallerInternalCandidate)' == ''">false</ClashSharpInstallerInternalCandidate>
   </PropertyGroup>
+
+  <PropertyGroup Condition="'$(ClashSharpInstallerInternalCandidate)' == 'true'">
+    <DefineConstants>$(DefineConstants);CLASHSHARP_INSTALLER_INTERNAL_CANDIDATE</DefineConstants>
+  </PropertyGroup>
+
+  <Target Name="ValidateClashSharpInternalCandidateProfile" BeforeTargets="PrepareForBuild"
+          Condition="'$(ClashSharpInstallerInternalCandidate)' == 'true'">
+    <Error Condition="'$(ClashSharpFormalInstallerBuild)' != 'true' or '$(ClashSharpEnableInstallerMutationRuntime)' != 'true'"
+           Text="An internal candidate requires the signed production Installer profile." />
+  </Target>
 
   <ItemGroup>
     <ProjectReference Include="..\ClashSharp.Core\ClashSharp.Core.csproj" />

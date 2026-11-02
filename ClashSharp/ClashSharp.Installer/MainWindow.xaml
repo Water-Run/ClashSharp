@@ -50,14 +50,16 @@
           FontSize="24"
           FontWeight="SemiBold" />
         <TextBlock
+          x:Name="PackageVersionText"
           Margin="0,4,0,0"
           Style="{StaticResource MutedTextStyle}">
           <Run
-            Text="版本 " />
+            Text="安装包版本 " />
           <Run
             Text="{Binding DisplayVersion, Mode=OneWay}" />
           <Run
             Text=" · x64" />
+          <Run Text="{Binding ReleaseChannelText, Mode=OneWay}" />
         </TextBlock>
       </StackPanel>
       <StackPanel

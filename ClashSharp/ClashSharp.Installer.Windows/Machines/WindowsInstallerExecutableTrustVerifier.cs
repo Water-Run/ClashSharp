@@ -206,11 +206,20 @@ internal sealed class WindowsAuthenticodeVerifier : IWindowsAuthenticodeVerifier
     private const uint StateActionVerify = 1;
     private const uint StateActionClose = 2;
     private const uint CacheOnlyUrlRetrieval = 0x0000_1000;
+    private const int UntrustedRoot = unchecked((int)0x800B0109);
+    private readonly bool _allowPinnedInternalSigner;
 
-    internal static WindowsAuthenticodeVerifier Instance { get; } = new();
+#if CLASHSHARP_INSTALLER_INTERNAL_CANDIDATE
+    private const bool InternalCandidateBuild = true;
+#else
+    private const bool InternalCandidateBuild = false;
+#endif
 
-    private WindowsAuthenticodeVerifier()
+    internal static WindowsAuthenticodeVerifier Instance { get; } = new(InternalCandidateBuild);
+
+    internal WindowsAuthenticodeVerifier(bool allowPinnedInternalSigner)
     {
+        _allowPinnedInternalSigner = allowPinnedInternalSigner;
     }
 
     public string VerifyTrustedSigner(
@@ -256,14 +265,22 @@ internal sealed class WindowsAuthenticodeVerifier : IWindowsAuthenticodeVerifier
             };
             verificationStarted = true;
             int status = WinVerifyTrust(new nint(-1), ref policy, ref trustData);
-            if (status != 0)
+            if (status != 0 && (status != UntrustedRoot || !_allowPinnedInternalSigner))
             {
-                throw new InstallerProtocolException(
-                    "installer.elevation.authenticode_invalid");
+                throw new InstallerProtocolException(GetFailureCode(status));
             }
 
             cancellationToken.ThrowIfCancellationRequested();
-            return ReadSignerThumbprint(trustData.StateData);
+            using X509Certificate2 certificate = ReadSignerCertificate(trustData.StateData, out uint chainCount);
+            // Internal candidates use a short-lived self-signed certificate. Windows still verifies
+            // the image digest and signature above; only an absent system root may be replaced by
+            // this in-memory chain. The outer verifier must then match the exact embedded signer
+            // thumbprint before granting a lease. No OS certificate store is changed here.
+            if (status == UntrustedRoot && (chainCount != 1 || !IsValidInternalCertificate(certificate)))
+            {
+                throw new InstallerProtocolException("installer.elevation.certificate_untrusted");
+            }
+            return Convert.ToHexString(certificate.GetCertHash(HashAlgorithmName.SHA1));
         }
         finally
         {
@@ -286,7 +303,37 @@ internal sealed class WindowsAuthenticodeVerifier : IWindowsAuthenticodeVerifier
         }
     }
 
-    private static string ReadSignerThumbprint(nint stateData)
+    private static string GetFailureCode(int status) => status switch
+    {
+        UntrustedRoot => "installer.elevation.certificate_untrusted",
+        unchecked((int)0x800B0101) => "installer.elevation.certificate_expired",
+        unchecked((int)0x800B010C) => "installer.elevation.certificate_revoked",
+        unchecked((int)0x800B0100) => "installer.elevation.authenticode_missing",
+        _ => "installer.elevation.authenticode_invalid",
+    };
+
+    private static bool IsValidInternalCertificate(X509Certificate2 certificate)
+    {
+        const string prefix = "CN=ClashSharp Internal Candidate ";
+        if (!certificate.Subject.StartsWith(prefix, StringComparison.Ordinal)
+            || !Guid.TryParseExact(certificate.Subject.AsSpan(prefix.Length), "N", out _)
+            || !certificate.SubjectName.RawData.AsSpan().SequenceEqual(certificate.IssuerName.RawData)
+            || certificate.Extensions["2.5.29.37"] is not X509EnhancedKeyUsageExtension usage
+            || !usage.EnhancedKeyUsages.Cast<Oid>().Any(static oid => oid.Value == "1.3.6.1.5.5.7.3.3"))
+        {
+            return false;
+        }
+
+        using var chain = new X509Chain();
+        chain.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
+        chain.ChainPolicy.CustomTrustStore.Add(certificate);
+        chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
+        chain.ChainPolicy.DisableCertificateDownloads = true;
+        chain.ChainPolicy.ApplicationPolicy.Add(new Oid("1.3.6.1.5.5.7.3.3"));
+        return chain.Build(certificate);
+    }
+
+    private static X509Certificate2 ReadSignerCertificate(nint stateData, out uint chainCount)
     {
         nint providerData = WTHelperProvDataFromStateData(stateData);
         nint providerSigner = providerData == 0
@@ -304,6 +351,7 @@ internal sealed class WindowsAuthenticodeVerifier : IWindowsAuthenticodeVerifier
 
         CryptProviderSigner signer = Marshal.PtrToStructure<CryptProviderSigner>(
             providerSigner);
+        chainCount = signer.CertificateChainCount;
         if (signer.CertificateChainCount == 0 || signer.CertificateChain == 0)
         {
             throw new InstallerProtocolException(
@@ -333,8 +381,7 @@ internal sealed class WindowsAuthenticodeVerifier : IWindowsAuthenticodeVerifier
         Marshal.Copy(certificateContext.EncodedCertificate, encoded, 0, encoded.Length);
         try
         {
-            using X509Certificate2 certificate = X509CertificateLoader.LoadCertificate(encoded);
-            return Convert.ToHexString(certificate.GetCertHash(HashAlgorithmName.SHA1));
+            return X509CertificateLoader.LoadCertificate(encoded);
         }
         finally
         {

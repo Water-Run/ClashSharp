@@ -1,11 +1,26 @@
 #Requires -Version 7.4
 
+<#
+.SYNOPSIS
+Builds the complete signed installer or an explicitly non-mutating development package.
+.DESCRIPTION
+Internal candidates additionally opt in to exact embedded-signer verification for their
+short-lived self-signed certificate without requiring a preinstalled Authenticode root.
+.PARAMETER Development
+Builds an unsigned non-mutating development preview.
+.PARAMETER InternalCandidate
+Selects the internal signed candidate profile, including its visible test-build label.
+#>
 [CmdletBinding()]
 param(
-    [switch] $Development
+    [switch] $Development,
+    [switch] $InternalCandidate
 )
 
 $ErrorActionPreference = "Stop"
+if ($Development -and $InternalCandidate) {
+    throw 'An internal candidate requires the signed production Installer profile.'
+}
 
 $installerRoot = $PSScriptRoot
 $repoRoot = Resolve-Path (Join-Path $installerRoot "..\..")
@@ -794,6 +809,7 @@ dotnet publish $installerProject `
     -p:DebugType=None `
     -p:PublishDocumentationFiles=false `
     -p:ClashSharpFormalInstallerBuild=true `
+    "-p:ClashSharpInstallerInternalCandidate=$($InternalCandidate.IsPresent.ToString().ToLowerInvariant())" `
     $installerRuntimeProperty `
     "-p:ClashSharpInstallerReleaseManifestPath=$($installerReleaseManifest.FullName)" `
     -o $installerPublishRoot

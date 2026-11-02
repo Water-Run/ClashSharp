@@ -29,6 +29,9 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
         };
 
     private readonly IInstallerRuntime _runtime;
+    // Dedicated account operations can inspect a foreign owner's protected journal separately.
+    // Keep that recovery entry for an unreadable journal, but hide it after bootstrap failures.
+    private bool _accountActionsBlocked;
     private bool _canRestoreOriginal;
     private readonly object _operationSync = new();
     private CancellationTokenSource? _activeCancellation;
@@ -59,10 +62,19 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
     private IReadOnlyList<InstallerCapabilityStatus> _capabilities = Array.Empty<InstallerCapabilityStatus>();
 
     /// <summary>Initializes the shell against an explicit readiness/execution port.</summary>
-    public InstallerShellViewModel(IInstallerRuntime runtime)
+    /// <param name="runtime">Runtime that owns inspection and mutation authority.</param>
+    /// <param name="packageVersion">Display-only version from the executable's embedded manifest, independent of successful inspection.</param>
+    /// <param name="isInternalCandidate">Whether the executable was built as an internal test candidate.</param>
+    public InstallerShellViewModel(IInstallerRuntime runtime, string? packageVersion = null, bool isInternalCandidate = false)
     {
         ArgumentNullException.ThrowIfNull(runtime);
         _runtime = runtime;
+        if (packageVersion is not null)
+        {
+            InstallerProtocolValidation.ValidatePackageVersion(packageVersion);
+            _displayVersion = packageVersion;
+        }
+        ReleaseChannelText = isInternalCandidate ? " · 内部测试版" : string.Empty;
         CompletePreferencesCommand = new AsyncDelegateCommand(
             () => ExecuteOperationAsync(null, completePreferences: true), () => IsCompletePreferencesVisible, SetUnhandledCommandFailure);
         ResetInstallPreferencesCommand = new DelegateCommand(ResetInstallPreferences,
@@ -125,7 +137,7 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
     public DelegateCommand DeclineOwnerTransferCommand { get; }
 
     /// <summary>Gets whether this trusted composition supplies an idle dedicated transfer action.</summary>
-    public bool IsOwnerTransferActionVisible => CanStartOperation && _runtime is IInstallerOwnerTransferRuntime { SupportsOwnerTransfer: true }
+    public bool IsOwnerTransferActionVisible => !_accountActionsBlocked && CanStartOperation && _runtime is IInstallerOwnerTransferRuntime { SupportsOwnerTransfer: true }
         && (!_offersInstallPreferences || _installPreferences.InstallTransparentProxyService);
 
     /// <summary>Gets whether the current operation is waiting for explicit user consent.</summary>
@@ -249,6 +261,9 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
         get => _displayVersion;
         private set => SetProperty(ref _displayVersion, value);
     }
+
+    /// <summary>Gets the build channel suffix independently of installed-state inspection.</summary>
+    public string ReleaseChannelText { get; }
 
     /// <summary>Gets a stable code suitable for support and automated diagnosis.</summary>
     public string DiagnosticCode
@@ -400,6 +415,7 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
             }
 
             ValidateReadiness(readiness);
+            _accountActionsBlocked = false;
             _canRestoreOriginal = readiness.CanRestoreOriginal;
             _hasPendingUserPreferences = readiness.PendingUserPreferences && readiness.CanExecute && readiness.ProductState == InstallerProductState.Installed;
             CanExecuteMutations = readiness.CanExecute;
@@ -695,6 +711,7 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
 
         InvalidateReadiness();
         StatusBadge = "已阻止";
+        _accountActionsBlocked = diagnosticCode != "installer.transaction.root_verification_failed";
         bool releaseConflict = diagnosticCode == "installer.transaction.release_conflict";
         StatusTitle = releaseConflict ? "请使用原安装器继续" : "无法检查安装状态";
         StatusDetail = releaseConflict
@@ -702,6 +719,7 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
             : "请重新检查；若问题持续，可展开详情查看诊断代码。";
         DiagnosticCode = diagnosticCode;
         ProgressStatus = "就绪检查失败。";
+        ApplyFailureGuidance(diagnosticCode);
     }
 
     private void SetExecutionFailureIfCurrent(OperationGeneration operation, string diagnosticCode)
@@ -788,7 +806,40 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
 
     private void ApplyFailureGuidance(string diagnosticCode)
     {
-        if (diagnosticCode.StartsWith("installer.recovery.original_", StringComparison.Ordinal)
+        if (diagnosticCode == "installer.transaction.root_verification_failed")
+        {
+            StatusTitle = "无法读取现有安装记录";
+            StatusDetail = "如果此前由其他 Windows 账户安装，可在“详细信息”中检查并切换使用账户，"
+                + "或卸载旧账户副本。否则请保留诊断代码并反馈。";
+        }
+        else if (diagnosticCode == "installer.elevation.certificate_untrusted")
+        {
+            StatusTitle = "安装包签名尚未受信任";
+            StatusDetail = "此电脑尚未信任安装包的签名证书。请向安装包提供者获取受信任签名的版本，"
+                + "或核对其内部测试包说明。更换安装包后再重新检查。";
+        }
+        else if (diagnosticCode == "installer.elevation.certificate_expired")
+        {
+            StatusTitle = "安装包签名证书已过期";
+            StatusDetail = "请检查电脑的日期和时间，并向安装包提供者获取新版本。完整解压新安装包后，再运行 Setup.exe。";
+        }
+        else if (diagnosticCode == "installer.elevation.certificate_revoked")
+        {
+            StatusTitle = "安装包签名证书已被撤销";
+            StatusDetail = "请向安装包提供者获取使用有效证书签名的新版本，完整解压后运行 Setup.exe。";
+        }
+        else if (diagnosticCode == "installer.elevation.authenticode_missing")
+        {
+            StatusTitle = "安装包缺少有效签名";
+            StatusDetail = "请重新获取完整安装包，完整解压后运行其中的 Setup.exe，并保留随附文件。";
+        }
+        else if (diagnosticCode is "installer.elevation.authenticode_invalid" or "installer.elevation.signer_mismatch")
+        {
+            StatusTitle = "安装包签名校验失败";
+            StatusDetail = "安装器文件可能已损坏、被修改，或与安装载荷不属于同一版本。"
+                + "请重新获取完整安装包，完整解压后运行其中的 Setup.exe。";
+        }
+        else if (diagnosticCode.StartsWith("installer.recovery.original_", StringComparison.Ordinal)
             || diagnosticCode is "installer.recovery.phase_invalid" or "installer.recovery.capability_unavailable")
         {
             StatusTitle = "无法确认原安装可恢复";

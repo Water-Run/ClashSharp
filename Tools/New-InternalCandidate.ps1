@@ -86,7 +86,7 @@ try{
     [Environment]::SetEnvironmentVariable('CLASHSHARP_WINDOWS_SDK_VERSION',$sdk.version,'Process')
     $stage='build'
     Push-Location -LiteralPath $source
-    try{& "$source/ClashSharp/Installer/build.ps1" *> "$output/build.log"}finally{Pop-Location}
+    try{& "$source/ClashSharp/Installer/build.ps1" -InternalCandidate *> "$output/build.log"}finally{Pop-Location}
     $stage='identity'
     $identityReceipt=& "$PSScriptRoot/New-SignedCandidateIdentity.ps1" -RepositoryRoot $source -ReleaseDirectory "$source/artifacts/installer/release" -CiEvidencePath $ciPath -ExpectedCiEvidenceSha256 $ExpectedCiEvidenceSha256 -AuthenticodeSubject $signers.authenticodeSubject -AuthenticodeThumbprint $signers.authenticodeThumbprint -MsixThumbprint $signers.msixThumbprint -OutputPath "$public/candidate-identity.json"
     $stage='archive'

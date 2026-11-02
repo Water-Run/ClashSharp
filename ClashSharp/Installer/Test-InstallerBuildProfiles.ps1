@@ -110,17 +110,20 @@ try {
     $enabled = Get-ClashSharpInstallerMutationRuntimeProperty
     $disabled = Get-ClashSharpInstallerMutationRuntimeProperty -Development
     $profiles = @(
-        @{ name = 'preview'; enabled = $false; arguments = @() },
-        @{ name = 'development'; enabled = $false; arguments = @($formal, $manifestProperty, $disabled) },
-        @{ name = 'signed'; enabled = $true; arguments = @($formal, $manifestProperty, $enabled) }
+        @{ name = 'preview'; enabled = $false; internal = $false; arguments = @() },
+        @{ name = 'development'; enabled = $false; internal = $false; arguments = @($formal, $manifestProperty, $disabled) },
+        @{ name = 'signed'; enabled = $true; internal = $false; arguments = @($formal, $manifestProperty, $enabled) },
+        @{ name = 'internal'; enabled = $true; internal = $true; arguments = @($formal, $manifestProperty, $enabled, '-p:ClashSharpInstallerInternalCandidate=true') }
     )
     foreach ($profile in $profiles) {
-        $result = Invoke-InstallerProfileBuild -Arguments (@('-getProperty:ClashSharpEnableInstallerMutationRuntime,DefineConstants,SelfContained,PublishSingleFile') + $profile.arguments)
+        $result = Invoke-InstallerProfileBuild -Arguments (@('-getProperty:ClashSharpEnableInstallerMutationRuntime,ClashSharpInstallerInternalCandidate,DefineConstants,SelfContained,PublishSingleFile') + $profile.arguments)
         if ($result.exitCode -ne 0) { throw "MSBuild profile $($profile.name) failed: $($result.output)$($result.error)" }
         $properties = ($result.output | ConvertFrom-Json).Properties
         $expected = if ($profile.enabled) { 'true' } else { 'false' }
         if ($properties.ClashSharpEnableInstallerMutationRuntime -cne $expected -or
             (($properties.DefineConstants -split ';') -ccontains 'CLASHSHARP_INSTALLER_MUTATION_RUNTIME') -ne $profile.enabled -or
+            (($properties.DefineConstants -split ';') -ccontains 'CLASHSHARP_INSTALLER_INTERNAL_CANDIDATE') -ne $profile.internal -or
+            $properties.ClashSharpInstallerInternalCandidate -cne $profile.internal.ToString().ToLowerInvariant() -or
             $properties.SelfContained -cne 'true' -or $properties.PublishSingleFile -cne 'true') {
             throw "MSBuild profile $($profile.name) selected an incorrect runtime or deployment model."
         }
@@ -136,7 +139,13 @@ try {
             throw 'MSBuild admitted an incomplete installer activation profile or failed for an unrelated reason.'
         }
     }
-    Write-Output 'Installer build profiles passed: 3 evaluated profiles and 3 rejected activation combinations.'
+    foreach ($arguments in @(@('-p:ClashSharpInstallerInternalCandidate=true'), @($formal, $manifestProperty, $disabled, '-p:ClashSharpInstallerInternalCandidate=true'))) {
+        $result = Invoke-InstallerProfileBuild -Arguments (@('-t:ValidateClashSharpInternalCandidateProfile') + $arguments)
+        if ($result.exitCode -eq 0 -or -not $result.output.Contains('requires the signed production Installer profile', [StringComparison]::Ordinal)) {
+            throw 'An incomplete internal candidate profile was admitted.'
+        }
+    }
+    Write-Output 'Installer build profiles passed: 4 evaluated profiles and 5 rejected activation combinations.'
 } finally {
     $resolved = Assert-ClashSharpOrdinaryPath -LiteralPath $testRoot -RequireDirectory
     if ([IO.Path]::GetDirectoryName($resolved) -cne $testParent -or

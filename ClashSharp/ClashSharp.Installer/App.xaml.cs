@@ -12,19 +12,26 @@ public partial class App : Application
     {
         base.OnStartup(e);
 
-        IInstallerRuntime runtime = CreateRuntime();
-        var viewModel = new InstallerShellViewModel(runtime);
+        IInstallerRuntime runtime = CreateRuntime(out string? packageVersion);
+#if CLASHSHARP_INSTALLER_INTERNAL_CANDIDATE
+        const bool internalCandidate = true;
+#else
+        const bool internalCandidate = false;
+#endif
+        var viewModel = new InstallerShellViewModel(runtime, packageVersion, internalCandidate);
         var window = new MainWindow(viewModel);
         MainWindow = window;
         window.Show();
     }
 
-    private static IInstallerRuntime CreateRuntime()
+    private static IInstallerRuntime CreateRuntime(out string? packageVersion)
     {
 #if CLASHSHARP_INSTALLER_MUTATION_RUNTIME
         EmbeddedInstallerReleaseManifest release = EmbeddedInstallerReleaseManifest.Load();
+        packageVersion = release.Manifest.ExpectedPackageVersion;
         return WindowsProductionInstallerRuntimeFactory.Create(release);
 #else
+        packageVersion = null;
         return new MigrationPreviewInstallerRuntime();
 #endif
     }

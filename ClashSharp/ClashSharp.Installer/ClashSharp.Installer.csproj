@@ -28,11 +28,22 @@
     <StartupObject>ClashSharp.Installer.Program</StartupObject>
     <ClashSharpInstallerReleaseManifestLogicalName>ClashSharp.Installer.ReleaseManifest.json</ClashSharpInstallerReleaseManifestLogicalName>
     <ClashSharpEnableInstallerMutationRuntime Condition="'$(ClashSharpEnableInstallerMutationRuntime)' == ''">false</ClashSharpEnableInstallerMutationRuntime>
+    <ClashSharpInstallerInternalCandidate Condition="'$(ClashSharpInstallerInternalCandidate)' == ''">false</ClashSharpInstallerInternalCandidate>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(ClashSharpEnableInstallerMutationRuntime)' == 'true'">
     <DefineConstants>$(DefineConstants);CLASHSHARP_INSTALLER_MUTATION_RUNTIME</DefineConstants>
   </PropertyGroup>
+
+  <PropertyGroup Condition="'$(ClashSharpInstallerInternalCandidate)' == 'true'">
+    <DefineConstants>$(DefineConstants);CLASHSHARP_INSTALLER_INTERNAL_CANDIDATE</DefineConstants>
+  </PropertyGroup>
+
+  <Target Name="ValidateClashSharpInternalCandidateProfile" BeforeTargets="PrepareForBuild"
+          Condition="'$(ClashSharpInstallerInternalCandidate)' == 'true'">
+    <Error Condition="'$(ClashSharpFormalInstallerBuild)' != 'true' or '$(ClashSharpEnableInstallerMutationRuntime)' != 'true'"
+           Text="An internal candidate requires the signed production Installer profile." />
+  </Target>
 
   <ItemGroup>
     <ProjectReference Include="..\ClashSharp.Installer.Core\ClashSharp.Installer.Core.csproj" />
