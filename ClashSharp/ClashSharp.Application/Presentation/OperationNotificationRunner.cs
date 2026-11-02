@@ -16,6 +16,7 @@ public sealed class OperationNotificationRunner(IUserOperationNotifications? not
     {
         public int SuccessReported;
         public int FailureReported;
+        public int Closed;
     }
 
     /// <summary>Records an availability failure already reported by a specialized operation boundary.</summary>
@@ -24,13 +25,13 @@ public sealed class OperationNotificationRunner(IUserOperationNotifications? not
     {
         ArgumentNullException.ThrowIfNull(exception);
         _ = ReportedFailures.GetValue(exception, static _ => new());
-        if (CurrentScope.Value is { } scope) { Interlocked.Exchange(ref scope.FailureReported, 1); }
+        if (CurrentScope.Value is { } scope && Volatile.Read(ref scope.Closed) == 0) { Interlocked.Exchange(ref scope.FailureReported, 1); }
     }
 
     /// <summary>Records a verified state-change notification within the current command.</summary>
     public static void MarkSuccessReported()
     {
-        if (CurrentScope.Value is { } scope) { Interlocked.Exchange(ref scope.SuccessReported, 1); }
+        if (CurrentScope.Value is { } scope && Volatile.Read(ref scope.Closed) == 0) { Interlocked.Exchange(ref scope.SuccessReported, 1); }
     }
 
     /// <summary>Checks whether every failure branch already belongs to an operation notification.</summary>
@@ -80,7 +81,8 @@ public sealed class OperationNotificationRunner(IUserOperationNotifications? not
     {
         ArgumentNullException.ThrowIfNull(operation);
         OutcomeScope? previous = CurrentScope.Value;
-        CurrentScope.Value ??= new();
+        OutcomeScope scope = previous is not null && Volatile.Read(ref previous.Closed) == 0 ? previous : new();
+        CurrentScope.Value = scope;
         try
         {
             T result;
@@ -93,7 +95,11 @@ public sealed class OperationNotificationRunner(IUserOperationNotifications? not
             if (result is not null) { TryReport(titleResourceKey, result is false ? failureResourceKey : successResourceKey, result is false); }
             return result;
         }
-        finally { CurrentScope.Value = previous; }
+        finally
+        {
+            if (!ReferenceEquals(previous, scope)) { Volatile.Write(ref scope.Closed, 1); }
+            CurrentScope.Value = previous;
+        }
     }
 
     /// <summary>Reports a completed synchronous operation.</summary>
@@ -118,7 +124,8 @@ public sealed class OperationNotificationRunner(IUserOperationNotifications? not
     {
         ArgumentNullException.ThrowIfNull(operation);
         OutcomeScope? previous = CurrentScope.Value;
-        CurrentScope.Value ??= new();
+        OutcomeScope scope = previous is not null && Volatile.Read(ref previous.Closed) == 0 ? previous : new();
+        CurrentScope.Value = scope;
         try
         {
             T result;
@@ -133,7 +140,11 @@ public sealed class OperationNotificationRunner(IUserOperationNotifications? not
             if (succeeded is { } completed) { TryReport(titleResourceKey, completed ? successResourceKey : failureResourceKey, !completed); }
             return result;
         }
-        finally { CurrentScope.Value = previous; }
+        finally
+        {
+            if (!ReferenceEquals(previous, scope)) { Volatile.Write(ref scope.Closed, 1); }
+            CurrentScope.Value = previous;
+        }
     }
 
     private void TryReport(string title, string message, bool failed)

@@ -6,6 +6,27 @@ namespace ClashSharp.Tests.Unit.Presentation;
 
 public sealed class OperationNotificationRunnerTests
 {
+    [Fact]
+    public async Task BackgroundWorkInheritedFromACompletedCommandStartsANewNotificationScope()
+    {
+        Recorder notifications = new();
+        OperationNotificationRunner runner = new(notifications);
+        TaskCompletionSource release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        Task background = Task.CompletedTask;
+        await runner.ExecuteAsync(() =>
+        {
+            background = Task.Run(async () =>
+            {
+                await release.Task;
+                await runner.ExecuteAsync(() => Task.CompletedTask, "Background", "Later outcome", "Failed", CancellationToken.None);
+            });
+            return Task.CompletedTask;
+        }, "Command", "Initial outcome", "Failed", CancellationToken.None);
+        release.SetResult();
+        await background;
+        Assert.Equal(new[] { ("Initial outcome", false), ("Later outcome", false) }, notifications.Messages);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

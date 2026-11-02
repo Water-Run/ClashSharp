@@ -3,6 +3,7 @@ using System.Runtime.CompilerServices;
 using ClashSharp.ApplicationModel.Lifecycle;
 using ClashSharp.ApplicationModel.Mutations;
 using ClashSharp.ApplicationModel.Network;
+using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.ApplicationModel.Security;
 using ClashSharp.ApplicationModel.Settings;
 using ClashSharp.ApplicationModel.Triggers;
@@ -33,7 +34,8 @@ public sealed partial class GenerationSettingsAuthorityTests
     {
         await using Fixture fixture = await Fixture.CreateAsync();
         _ = await fixture.Authority.OpenAsync(CancellationToken.None);
-        Actions actions = CreateActions(fixture, new ActionObserver(fixture));
+        RecordedNotifications notifications = new();
+        Actions actions = CreateActions(fixture, new ActionObserver(fixture), notifications);
 
         await actions.DispatchAsync(Enum.Parse<ActionKind>(kind), value, CancellationToken.None);
 
@@ -41,6 +43,9 @@ public sealed partial class GenerationSettingsAuthorityTests
         Assert.Equal(value, fixture.Session.Snapshot.Applied[new(key)].Value!.CanonicalText);
         Assert.Empty(fixture.Session.Snapshot.PendingApplications);
         Assert.Equal(1, fixture.Participants[SettingsRegistry.Default.Get(key).ApplicationKind].Applies);
+        Assert.Equal(("Notification.Settings.Saved", false), Assert.Single(notifications.Operations));
+        await actions.DispatchAsync(Enum.Parse<ActionKind>(kind), value, CancellationToken.None);
+        Assert.Single(notifications.Operations);
     }
 
     [Fact]
@@ -322,8 +327,11 @@ public sealed partial class GenerationSettingsAuthorityTests
         public string GetSecret() => "isolated-runtime-action-credential";
     }
 
-    private sealed class RecordedNotifications : NotificationSink
+    private sealed class RecordedNotifications : NotificationSink, IUserOperationNotifications
     {
+        public List<(string Key, bool Failed)> Operations { get; } = [];
+        public void ReportOperation(string titleResourceKey, string messageResourceKey, bool failed, params object[] arguments) =>
+            Operations.Add((messageResourceKey, failed));
         public List<ClashSharpMode> Modes { get; } = [];
         public List<(bool Enabled, bool Effective)> TransparentProxyChanges { get; } = [];
         public void NotifyTransparentProxyChanged(bool enabled, bool effective) => TransparentProxyChanges.Add((enabled, effective));
