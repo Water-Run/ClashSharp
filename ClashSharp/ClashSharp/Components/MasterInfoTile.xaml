@@ -46,9 +46,6 @@
                     <TextBlock MaxWidth="360" Text="{x:Bind GetTooltipText(Value, Detail, Description, ReorderHint), Mode=OneWay}" TextWrapping="Wrap" />
                 </ToolTip>
             </ToolTipService.ToolTip>
-        <Grid.RenderTransform>
-            <ScaleTransform x:Name="TileScaleTransform" CenterX="110" CenterY="58" />
-        </Grid.RenderTransform>
         <Grid.Projection>
             <PlaneProjection x:Name="TileTiltProjection" />
         </Grid.Projection>

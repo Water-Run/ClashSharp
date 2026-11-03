@@ -33,11 +33,7 @@
 
                 <Grid Style="{StaticResource ClashSectionGridStyle}" Padding="0" RowSpacing="12" RowDefinitions="Auto,Auto">
                     <StackPanel x:Name="AboutBrand" Spacing="4" Padding="12,0" HorizontalAlignment="Center" MaxWidth="720">
-                        <Image x:Name="AboutLogo" Width="72" Height="72" Stretch="Uniform" HorizontalAlignment="Center" Margin="0,0,0,4" AutomationProperties.AccessibilityView="Raw">
-                            <Image.Source>
-                                <SvgImageSource UriSource="ms-appx:///Assets/Logo.svg" />
-                            </Image.Source>
-                        </Image>
+                        <Image x:Name="AboutLogo" Source="ms-appx:///Assets/Square150x150Logo.scale-400.png" Width="72" Height="72" Stretch="Uniform" HorizontalAlignment="Center" Margin="0,0,0,4" AutomationProperties.AccessibilityView="Raw" />
                         <TextBlock Text="{Binding AppNameText}" Style="{ThemeResource TitleTextBlockStyle}" TextWrapping="Wrap" TextAlignment="Center" AutomationProperties.HeadingLevel="Level2" />
                         <TextBlock Text="{Binding VersionSummaryText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" TextAlignment="Center" IsTextSelectionEnabled="True" />
                         <TextBlock x:Name="MihomoStatusText" Text="{Binding MihomoStatusText}" Style="{StaticResource ClashSecondaryCaptionTextBlockStyle}" TextWrapping="Wrap" TextAlignment="Center" IsTextSelectionEnabled="True" />

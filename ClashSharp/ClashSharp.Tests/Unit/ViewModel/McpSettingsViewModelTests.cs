@@ -94,6 +94,51 @@ public sealed class McpSettingsViewModelTests
         Assert.DoesNotContain("private-fixture", viewModel.Message + viewModel.Status + viewModel.Endpoint, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task EmptyConfigurationDoesNotReplaceClipboardOrReportSuccess(string configuration)
+    {
+        Management service = new() { ClientConfiguration = configuration };
+        McpSettingsViewModel viewModel = new(service, key => key, new Errors());
+        bool wrote = false;
+        await viewModel.CopyAsync((_, _) => { wrote = true; return Task.FromResult(true); }, CancellationToken.None);
+        Assert.False(wrote);
+        Assert.True(viewModel.HasError);
+        Assert.Equal("Settings.Mcp.CopyFailed", viewModel.Message);
+    }
+
+    [Fact]
+    public async Task CopySuccessWaitsForAsynchronousClipboardAcknowledgement()
+    {
+        Management service = new();
+        McpSettingsViewModel viewModel = new(service, key => key, new Errors());
+        TaskCompletionSource<bool> written = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        Task copying = viewModel.CopyAsync((_, _) => written.Task, CancellationToken.None);
+        Assert.False(copying.IsCompleted);
+        Assert.False(viewModel.IsInputEnabled);
+        Assert.DoesNotContain("Copied", viewModel.Message, StringComparison.Ordinal);
+        written.SetResult(true);
+        await copying;
+        Assert.False(viewModel.HasError);
+        Assert.Equal("Settings.Mcp.Copied", viewModel.Message);
+        Assert.True(viewModel.IsInputEnabled);
+    }
+
+    [Fact]
+    public async Task ClosingDuringClipboardAcknowledgementDoesNotReportCopySuccess()
+    {
+        McpSettingsViewModel viewModel = new(new Management(), key => key, new Errors());
+        using CancellationTokenSource lifetime = new();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => viewModel.CopyAsync((_, _) =>
+        {
+            lifetime.Cancel();
+            return Task.FromResult(true);
+        }, lifetime.Token));
+        Assert.Empty(viewModel.Message);
+        Assert.True(viewModel.IsInputEnabled);
+    }
+
     [Fact]
     public async Task RejectedClipboardWritePreservesUnappliedDraftAndAllowsRetry()
     {
@@ -322,6 +367,7 @@ public sealed class McpSettingsViewModelTests
         public bool FailApply { get; set; }
         public int ReadFailuresRemaining { get; set; }
         public bool FailClientRead { get; init; }
+        public string ClientConfiguration { get; init; } = "private-fixture";
         public TaskCompletionSource<McpSettingsSnapshot>? PendingRead { get; set; }
         public CancellationTokenSource? CancelClientRead { get; init; }
         public McpSettingsSnapshot Snapshot { get; set; } = new(new(17892, McpAccessPolicy.Default), new(new(17892, McpAccessPolicy.Default), null, false, false, null));
@@ -343,7 +389,7 @@ public sealed class McpSettingsViewModelTests
             Copies++;
             if (FailClientRead) { throw new IOException("private-fixture"); }
             CancelClientRead?.Cancel();
-            return Task.FromResult("private-fixture");
+            return Task.FromResult(ClientConfiguration);
         }
         public Task<McpSettingsSnapshot> RotateCredentialAsync(CancellationToken cancellationToken) => Task.FromResult(Snapshot);
     }

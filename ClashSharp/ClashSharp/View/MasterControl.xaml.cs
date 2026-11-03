@@ -505,8 +505,9 @@ public sealed partial class MasterControl : Page
         _pageLifetime = null;
         _dataReady = false;
         StopObservingInfoTileHostWindow();
+        _openInfoTileContextMenu?.Hide();
+        _openInfoTileContextMenu = null;
         CancelInfoTileReorder();
-        EndInfoTileEditing();
         _dataChanges.Stop();
         _tileActions.Deactivate();
         _loadSession.Cancel();
@@ -712,11 +713,6 @@ public sealed partial class MasterControl : Page
     /// <summary>Opens a small editor that toggles which information tiles are visible.</summary>
     private async void EditInfoTilesButton_Click(object sender, RoutedEventArgs e)
     {
-        if (_isEditingInfoTiles)
-        {
-            EndInfoTileEditing();
-            return;
-        }
         await _tileActions.RunAsync(ShowInfoTilesEditorAsync);
     }
 
@@ -1061,11 +1057,13 @@ public sealed partial class MasterControl : Page
         ApplyInfoTileContainerWidth(args.ItemContainer);
         if (args.InRecycleQueue)
         {
+            args.ItemContainer.ContextFlyout = null;
             args.ItemContainer.ClearValue(AutomationProperties.NameProperty);
             args.ItemContainer.ClearValue(AutomationProperties.HelpTextProperty);
         }
         else if (args.Item is MasterControlInfoTileViewModel tile)
         {
+            args.ItemContainer.ContextFlyout = CreateInfoTileContextMenu(tile.Id);
             args.ItemContainer.SetBinding(AutomationProperties.NameProperty,
                 new Binding { Source = tile, Path = new PropertyPath(nameof(tile.Title)), Mode = BindingMode.OneWay });
             args.ItemContainer.SetBinding(AutomationProperties.HelpTextProperty,
@@ -1078,13 +1076,6 @@ public sealed partial class MasterControl : Page
         if (_infoTileDragInitialOrder is not null || _fallbackPointer is not null || _suppressFallbackClick
             || !_dataReady || _dataChanges.IsInvalidated)
         {
-            return;
-        }
-
-        if (_isEditingInfoTiles && e.ClickedItem is MasterControlInfoTileViewModel selected)
-        {
-            _selectedEditingInfoTileId = selected.Id;
-            RefreshInfoTileEditingAppearance();
             return;
         }
 
@@ -1107,7 +1098,7 @@ public sealed partial class MasterControl : Page
         if (!canCommit)
         {
             RestoreInfoTileOrderWithMotion();
-            DispatcherQueue.TryEnqueue(RefreshInfoTileEditingAppearance);
+            DispatcherQueue.TryEnqueue(RefreshInfoTileFocusAppearance);
             return;
         }
 
@@ -1115,7 +1106,7 @@ public sealed partial class MasterControl : Page
         {
             await CommitInfoTileOrderAsync();
         }
-        DispatcherQueue.TryEnqueue(RefreshInfoTileEditingAppearance);
+        DispatcherQueue.TryEnqueue(RefreshInfoTileFocusAppearance);
     }
 
     private void CancelInfoTileReorder()
@@ -1130,7 +1121,7 @@ public sealed partial class MasterControl : Page
         _infoTileDragLifetime = null;
         _infoTileDragGenerationId = null;
         RestoreInfoTileOrderWithMotion();
-        DispatcherQueue.TryEnqueue(RefreshInfoTileEditingAppearance);
+        DispatcherQueue.TryEnqueue(RefreshInfoTileFocusAppearance);
     }
 
     private async Task CommitInfoTileOrderAsync()
@@ -1296,14 +1287,12 @@ public sealed partial class MasterControl : Page
     private Point _fallbackPreviewOffset;
     private Point _fallbackLastPoint;
     private Point _fallbackLastRootPoint;
-    private DispatcherQueueTimer? _fallbackHoldTimer;
     private DispatcherQueueTimer? _fallbackScrollTimer;
     private bool _fallbackCaptureTransfer;
     private bool _suppressFallbackClick;
     private AppWindow? _infoTileHostWindow;
+    private MenuFlyout? _openInfoTileContextMenu;
     private bool _isSettlingInfoTile;
-    private bool _isEditingInfoTiles;
-    private string? _selectedEditingInfoTileId;
     private bool _infoTilePreviewIsMoving;
     private Storyboard? _infoTileDropAnimation;
     private Storyboard? _infoTilePickUpAnimation;
@@ -1320,7 +1309,6 @@ public sealed partial class MasterControl : Page
         InfoTileGrid.AddHandler(PointerCaptureLostEvent, new PointerEventHandler(InfoTileGrid_PointerCaptureLost), true);
         InfoTileGrid.AddHandler(KeyDownEvent, new KeyEventHandler(InfoTileGrid_KeyDown), true);
         InfoTileGrid.GotFocus += InfoTileGrid_GotFocus;
-        AddHandler(PointerPressedEvent, new PointerEventHandler(Page_InfoTileEditingPointerPressed), true);
     }
 
     private void ObserveInfoTileHostWindow()
@@ -1345,12 +1333,15 @@ public sealed partial class MasterControl : Page
         if (!sender.IsVisible || sender.Presenter is OverlappedPresenter { State: OverlappedPresenterState.Minimized })
         {
             CancelInfoTileReorder();
-            EndInfoTileEditing();
+            _openInfoTileContextMenu?.Hide();
         }
     }
 
     private void InfoTileGrid_PointerPressed(object sender, PointerRoutedEventArgs e)
     {
+        // Touch and pen keep the native scroll, tap and press-and-hold context gestures.
+        // A left mouse hold remains a click until actual movement starts a reorder.
+        if (e.Pointer.PointerDeviceType != PointerDeviceType.Mouse) { return; }
         if (_isSettlingInfoTile || _fallbackPointer is not null || _infoTileDragInitialOrder is not null
             || !_dataReady || _dataChanges.IsInvalidated || !_viewModel.CanEditTileLayout)
         {
@@ -1358,12 +1349,6 @@ public sealed partial class MasterControl : Page
         }
 
         PointerPoint point = e.GetCurrentPoint(InfoTileGrid);
-        if (_isEditingInfoTiles && FindInfoTileAt(point.Position) is null)
-        {
-            EndInfoTileEditing();
-            e.Handled = true;
-            return;
-        }
         if (!(e.Pointer.PointerDeviceType == PointerDeviceType.Mouse
                 ? point.Properties.IsLeftButtonPressed : e.Pointer.IsInContact)
             || FindInfoTileAt(point.Position) is not GridViewItem { Content: MasterControlInfoTileViewModel tile } container)
@@ -1393,20 +1378,6 @@ public sealed partial class MasterControl : Page
         (container.ContentTemplateRoot as MasterInfoTile)?.BeginPressFeedback(
             new Point(point.Position.X - bounds.X, point.Position.Y - bounds.Y));
         e.Handled = true;
-        DispatcherQueueTimer timer = DispatcherQueue.CreateTimer();
-        timer.Interval = TimeSpan.FromMilliseconds(450);
-        timer.IsRepeating = false;
-        timer.Tick += (_, _) =>
-        {
-            timer.Stop();
-            if (ReferenceEquals(_fallbackHoldTimer, timer))
-            {
-                EnterInfoTileEditing(tile.Id);
-                BeginInfoTilePointerReorder();
-            }
-        };
-        _fallbackHoldTimer = timer;
-        timer.Start();
     }
 
     private void InfoTileGrid_PointerMoved(object sender, PointerRoutedEventArgs e)
@@ -1420,7 +1391,7 @@ public sealed partial class MasterControl : Page
         {
             double x = point.Position.X - _fallbackPressPoint.X;
             double y = point.Position.Y - _fallbackPressPoint.Y;
-            if (x * x + y * y < 64)
+            if (!MasterTileMotionPolicy.ShouldStartMouseDrag(x, y))
             {
                 if (FindInfoTileContainer(_fallbackTileId)?.ContentTemplateRoot is MasterInfoTile pressed)
                 {
@@ -1428,7 +1399,7 @@ public sealed partial class MasterControl : Page
                 }
                 return;
             }
-            if (!_isEditingInfoTiles && e.Pointer.PointerDeviceType != PointerDeviceType.Mouse)
+            if (e.Pointer.PointerDeviceType != PointerDeviceType.Mouse)
             {
                 // A touch pan before the hold is scrolling, never a reorder.
                 CancelInfoTileReorder();
@@ -1446,7 +1417,7 @@ public sealed partial class MasterControl : Page
         e.Handled = true;
         double moveX = point.Position.X - _fallbackPressPoint.X;
         double moveY = point.Position.Y - _fallbackPressPoint.Y;
-        if (!_infoTilePreviewIsMoving && moveX * moveX + moveY * moveY >= 64)
+        if (!_infoTilePreviewIsMoving && MasterTileMotionPolicy.ShouldStartMouseDrag(moveX, moveY))
         {
             _infoTilePreviewIsMoving = true;
             InfoTileDragPreview.Opacity = MasterTileMotionPolicy.DragOpacity;
@@ -1472,8 +1443,6 @@ public sealed partial class MasterControl : Page
 
     private void BeginInfoTilePointerReorder()
     {
-        _fallbackHoldTimer?.Stop();
-        _fallbackHoldTimer = null;
         if (_fallbackPointer is null || !_viewModel.CanEditTileLayout || _dataChanges.IsInvalidated
             || FindInfoTileContainer(_fallbackTileId) is not GridViewItem { Content: MasterControlInfoTileViewModel tile } container)
         {
@@ -1485,7 +1454,6 @@ public sealed partial class MasterControl : Page
         _infoTileDragLifetime = _pageLifetime;
         _infoTileDragGenerationId = _getDataGenerationId();
         _suppressFallbackClick = true;
-        if (_isEditingInfoTiles) { _selectedEditingInfoTileId = tile.Id; }
         InfoTileDragContent.ContentTemplate = InfoTileGrid.ItemTemplate;
         InfoTileDragContent.Content = tile;
         InfoTileDragPreview.Width = container.ActualWidth;
@@ -1571,15 +1539,7 @@ public sealed partial class MasterControl : Page
             if (clicked is { Content: MasterControlInfoTileViewModel tile, ContentTemplateRoot: MasterInfoTile control }
                 && StringComparer.Ordinal.Equals(tile.Id, tileId))
             {
-                if (_isEditingInfoTiles)
-                {
-                    _selectedEditingInfoTileId = tile.Id;
-                    RefreshInfoTileEditingAppearance();
-                }
-                else
-                {
-                    control.Activate();
-                }
+                control.Activate();
             }
         }
     }
@@ -1606,10 +1566,9 @@ public sealed partial class MasterControl : Page
     private void InfoTileGrid_KeyDown(object sender, KeyRoutedEventArgs e)
     {
         if (e.Key != Windows.System.VirtualKey.Escape
-            || _fallbackPointer is null && !_isSettlingInfoTile && !_isEditingInfoTiles) { return; }
+            || _fallbackPointer is null && !_isSettlingInfoTile) { return; }
         _suppressFallbackClick = true;
         CancelInfoTileReorder();
-        EndInfoTileEditing();
         e.Handled = true;
     }
 
@@ -1639,9 +1598,7 @@ public sealed partial class MasterControl : Page
             bool source = StringComparer.Ordinal.Equals(tile.Id, _fallbackTileId);
             container.Opacity = source ? 0 : 1;
             container.UseSystemFocusVisuals = false;
-            (container.ContentTemplateRoot as MasterInfoTile)?.SetReorderContext(
-                _isEditingInfoTiles || !source,
-                _isEditingInfoTiles && StringComparer.Ordinal.Equals(tile.Id, _selectedEditingInfoTileId));
+
         }
     }
 
@@ -1666,7 +1623,7 @@ public sealed partial class MasterControl : Page
         AddInfoTileDropMotion(animation, InfoTileDragPreview, "(Canvas.Left)", target.X);
         AddInfoTileDropMotion(animation, InfoTileDragPreview, "(Canvas.Top)", target.Y);
         AddInfoTileDropMotion(animation, InfoTileDragPreview, nameof(Opacity), 1);
-        double finalScale = _isEditingInfoTiles ? MasterTileMotionPolicy.SelectedScale : 1;
+        double finalScale = 1;
         AddInfoTileDropMotion(animation, InfoTileDragScale, nameof(ScaleTransform.ScaleX), finalScale);
         AddInfoTileDropMotion(animation, InfoTileDragScale, nameof(ScaleTransform.ScaleY), finalScale);
         AddInfoTileDropMotion(animation, InfoTileDragScale, nameof(ScaleTransform.CenterX), container.ActualWidth / 2);
@@ -1717,8 +1674,6 @@ public sealed partial class MasterControl : Page
         Pointer? pointer = _fallbackPointer;
         _fallbackPointer = null;
         _fallbackTileId = null;
-        _fallbackHoldTimer?.Stop();
-        _fallbackHoldTimer = null;
         _fallbackScrollTimer?.Stop();
         _fallbackScrollTimer = null;
         if (pointer is not null) { InfoTileGrid.ReleasePointerCapture(pointer); }
@@ -1732,8 +1687,6 @@ public sealed partial class MasterControl : Page
                 container.UseSystemFocusVisuals = container.FocusState == FocusState.Keyboard;
                 if (container.ContentTemplateRoot is MasterInfoTile control)
                 {
-                    control.SetReorderContext(_isEditingInfoTiles,
-                        _isEditingInfoTiles && StringComparer.Ordinal.Equals(tile.Id, _selectedEditingInfoTileId));
                     control.ResetPointerFeedback();
                 }
             }
@@ -1783,45 +1736,15 @@ public sealed partial class MasterControl : Page
         AnimateInfoTileReflow(positions);
     }
 
-    private void EnterInfoTileEditing(string tileId)
-    {
-        _isEditingInfoTiles = true;
-        _selectedEditingInfoTileId = tileId;
-        EditInfoTilesLink.Content = _getString("Master.Tile.FinishEditing");
-        RefreshInfoTileEditingAppearance();
-    }
-
-    private void EndInfoTileEditing()
-    {
-        if (!_isEditingInfoTiles) { return; }
-        _isEditingInfoTiles = false;
-        _selectedEditingInfoTileId = null;
-        EditInfoTilesLink.SetBinding(ContentControl.ContentProperty,
-            new Binding { Source = _viewModel, Path = new PropertyPath(nameof(_viewModel.EditInfoTilesText)), Mode = BindingMode.OneWay });
-        RefreshInfoTileEditingAppearance();
-    }
-
-    private void RefreshInfoTileEditingAppearance()
+    private void RefreshInfoTileFocusAppearance()
     {
         foreach (MasterControlInfoTileViewModel tile in _viewModel.VisibleInfoTiles)
         {
-            if (InfoTileGrid.ContainerFromItem(tile) is not GridViewItem container) { continue; }
-            container.UseSystemFocusVisuals = container.FocusState == FocusState.Keyboard;
-            (container.ContentTemplateRoot as MasterInfoTile)?.SetReorderContext(_isEditingInfoTiles,
-                _isEditingInfoTiles && StringComparer.Ordinal.Equals(tile.Id, _selectedEditingInfoTileId));
+            if (InfoTileGrid.ContainerFromItem(tile) is GridViewItem container)
+            {
+                container.UseSystemFocusVisuals = container.FocusState == FocusState.Keyboard;
+            }
         }
-    }
-
-    private void Page_InfoTileEditingPointerPressed(object sender, PointerRoutedEventArgs e)
-    {
-        if (!_isEditingInfoTiles) { return; }
-        for (DependencyObject? node = e.OriginalSource as DependencyObject;
-            node is not null; node = VisualTreeHelper.GetParent(node))
-        {
-            if (ReferenceEquals(node, InfoTileGrid) || ReferenceEquals(node, EditInfoTilesLink)) { return; }
-        }
-        CancelInfoTileReorder();
-        EndInfoTileEditing();
     }
 
     private void InfoTileGrid_GotFocus(object sender, RoutedEventArgs e)
@@ -1832,12 +1755,48 @@ public sealed partial class MasterControl : Page
             if (node is not GridViewItem container) { continue; }
             bool keyboard = container.FocusState == FocusState.Keyboard;
             container.UseSystemFocusVisuals = keyboard;
-            if (keyboard && _isEditingInfoTiles && container.Content is MasterControlInfoTileViewModel tile)
-            {
-                _selectedEditingInfoTileId = tile.Id;
-                RefreshInfoTileEditingAppearance();
-            }
             return;
         }
+    }
+
+    private MenuFlyout CreateInfoTileContextMenu(string tileId)
+    {
+        MenuFlyout menu = new();
+        MenuFlyoutItem unpin = new() { Text = _getString("Master.Tile.Unpin") };
+        MenuFlyoutItem arrange = new() { Text = _viewModel.EditInfoTilesText };
+        menu.Items.Add(unpin);
+        menu.Items.Add(arrange);
+        CancellationTokenSource? openedLifetime = null;
+        Guid? openedGeneration = null;
+        menu.Opening += (_, _) =>
+        {
+            unpin.Text = _getString("Master.Tile.Unpin");
+            arrange.Text = _viewModel.EditInfoTilesText;
+            CancelInfoTileReorder();
+            _openInfoTileContextMenu = menu;
+            bool ready = _pageLifetime is not null && _dataReady && !_dataChanges.IsInvalidated && _viewModel.CanEditTileLayout;
+            unpin.IsEnabled = arrange.IsEnabled = ready;
+            openedLifetime = ready ? _pageLifetime : null;
+            openedGeneration = ready ? _getDataGenerationId() : null;
+        };
+        menu.Closed += (_, _) =>
+        {
+            if (ReferenceEquals(_openInfoTileContextMenu, menu)) { _openInfoTileContextMenu = null; }
+        };
+        unpin.Click += async (_, _) =>
+        {
+            if (openedLifetime is null || !ReferenceEquals(openedLifetime, _pageLifetime)
+                || _dataChanges.IsInvalidated || openedGeneration != _getDataGenerationId()) { return; }
+            string[] requested = _viewModel.VisibleInfoTiles.Where(tile => !StringComparer.Ordinal.Equals(tile.Id, tileId))
+                .Select(static tile => tile.Id).ToArray();
+            await _tileActions.RunAsync(token => _viewModel.SetVisibleInfoTileIdsAsync(requested, token));
+        };
+        arrange.Click += async (_, _) =>
+        {
+            if (openedLifetime is null || !ReferenceEquals(openedLifetime, _pageLifetime)
+                || _dataChanges.IsInvalidated || openedGeneration != _getDataGenerationId()) { return; }
+            await _tileActions.RunAsync(ShowInfoTilesEditorAsync);
+        };
+        return menu;
     }
 }

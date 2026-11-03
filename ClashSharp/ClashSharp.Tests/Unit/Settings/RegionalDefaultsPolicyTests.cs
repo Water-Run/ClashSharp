@@ -27,8 +27,8 @@ public sealed class RegionalDefaultsPolicyTests
     }
 
     [Theory]
-    [InlineData("12HourClock", ClockFormat.TwelveHour)]
-    [InlineData("24HourClock", ClockFormat.TwentyFourHour)]
+    [InlineData("12HourClock", ClockFormat.FollowSystem)]
+    [InlineData("24HourClock", ClockFormat.FollowSystem)]
     [InlineData("", ClockFormat.FollowSystem)]
     public void ClockDoesNotAssumeTheLanguageDefault(string identifier, ClockFormat expected)
     {

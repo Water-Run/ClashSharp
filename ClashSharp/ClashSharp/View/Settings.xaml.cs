@@ -1218,7 +1218,8 @@ public sealed partial class Settings : Page, ILocalizedPresentation
     private async void McpRotate_Click(object sender, RoutedEventArgs args) => await RunPageOperationAsync(_mcp.RotateAsync);
     private async void McpReset_Click(object sender, RoutedEventArgs args) => await RunPageOperationAsync(_mcp.ResetAsync);
     private async void McpCopy_Click(object sender, RoutedEventArgs args) => await RunPageOperationAsync(token =>
-        _mcp.CopyAsync(McpClientClipboard.TryCopy, token));
+        _mcp.CopyAsync((configuration, cancellationToken) =>
+            McpClientClipboard.TryCopyAsync(configuration, DispatcherQueue, cancellationToken), token));
 
     /// <summary>Shows a destructive-action confirmation dialog.</summary>
     private async Task<bool> ConfirmAsync(string title, string content, string primaryButtonText, CancellationToken cancellationToken)

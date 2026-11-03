@@ -21,10 +21,7 @@ public sealed partial class MasterInfoTile : UserControl
 
     private bool _isLoaded;
     private bool _isPressActive;
-    private bool _isInReorderContext;
-    private bool _isSelectedForEditing;
     private Storyboard? _tiltAnimation;
-    private Storyboard? _contextAnimation;
     private Storyboard? _reflowAnimation;
 
     /// <summary>Identifies the recent rate samples shown as a compact trend.</summary>
@@ -141,11 +138,6 @@ public sealed partial class MasterInfoTile : UserControl
         AddHandler(PointerMovedEvent, new PointerEventHandler(TileRoot_PointerMoved), true);
         AddHandler(PointerReleasedEvent, new PointerEventHandler(TileRoot_PointerReleased), true);
         AddHandler(PointerCanceledEvent, new PointerEventHandler(TileRoot_PointerCanceled), true);
-        SizeChanged += (_, _) =>
-        {
-            TileScaleTransform.CenterX = ActualWidth / 2;
-            TileScaleTransform.CenterY = ActualHeight / 2;
-        };
     }
 
     /// <summary>Gets or sets the tile's primary label.</summary>
@@ -340,30 +332,9 @@ public sealed partial class MasterInfoTile : UserControl
     /// <summary>Updates depression and tilt from a point in the unprojected tile's coordinates.</summary>
     internal void UpdatePressFeedback(Point point)
     {
-        if (!_isPressActive || _isInReorderContext) { return; }
+        if (!_isPressActive) { return; }
         MasterTileMotionPolicy.PressPose pose = MasterTileMotionPolicy.GetPressPose(point.X, point.Y, ActualWidth, ActualHeight);
         AnimateTilt(pose, MasterTileMotionPolicy.PressMilliseconds);
-    }
-
-    /// <summary>Gives surrounding tiles the compact editing appearance without changing layout geometry.</summary>
-    internal void SetReorderContext(bool active, bool selected = false)
-    {
-        if (_isInReorderContext == active && _isSelectedForEditing == selected) { return; }
-        _isInReorderContext = active;
-        _isSelectedForEditing = selected;
-        ResetPointerFeedback();
-        double x = TileScaleTransform.ScaleX;
-        double y = TileScaleTransform.ScaleY;
-        _contextAnimation?.Stop();
-        TileScaleTransform.ScaleX = x;
-        TileScaleTransform.ScaleY = y;
-        double scale = active
-            ? selected ? MasterTileMotionPolicy.SelectedScale : MasterTileMotionPolicy.SurroundingScale : 1;
-        Storyboard animation = new();
-        AddMotion(animation, TileScaleTransform, nameof(ScaleTransform.ScaleX), scale, MasterTileMotionPolicy.ReleaseMilliseconds);
-        AddMotion(animation, TileScaleTransform, nameof(ScaleTransform.ScaleY), scale, MasterTileMotionPolicy.ReleaseMilliseconds);
-        _contextAnimation = animation;
-        animation.Begin();
     }
 
     private void AnimateTilt(MasterTileMotionPolicy.PressPose pose, int milliseconds)
@@ -445,16 +416,11 @@ public sealed partial class MasterInfoTile : UserControl
         _isLoaded = false;
         _isPressActive = false;
         _tiltAnimation?.Stop();
-        _contextAnimation?.Stop();
         _reflowAnimation?.Stop();
         _reflowAnimation = null;
         TileReflowTransform.X = TileReflowTransform.Y = 0;
         _tiltAnimation = null;
-        _contextAnimation = null;
-        _isInReorderContext = false;
-        _isSelectedForEditing = false;
         TileTiltProjection.RotationX = TileTiltProjection.RotationY = TileTiltProjection.GlobalOffsetZ = 0;
-        TileScaleTransform.ScaleX = TileScaleTransform.ScaleY = 1;
         WindowDialogCoordinator.TryDismissTransient(XamlRoot, TileDetailsFlyout.Hide);
         ObserveCommand();
     }

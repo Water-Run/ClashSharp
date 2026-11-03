@@ -104,7 +104,7 @@ public sealed class WindowsInstallerPreferencesCoordinatorTests
         { FollowSystemDefaults = false, EnableMcpServer = true, Notifications = InstallerNotificationPreset.CriticalOnly };
         IReadOnlyDictionary<string, object> values = WindowsInstallerPreferencesCoordinator.BuildSeed(preferences);
         Assert.Equal((int)AppLanguage.English, values["DisplayLanguage"]);
-        Assert.Equal((int)ClockFormat.TwentyFourHour, values["ClockFormat"]);
+        Assert.Equal((int)ClockFormat.FollowSystem, values["ClockFormat"]);
         Assert.Equal((int)MainlandChinaFeatureMode.Disabled, values["MainlandChinaFeatureMode"]);
         Assert.Equal((int)NotificationLevel.CriticalOnly, values["NotificationLevel"]);
         Assert.Equal(true, values["McpServerEnabled"]);

@@ -2069,6 +2069,9 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("ItemClick=\"InfoTileGrid_ItemClick\"", masterControlXaml, StringComparison.Ordinal);
         Assert.Contains("InfoTileGrid_PointerPressed", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("InfoTileGrid_PointerReleased", masterControlCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("EnterInfoTileEditing(", masterControlCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("_fallbackHoldTimer", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("ContextFlyout = CreateInfoTileContextMenu", masterControlCode, StringComparison.Ordinal);
         Assert.DoesNotContain("BeginReorderPointer(", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("AnimateInfoTileReflow", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"HeroStatusItemGrid\"", masterControlXaml, StringComparison.Ordinal);

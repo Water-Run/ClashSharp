@@ -4,6 +4,18 @@ namespace ClashSharp.Tests.Unit.Presentation;
 
 public sealed class MasterTileMotionPolicyTests
 {
+    [Theory]
+    [InlineData(0, 0, false)]
+    [InlineData(7.9, 0, false)]
+    [InlineData(0, 7.9, false)]
+    [InlineData(8, 0, true)]
+    [InlineData(0, -8, true)]
+    [InlineData(6, 6, true)]
+    [InlineData(double.NaN, 0, false)]
+    public void MouseHold_BecomesDragOnlyAfterSpatialThreshold(double x, double y, bool dragging)
+    {
+        Assert.Equal(dragging, MasterTileMotionPolicy.ShouldStartMouseDrag(x, y));
+    }
     [Fact]
     public void CenterPress_DepressesWithoutTilting()
     {

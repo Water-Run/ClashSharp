@@ -98,12 +98,30 @@ internal sealed class McpSettingsViewModel(IMcpServerManagement management, Func
         SetMessage("Rotated", false);
     }, cancellationToken);
 
-    public Task CopyAsync(Func<string, bool> copyToClipboard, CancellationToken cancellationToken) => RunActionAsync(async () =>
+    /// <summary>Adapts a synchronous private-text writer to the acknowledged copy operation.</summary>
+    /// <param name="copyToClipboard">Writer that confirms whether it accepted the requested private text.</param>
+    /// <param name="cancellationToken">Cancels the explicit user operation.</param>
+    public Task CopyAsync(Func<string, bool> copyToClipboard, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(copyToClipboard);
+        return CopyAsync((text, _) => Task.FromResult(copyToClipboard(text)), cancellationToken);
+    }
+
+    /// <summary>Reports success only after the asynchronous clipboard port confirms usable private text.</summary>
+    /// <param name="copyToClipboard">Writer that confirms the requested private text is available for paste.</param>
+    /// <param name="cancellationToken">Cancels a queued or incomplete user operation.</param>
+    public Task CopyAsync(Func<string, CancellationToken, Task<bool>> copyToClipboard, CancellationToken cancellationToken) => RunActionAsync(async () =>
     {
         ArgumentNullException.ThrowIfNull(copyToClipboard);
         string configuration = await management.GetClientConfigurationAsync(cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
-        bool copied = copyToClipboard(configuration);
+        if (string.IsNullOrWhiteSpace(configuration))
+        {
+            SetMessage("CopyFailed", true);
+            return;
+        }
+        bool copied = await copyToClipboard(configuration, cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
         SetMessage(copied ? "Copied" : "CopyFailed", !copied);
     }, loadDraftOnFailure: false, cancellationToken);
 
