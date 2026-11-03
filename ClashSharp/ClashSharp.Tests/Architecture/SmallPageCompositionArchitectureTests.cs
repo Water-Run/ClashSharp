@@ -123,7 +123,9 @@ public sealed class SmallPageCompositionArchitectureTests
         Assert.Contains("private readonly PageLoadSession _loadSession = new();", source, StringComparison.Ordinal);
         Assert.Contains("Loaded += OnLoaded;", source, StringComparison.Ordinal);
         Assert.Contains("Unloaded += OnUnloaded;", source, StringComparison.Ordinal);
-        Assert.Contains("await _loadSession.RunAsync(_viewModel.LoadAsync);", source, StringComparison.Ordinal);
+        Assert.Contains("await _loadSession.RunAsync(async token =>", source, StringComparison.Ordinal);
+        Assert.Contains("_viewModel.SetProxyPort(_readProxyInformation().MixedPort);", source, StringComparison.Ordinal);
+        Assert.Contains("await _viewModel.LoadAsync(token);", source, StringComparison.Ordinal);
         Assert.Contains("_loadSession.Cancel();", source, StringComparison.Ordinal);
         Assert.DoesNotContain("LoadCommand.Execute", source, StringComparison.Ordinal);
     }
