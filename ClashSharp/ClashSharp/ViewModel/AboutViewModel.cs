@@ -21,6 +21,7 @@ internal sealed class AboutViewModel : ObservableObject, ILocalizedPresentation
     {
         OnPropertyChanged(nameof(PageTitleText));
         OnPropertyChanged(nameof(DescriptionText));
+        OnPropertyChanged(nameof(InformationTitleText));
         OnPropertyChanged(nameof(AppDescriptionText));
         OnPropertyChanged(nameof(AppNameText));
         OnPropertyChanged(nameof(VersionText));
@@ -123,6 +124,9 @@ internal sealed class AboutViewModel : ObservableObject, ILocalizedPresentation
     /// <summary>Gets the page title text.</summary>
     /// <value>Localized page title.</value>
     public string PageTitleText => _localization.GetString("Nav.About");
+
+    /// <summary>Gets the heading for the expandable application metadata.</summary>
+    public string InformationTitleText => _localization.GetString("About.Information.Title");
 
     /// <summary>Gets the page description text.</summary>
     /// <value>Localized page description.</value>

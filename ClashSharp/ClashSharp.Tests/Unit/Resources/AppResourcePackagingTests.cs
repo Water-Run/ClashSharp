@@ -337,9 +337,9 @@ public sealed class AppResourcePackagingTests
         Assert.DoesNotContain(".Instance", aboutCode, StringComparison.Ordinal);
     }
 
-    /// <summary>Verifies about page version and runtime summary live under the product name before the app description.</summary>
+    /// <summary>Verifies app identity stays prominent while runtime metadata remains in the native details expander.</summary>
     [Fact]
-    public void AboutXaml_PlacesVersionAndRuntimeUnderAppName()
+    public void AboutXaml_SeparatesIdentityFromExpandableMetadata()
     {
         string aboutXamlPath = FindSourceFile("ClashSharp", "ClashSharp", "View", "About.xaml");
 
@@ -352,10 +352,14 @@ public sealed class AppResourcePackagingTests
 
         Assert.True(appNameIndex >= 0, "App name text is missing.");
         Assert.True(versionIndex > appNameIndex, "Version summary must be below the app name.");
-        Assert.True(runtimeIndex > versionIndex, "Runtime summary must be below the version.");
-        Assert.True(descriptionIndex > runtimeIndex, "App description must be below version and runtime.");
-        Assert.Contains("Text=\"{Binding VersionSummaryText}\" Style=\"{ThemeResource BodyStrongTextBlockStyle}\"", aboutXaml, StringComparison.Ordinal);
-        Assert.Contains("Text=\"{Binding AppDescriptionText}\" Style=\"{ThemeResource BodyTextBlockStyle}\"", aboutXaml, StringComparison.Ordinal);
+        Assert.True(descriptionIndex > versionIndex, "App description must follow the version.");
+        Assert.True(runtimeIndex > descriptionIndex, "Secondary runtime metadata must follow the compact identity section.");
+        XNamespace presentation = "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
+        XNamespace xaml = "http://schemas.microsoft.com/winfx/2006/xaml";
+        XElement details = XDocument.Parse(aboutXaml).Descendants(presentation + "Expander")
+            .Single(element => (string?)element.Attribute(xaml + "Name") == "AboutInformationExpander");
+        Assert.Contains(details.Descendants(presentation + "TextBlock"), element =>
+            (string?)element.Attribute("Text") == "{Binding RuntimeValueText}");
         Assert.DoesNotContain("x:Name=\"VersionLabelText\"", aboutXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("x:Name=\"RuntimeTitleText\"", aboutXaml, StringComparison.Ordinal);
     }
@@ -2269,8 +2273,8 @@ public sealed class AppResourcePackagingTests
             && (string?)setter.Attribute("Value") == "Stretch");
         Assert.Contains("Text=\"{Binding VersionSummaryText}\"", aboutXaml, StringComparison.Ordinal);
         Assert.Contains("Text=\"{Binding RuntimeValueText}\"", aboutXaml, StringComparison.Ordinal);
-        Assert.Contains("Text=\"{Binding VersionSummaryText}\" Style=\"{ThemeResource BodyStrongTextBlockStyle}\"", aboutXaml, StringComparison.Ordinal);
-        Assert.Contains("Text=\"{Binding AppDescriptionText}\" Style=\"{ThemeResource BodyTextBlockStyle}\" Foreground=\"{ThemeResource TextFillColorSecondaryBrush}\"", aboutXaml, StringComparison.Ordinal);
+        Assert.Contains("Text=\"{Binding VersionSummaryText}\"", aboutXaml, StringComparison.Ordinal);
+        Assert.Contains("Text=\"{Binding AppDescriptionText}\"", aboutXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("x:Name=\"VersionLabelText\"", aboutXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("x:Name=\"RuntimeTitleText\"", aboutXaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"LicenseTitleText\"", aboutXaml, StringComparison.Ordinal);

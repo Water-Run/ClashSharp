@@ -506,6 +506,7 @@ internal static partial class LocalizationResources
             ["Command.Test"] = "테스트",
             ["Command.Register"] = "등록",
             ["Command.Detect"] = "감지",
+            ["About.Information.Title"] = "앱 정보",
             ["About.App.Description"] = "mihomo 기반 Windows 네이티브 Clash 클라이언트로, 권한에 따라 MCP를 통한 Agent 접근을 지원합니다.",
             ["About.Author.Title"] = "제작자",
             ["About.Author.Value"] = "WaterRun",

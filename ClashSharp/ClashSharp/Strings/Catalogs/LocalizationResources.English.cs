@@ -506,6 +506,7 @@ internal static partial class LocalizationResources
             ["Command.Test"] = "Test",
             ["Command.Register"] = "Register",
             ["Command.Detect"] = "Detect",
+            ["About.Information.Title"] = "App information",
             ["About.App.Description"] = "A native Windows Clash client powered by mihomo, with Agent access through MCP and permissions you control.",
             ["About.Author.Title"] = "Author",
             ["About.Author.Value"] = "WaterRun",

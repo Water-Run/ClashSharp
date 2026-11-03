@@ -506,6 +506,7 @@ internal static partial class LocalizationResources
             ["Command.Test"] = "آزمایش",
             ["Command.Register"] = "ثبت",
             ["Command.Detect"] = "تشخیص",
+            ["About.Information.Title"] = "اطلاعات برنامه",
             ["About.App.Description"] = "کلاینت بومی Clash برای Windows بر پایهٔ mihomo، با دسترسی Agent از طریق MCP و مجوزهای انتخابی شما.",
             ["About.Author.Title"] = "نویسنده",
             ["About.Author.Value"] = "WaterRun",

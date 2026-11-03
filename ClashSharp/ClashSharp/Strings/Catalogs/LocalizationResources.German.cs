@@ -506,6 +506,7 @@ internal static partial class LocalizationResources
             ["Command.Detect"] = "Erkennen",
             ["Command.CloseApplication"] = "Clash# schließen",
             ["Command.RestartApplication"] = "Clash# neu starten",
+            ["About.Information.Title"] = "App-Informationen",
             ["About.App.Description"] = "Ein nativer Clash-Client für Windows auf Basis von mihomo, mit Agent-Zugriff über MCP und Berechtigungen unter Ihrer Kontrolle.",
             ["About.Author.Title"] = "Autor",
             ["About.Author.Value"] = "WaterRun",

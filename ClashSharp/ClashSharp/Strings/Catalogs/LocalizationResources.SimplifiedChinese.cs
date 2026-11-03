@@ -506,6 +506,7 @@ internal static partial class LocalizationResources
             ["Command.Test"] = "测试",
             ["Command.Register"] = "注册",
             ["Command.Detect"] = "检测",
+            ["About.Information.Title"] = "应用信息",
             ["About.App.Description"] = "基于 mihomo 的 Windows 原生 Clash 客户端，支持 Agent 通过 MCP 按授权使用。",
             ["About.Author.Title"] = "作者",
             ["About.Author.Value"] = "WaterRun",
