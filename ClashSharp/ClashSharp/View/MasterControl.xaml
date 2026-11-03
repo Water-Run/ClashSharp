@@ -183,10 +183,7 @@
                         SizeChanged="InfoTileGrid_SizeChanged"
                         ContainerContentChanging="InfoTileGrid_ContainerContentChanging">
                         <GridView.ItemContainerTransitions>
-                            <TransitionCollection>
-                                <ReorderThemeTransition />
-                                <RepositionThemeTransition />
-                            </TransitionCollection>
+                            <TransitionCollection />
                         </GridView.ItemContainerTransitions>
                         <GridView.ItemsPanel>
                             <ItemsPanelTemplate>

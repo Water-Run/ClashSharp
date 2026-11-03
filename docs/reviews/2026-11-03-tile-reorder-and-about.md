@@ -8,9 +8,12 @@
 - 长按进入临时编辑状态，选中磁贴浮起、其他磁贴缩小。编辑状态中点击只选择，不触发代理开关或详情；鼠标或触摸可以继续拖动。Esc、空白处及“完成调整”退出，不新增持久设置。
 - 拿起点保持在鼠标／手指下方，磁贴平滑放大；移动后本体使用 65% 不透明度，原位留空，周围元素平滑让位。松开即接受并持久化顺序，视觉独立在 160ms 内落位；导航、取消和渲染暂停具有页面所有权与超时边界。
 - 普通权限与管理员进程采用同一窗口内动效，避开 OLE 对管理员进程的限制。GridViewItem 继续提供键盘与辅助功能语义，仅键盘交互显示系统焦点提示。
+- 实测蓝机交互会话的 `UISettings.AnimationsEnabled` 为 false，因此直接操作反馈独立于环境动画标记：程序显式实现按压、拿起、落位及按当前可见位置重定向的内容让位动画；不更改系统设置，不依赖被远程会话关闭的主题重排动画。
 - 关于页改为紧凑的居中 SVG 标识；应用与内核版本、运行时、简述和作者／许可证集中展示。更新与本地代理为第一组，项目与上游归属为第二组。直接显示可复制的本地代理地址，保留路径详情；更新不可用时明确给发布页入口和 Setup.exe 更新步骤。
 
 参考微软的 [Tilt 效果说明](https://devblogs.microsoft.com/vbteam/visual-basic-windows-phone-7-series-5-how-to-create-a-control-tilt-effect-application-for-windows-phone-7/) 与[拖动／重排动画说明](https://learn.microsoft.com/en-us/windows/apps/design/motion/xaml-animation)。本项目独立实现，没有复制旧 Toolkit 源码或引入其运行时依赖。
+
+倾斜方向按微软的[三维投影坐标说明](https://learn.microsoft.com/en-us/windows/apps/develop/platform/xaml/3-d-perspective-effects)核对，四条边均验证向按压侧下沉，中心使用负 Z 深度。
 
 ## 第一版历史验证（用户已拒绝其线框视觉）
 

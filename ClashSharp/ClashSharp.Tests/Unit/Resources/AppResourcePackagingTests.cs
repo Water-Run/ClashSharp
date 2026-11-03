@@ -2070,7 +2070,7 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("InfoTileGrid_PointerPressed", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("InfoTileGrid_PointerReleased", masterControlCode, StringComparison.Ordinal);
         Assert.DoesNotContain("BeginReorderPointer(", masterControlCode, StringComparison.Ordinal);
-        Assert.Contains("ReorderThemeTransition", masterControlXaml, StringComparison.Ordinal);
+        Assert.Contains("AnimateInfoTileReflow", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"HeroStatusItemGrid\"", masterControlXaml, StringComparison.Ordinal);
         Assert.Contains("ItemsSource=\"{Binding HeroStatusItems}\"", masterControlXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("x:Name=\"SetHeroStatusDisplayButton\"", masterControlXaml, StringComparison.Ordinal);

@@ -30,7 +30,9 @@ internal static class MasterTileMotionPolicy
         double vertical = Math.Clamp(2 * y / height - 1, -1, 1);
         double edge = Math.Max(Math.Abs(horizontal), Math.Abs(vertical));
         double depression = Math.Min(MaximumDepression, Math.Min(width, height) * 0.16);
-        return new PressPose(-vertical * MaximumTiltDegrees, horizontal * MaximumTiltDegrees,
+        // PlaneProjection's positive X rotation depresses the bottom edge; its positive
+        // Y rotation depresses the left edge. Press coordinates have a top-left origin.
+        return new PressPose(vertical * MaximumTiltDegrees, -horizontal * MaximumTiltDegrees,
             -depression * (1 - edge));
     }
 }

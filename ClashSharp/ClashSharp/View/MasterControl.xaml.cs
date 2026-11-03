@@ -25,7 +25,6 @@ using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Animation;
 using Windows.Foundation;
-using Windows.UI.ViewManagement;
 
 namespace ClashSharp.View;
 
@@ -1107,7 +1106,7 @@ public sealed partial class MasterControl : Page
         _infoTileDragGenerationId = null;
         if (!canCommit)
         {
-            _viewModel.RestoreCommittedInfoTileOrder();
+            RestoreInfoTileOrderWithMotion();
             DispatcherQueue.TryEnqueue(RefreshInfoTileEditingAppearance);
             return;
         }
@@ -1130,7 +1129,7 @@ public sealed partial class MasterControl : Page
         _infoTileDragInitialOrder = null;
         _infoTileDragLifetime = null;
         _infoTileDragGenerationId = null;
-        _viewModel.RestoreCommittedInfoTileOrder();
+        RestoreInfoTileOrderWithMotion();
         DispatcherQueue.TryEnqueue(RefreshInfoTileEditingAppearance);
     }
 
@@ -1145,7 +1144,7 @@ public sealed partial class MasterControl : Page
         finally
         {
             // The page queue may cancel before invoking the write, leaving the local order reordered.
-            _viewModel.RestoreCommittedInfoTileOrder();
+            RestoreInfoTileOrderWithMotion();
         }
     }
 
@@ -1309,7 +1308,6 @@ public sealed partial class MasterControl : Page
     private Storyboard? _infoTileDropAnimation;
     private Storyboard? _infoTilePickUpAnimation;
     private TaskCompletionSource<bool>? _infoTileDropCompletion;
-    private readonly UISettings _tileMotionSettings = new();
 
     private void InitializeInfoTilePointerReorder()
     {
@@ -1460,9 +1458,15 @@ public sealed partial class MasterControl : Page
     private void MoveInfoTilePointerTarget()
     {
         if (FindInfoTileAt(_fallbackLastPoint) is GridViewItem { Content: MasterControlInfoTileViewModel target }
-            && _fallbackTileId is string sourceId && _viewModel.MoveVisibleInfoTile(sourceId, target.Id))
+            && _fallbackTileId is string sourceId && !StringComparer.Ordinal.Equals(sourceId, target.Id))
         {
-            UpdateInfoTileReorderAppearance();
+            Dictionary<string, Point> positions = CaptureInfoTilePositions();
+            if (_viewModel.MoveVisibleInfoTile(sourceId, target.Id))
+            {
+                InfoTileGrid.UpdateLayout();
+                AnimateInfoTileReflow(positions);
+                UpdateInfoTileReorderAppearance();
+            }
         }
     }
 
@@ -1493,7 +1497,7 @@ public sealed partial class MasterControl : Page
         _infoTilePreviewIsMoving = false;
         InfoTileDragOverlay.Visibility = Visibility.Visible;
         Storyboard pickUp = new();
-        double pickUpScale = _tileMotionSettings.AnimationsEnabled ? MasterTileMotionPolicy.PickUpScale : 1;
+        double pickUpScale = MasterTileMotionPolicy.PickUpScale;
         AddInfoTileDropMotion(pickUp, InfoTileDragScale, nameof(ScaleTransform.ScaleX), pickUpScale);
         AddInfoTileDropMotion(pickUp, InfoTileDragScale, nameof(ScaleTransform.ScaleY), pickUpScale);
         _infoTilePickUpAnimation = pickUp;
@@ -1662,7 +1666,7 @@ public sealed partial class MasterControl : Page
         AddInfoTileDropMotion(animation, InfoTileDragPreview, "(Canvas.Left)", target.X);
         AddInfoTileDropMotion(animation, InfoTileDragPreview, "(Canvas.Top)", target.Y);
         AddInfoTileDropMotion(animation, InfoTileDragPreview, nameof(Opacity), 1);
-        double finalScale = _isEditingInfoTiles && _tileMotionSettings.AnimationsEnabled ? MasterTileMotionPolicy.SelectedScale : 1;
+        double finalScale = _isEditingInfoTiles ? MasterTileMotionPolicy.SelectedScale : 1;
         AddInfoTileDropMotion(animation, InfoTileDragScale, nameof(ScaleTransform.ScaleX), finalScale);
         AddInfoTileDropMotion(animation, InfoTileDragScale, nameof(ScaleTransform.ScaleY), finalScale);
         AddInfoTileDropMotion(animation, InfoTileDragScale, nameof(ScaleTransform.CenterX), container.ActualWidth / 2);
@@ -1688,12 +1692,12 @@ public sealed partial class MasterControl : Page
         }
     }
 
-    private void AddInfoTileDropMotion(Storyboard owner, DependencyObject target, string property, double value)
+    private static void AddInfoTileDropMotion(Storyboard owner, DependencyObject target, string property, double value)
     {
         DoubleAnimation animation = new()
         {
             To = value,
-            Duration = TimeSpan.FromMilliseconds(_tileMotionSettings.AnimationsEnabled ? MasterTileMotionPolicy.ReleaseMilliseconds : 0),
+            Duration = TimeSpan.FromMilliseconds(MasterTileMotionPolicy.ReleaseMilliseconds),
             EnableDependentAnimation = true,
             EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
         };
@@ -1735,6 +1739,48 @@ public sealed partial class MasterControl : Page
             }
         }
         if (!DispatcherQueue.TryEnqueue(() => _suppressFallbackClick = false)) { _suppressFallbackClick = false; }
+    }
+
+    private Dictionary<string, Point> CaptureInfoTilePositions()
+    {
+        Dictionary<string, Point> positions = new(StringComparer.Ordinal);
+        foreach (MasterControlInfoTileViewModel tile in _viewModel.VisibleInfoTiles)
+        {
+            if (InfoTileGrid.ContainerFromItem(tile) is not GridViewItem { ContentTemplateRoot: MasterInfoTile control } container) { continue; }
+            Rect bounds = GetInfoTileBounds(container);
+            Point offset = control.ReflowOffset;
+            positions[tile.Id] = new Point(bounds.X + offset.X, bounds.Y + offset.Y);
+        }
+        return positions;
+    }
+
+    private void AnimateInfoTileReflow(IReadOnlyDictionary<string, Point> previous)
+    {
+        // Layout slots remain stable for hit testing. Only the content moves, retargeted
+        // from its current rendered position when the pointer crosses another slot.
+        foreach (MasterControlInfoTileViewModel tile in _viewModel.VisibleInfoTiles)
+        {
+            if (StringComparer.Ordinal.Equals(tile.Id, _fallbackTileId)
+                || !previous.TryGetValue(tile.Id, out Point old)
+                || InfoTileGrid.ContainerFromItem(tile) is not GridViewItem { ContentTemplateRoot: MasterInfoTile control } container) { continue; }
+            Rect bounds = GetInfoTileBounds(container);
+            control.ReflowFrom(old.X - bounds.X, old.Y - bounds.Y);
+        }
+    }
+
+    private void RestoreInfoTileOrderWithMotion()
+    {
+        if (_pageLifetime is null || _dataChanges.IsInvalidated)
+        {
+            _viewModel.RestoreCommittedInfoTileOrder();
+            return;
+        }
+        string[] before = _viewModel.VisibleInfoTiles.Select(static tile => tile.Id).ToArray();
+        Dictionary<string, Point> positions = CaptureInfoTilePositions();
+        _viewModel.RestoreCommittedInfoTileOrder();
+        if (before.SequenceEqual(_viewModel.VisibleInfoTiles.Select(static tile => tile.Id), StringComparer.Ordinal)) { return; }
+        InfoTileGrid.UpdateLayout();
+        AnimateInfoTileReflow(positions);
     }
 
     private void EnterInfoTileEditing(string tileId)

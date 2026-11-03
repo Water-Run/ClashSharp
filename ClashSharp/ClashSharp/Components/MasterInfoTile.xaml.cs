@@ -11,7 +11,6 @@ using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Animation;
 using Windows.Foundation;
-using Windows.UI.ViewManagement;
 
 namespace ClashSharp.Components;
 
@@ -26,7 +25,7 @@ public sealed partial class MasterInfoTile : UserControl
     private bool _isSelectedForEditing;
     private Storyboard? _tiltAnimation;
     private Storyboard? _contextAnimation;
-    private readonly UISettings _motionSettings = new();
+    private Storyboard? _reflowAnimation;
 
     /// <summary>Identifies the recent rate samples shown as a compact trend.</summary>
     public static readonly DependencyProperty HistoryProperty = DependencyProperty.Register(
@@ -342,8 +341,7 @@ public sealed partial class MasterInfoTile : UserControl
     internal void UpdatePressFeedback(Point point)
     {
         if (!_isPressActive || _isInReorderContext) { return; }
-        MasterTileMotionPolicy.PressPose pose = _motionSettings.AnimationsEnabled
-            ? MasterTileMotionPolicy.GetPressPose(point.X, point.Y, ActualWidth, ActualHeight) : default;
+        MasterTileMotionPolicy.PressPose pose = MasterTileMotionPolicy.GetPressPose(point.X, point.Y, ActualWidth, ActualHeight);
         AnimateTilt(pose, MasterTileMotionPolicy.PressMilliseconds);
     }
 
@@ -359,7 +357,7 @@ public sealed partial class MasterInfoTile : UserControl
         _contextAnimation?.Stop();
         TileScaleTransform.ScaleX = x;
         TileScaleTransform.ScaleY = y;
-        double scale = active && _motionSettings.AnimationsEnabled
+        double scale = active
             ? selected ? MasterTileMotionPolicy.SelectedScale : MasterTileMotionPolicy.SurroundingScale : 1;
         Storyboard animation = new();
         AddMotion(animation, TileScaleTransform, nameof(ScaleTransform.ScaleX), scale, MasterTileMotionPolicy.ReleaseMilliseconds);
@@ -396,18 +394,43 @@ public sealed partial class MasterInfoTile : UserControl
         animation.Begin();
     }
 
-    private void AddMotion(Storyboard owner, DependencyObject target, string property, double value, int milliseconds)
+    private static void AddMotion(Storyboard owner, DependencyObject target, string property, double value, int milliseconds)
     {
         DoubleAnimation animation = new()
         {
             To = value,
-            Duration = TimeSpan.FromMilliseconds(_motionSettings.AnimationsEnabled ? milliseconds : 0),
+            Duration = TimeSpan.FromMilliseconds(milliseconds),
             EnableDependentAnimation = true,
             EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
         };
         Storyboard.SetTarget(animation, target);
         Storyboard.SetTargetProperty(animation, property);
         owner.Children.Add(animation);
+    }
+
+    /// <summary>Gets the current visual displacement while an adjacent tile is making room.</summary>
+    internal Point ReflowOffset => new(TileReflowTransform.X, TileReflowTransform.Y);
+
+    /// <summary>Moves from a captured rendered position into the newly arranged slot.</summary>
+    internal void ReflowFrom(double x, double y)
+    {
+        _reflowAnimation?.Stop();
+        _reflowAnimation = null;
+        TileReflowTransform.X = x;
+        TileReflowTransform.Y = y;
+        if (Math.Abs(x) < 0.1 && Math.Abs(y) < 0.1) { return; }
+        Storyboard animation = new();
+        AddMotion(animation, TileReflowTransform, nameof(TranslateTransform.X), 0, MasterTileMotionPolicy.ReleaseMilliseconds);
+        AddMotion(animation, TileReflowTransform, nameof(TranslateTransform.Y), 0, MasterTileMotionPolicy.ReleaseMilliseconds);
+        _reflowAnimation = animation;
+        animation.Completed += (_, _) =>
+        {
+            if (!ReferenceEquals(_reflowAnimation, animation)) { return; }
+            _reflowAnimation = null;
+            animation.Stop();
+            TileReflowTransform.X = TileReflowTransform.Y = 0;
+        };
+        animation.Begin();
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
@@ -423,6 +446,9 @@ public sealed partial class MasterInfoTile : UserControl
         _isPressActive = false;
         _tiltAnimation?.Stop();
         _contextAnimation?.Stop();
+        _reflowAnimation?.Stop();
+        _reflowAnimation = null;
+        TileReflowTransform.X = TileReflowTransform.Y = 0;
         _tiltAnimation = null;
         _contextAnimation = null;
         _isInReorderContext = false;

@@ -14,6 +14,18 @@ public sealed class MasterTileMotionPolicyTests
     }
 
     [Theory]
+    [InlineData(0, 58, 0, 17)]
+    [InlineData(280, 58, 0, -17)]
+    [InlineData(140, 0, -17, 0)]
+    [InlineData(140, 116, 17, 0)]
+    public void PressedEdge_RotatesIntoTheWinUiProjectionPlane(double x, double y, double rotationX, double rotationY)
+    {
+        var pose = MasterTileMotionPolicy.GetPressPose(x, y, 280, 116);
+        Assert.Equal(rotationX, pose.RotationX);
+        Assert.Equal(rotationY, pose.RotationY);
+    }
+
+    [Theory]
     [InlineData(0, 58, 280, 58)]
     [InlineData(140, 0, 140, 116)]
     [InlineData(0, 0, 280, 116)]
