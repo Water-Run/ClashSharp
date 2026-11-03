@@ -23,7 +23,7 @@
         VerticalScrollBarVisibility="Auto"
         HorizontalScrollBarVisibility="Disabled"
         HorizontalContentAlignment="Stretch">
-        <StackPanel Style="{StaticResource ClashReadingPagePanelStyle}" MaxWidth="840" HorizontalAlignment="Left" Spacing="24">
+        <StackPanel Style="{StaticResource ClashReadingPagePanelStyle}" MaxWidth="840" HorizontalAlignment="Center" Spacing="24">
             <TextBlock Text="{Binding PageTitleText}" Style="{ThemeResource TitleTextBlockStyle}" TextWrapping="Wrap" AutomationProperties.HeadingLevel="Level1" />
             <StackPanel x:Name="AboutBrand" Spacing="4" MaxWidth="480" HorizontalAlignment="Center">
                 <Image x:Name="AboutLogo" Source="ms-appx:///Assets/Square150x150Logo.scale-400.png" Width="64" Height="64" Stretch="Uniform" HorizontalAlignment="Center" Margin="0,0,0,8" AutomationProperties.Name="{Binding AppNameText}" />
