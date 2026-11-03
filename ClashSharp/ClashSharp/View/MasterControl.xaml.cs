@@ -1312,6 +1312,12 @@ public sealed partial class MasterControl : Page
     private void InitializeInfoTilePointerReorder()
     {
         if (SupportsNativeTileDrag) { return; }
+        // Collection moves schedule layout asynchronously. Keep the marker on the actual
+        // arranged source slot, including reflow and scrolling while the pointer is held.
+        InfoTileGrid.LayoutUpdated += (_, _) =>
+        {
+            if (_fallbackPointer is not null && _infoTileDragInitialOrder is not null) { UpdateInfoTileDropOutline(); }
+        };
         InfoTileGrid.AddHandler(PointerPressedEvent, new PointerEventHandler(InfoTileGrid_PointerPressed), true);
         InfoTileGrid.AddHandler(PointerMovedEvent, new PointerEventHandler(InfoTileGrid_PointerMoved), true);
         InfoTileGrid.AddHandler(PointerReleasedEvent, new PointerEventHandler(InfoTileGrid_PointerReleased), true);
