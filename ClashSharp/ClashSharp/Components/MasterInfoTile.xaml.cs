@@ -3,7 +3,6 @@ using System.Linq;
 using System.Windows.Input;
 using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.Presentation.Dialogs;
-using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Data;
@@ -16,12 +15,6 @@ namespace ClashSharp.Components;
 /// <summary>Reusable compact information tile with an optional state action.</summary>
 public sealed partial class MasterInfoTile : UserControl
 {
-    private const double DragSuppressThreshold = 8;
-
-    private Point? _pressedPoint;
-    private bool _suppressNextTap;
-    private bool _isReordering;
-
     private ICommand? _observedCommand;
 
     private bool _isLoaded;
@@ -117,18 +110,28 @@ public sealed partial class MasterInfoTile : UserControl
     public static readonly DependencyProperty NavigationTextProperty = DependencyProperty.Register(
         nameof(NavigationText), typeof(string), typeof(MasterInfoTile), new PropertyMetadata(string.Empty));
 
+    /// <summary>Identifies the localized guidance for native tile reordering.</summary>
+    public static readonly DependencyProperty ReorderHintProperty = DependencyProperty.Register(
+        nameof(ReorderHint), typeof(string), typeof(MasterInfoTile), new PropertyMetadata(string.Empty));
+
+    /// <summary>Gets or sets the guidance shown with the tile's tooltip.</summary>
+    public string ReorderHint
+    {
+        get => (string)GetValue(ReorderHintProperty);
+        set => SetValue(ReorderHintProperty, value);
+    }
+
     /// <summary>Initializes an information tile and its pointer-aware visual states.</summary>
     public MasterInfoTile()
     {
         InitializeComponent();
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
-        // Native Button supplies keyboard, focus and UIA Invoke behavior. Observe handled
-        // pointer events as well, because Button may capture them before the parent GridView.
-        TileButton.AddHandler(PointerPressedEvent, new PointerEventHandler(TileRoot_PointerPressed), true);
-        TileButton.AddHandler(PointerMovedEvent, new PointerEventHandler(TileRoot_PointerMoved), true);
-        TileButton.AddHandler(PointerReleasedEvent, new PointerEventHandler(TileRoot_PointerReleased), true);
-        TileButton.AddHandler(PointerCanceledEvent, new PointerEventHandler(TileRoot_PointerCanceled), true);
+        // The containing GridViewItem is the sole semantic input owner. A child Button
+        // captures the pointer before GridView can recognize its standard reorder gesture.
+        AddHandler(PointerPressedEvent, new PointerEventHandler(TileRoot_PointerPressed), true);
+        AddHandler(PointerReleasedEvent, new PointerEventHandler(TileRoot_PointerReleased), true);
+        AddHandler(PointerCanceledEvent, new PointerEventHandler(TileRoot_PointerCanceled), true);
     }
 
     /// <summary>Gets or sets the tile's primary label.</summary>
@@ -203,8 +206,8 @@ public sealed partial class MasterInfoTile : UserControl
 
     /// <summary>Combines the current tile text without empty or repeated explanations.</summary>
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1822:Mark members as static", Justification = "WinUI x:Bind calls this function through the control instance.")]
-    public string GetTooltipText(string value, string detail, string description) =>
-        string.Join(Environment.NewLine, new[] { value, detail, description }
+    public string GetTooltipText(string value, string detail, string description, string reorderHint) =>
+        string.Join(Environment.NewLine, new[] { value, detail, description, reorderHint }
             .Where(text => !string.IsNullOrWhiteSpace(text)).Distinct(StringComparer.Ordinal));
 
     /// <summary>Builds the live detail paragraphs without empty or repeated values.</summary>
@@ -218,14 +221,10 @@ public sealed partial class MasterInfoTile : UserControl
     public Visibility GetNavigationVisibility(ICommand? navigation, string text) =>
         navigation is not null && !string.IsNullOrWhiteSpace(text) ? Visibility.Visible : Visibility.Collapsed;
 
-    private void TileButton_Click(object sender, RoutedEventArgs e)
+    /// <summary>Invokes the action or opens details after the containing native item accepts a click.</summary>
+    internal void Activate()
     {
-        if (_isReordering) { return; }
-        if (_suppressNextTap)
-        {
-            _suppressNextTap = false;
-            return;
-        }
+        if (!_isLoaded) { return; }
 
         if (TileCommand is not ICommand command)
         {
@@ -236,7 +235,7 @@ public sealed partial class MasterInfoTile : UserControl
             presentation.Setters.Add(new Setter(FlowDirectionProperty, root.FlowDirection));
             TileDetailsFlyout.FlyoutPresenterStyle = presentation;
             TileDetailsScroller.MaxHeight = Math.Max(1, Math.Min(360, XamlRoot.Size.Height - 120));
-            TileDetailsFlyout.ShowAt(TileButton);
+            TileDetailsFlyout.ShowAt(this);
             return;
         }
 
@@ -285,46 +284,21 @@ public sealed partial class MasterInfoTile : UserControl
 
     private void TileRoot_PointerPressed(object sender, PointerRoutedEventArgs e)
     {
-        _pressedPoint = e.GetCurrentPoint(TileRoot).Position;
-        _suppressNextTap = false;
-        if (TileCommand is not null)
-        {
-            _ = VisualStateManager.GoToState(this, "Pressed", true);
-        }
-    }
-
-    private void TileRoot_PointerMoved(object sender, PointerRoutedEventArgs e)
-    {
-        if (_pressedPoint is not Point pressedPoint)
-        {
-            return;
-        }
-
-        Point currentPoint = e.GetCurrentPoint(TileRoot).Position;
-        double deltaX = currentPoint.X - pressedPoint.X;
-        double deltaY = currentPoint.Y - pressedPoint.Y;
-        if ((deltaX * deltaX) + (deltaY * deltaY) >= DragSuppressThreshold * DragSuppressThreshold)
-        {
-            _suppressNextTap = true;
-            _ = VisualStateManager.GoToState(this, "Normal", true);
-        }
+        _ = VisualStateManager.GoToState(this, "Pressed", true);
     }
 
     private void TileRoot_PointerReleased(object sender, PointerRoutedEventArgs e)
     {
-        _pressedPoint = null;
         _ = VisualStateManager.GoToState(this, "PointerOver", true);
-        // A drag may suppress native Click entirely. Clear its residue after this input
-        // message so the next keyboard/UIA activation is never mistaken for the drag.
-        DispatcherQueue.TryEnqueue(() => _suppressNextTap = false);
     }
 
     private void TileRoot_PointerCanceled(object sender, PointerRoutedEventArgs e)
     {
-        _pressedPoint = null;
-        _suppressNextTap = false;
-        _ = VisualStateManager.GoToState(this, "Normal", true);
+        ResetPointerFeedback();
     }
+
+    /// <summary>Clears press feedback when the containing grid ends or transfers the pointer.</summary>
+    internal void ResetPointerFeedback() => VisualStateManager.GoToState(this, "Normal", true);
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
@@ -338,9 +312,6 @@ public sealed partial class MasterInfoTile : UserControl
         _isLoaded = false;
         WindowDialogCoordinator.TryDismissTransient(XamlRoot, TileDetailsFlyout.Hide);
         ObserveCommand();
-        _pressedPoint = null;
-        _suppressNextTap = false;
-        _isReordering = false;
     }
 
     private static void OnTileCommandChanged(DependencyObject dependencyObject, DependencyPropertyChangedEventArgs args)
@@ -371,20 +342,10 @@ public sealed partial class MasterInfoTile : UserControl
 
     private void UpdateCommandState()
     {
-        if (TileButton is null)
-        {
-            return;
-        }
-
-        bool available = _isLoaded && (TileCommand is null || TileCommand.CanExecute(null));
+        if (ExecutionProgress is null) { return; }
         bool running = _isLoaded && TileCommand is IAsyncCommandState { IsRunning: true };
-        TileButton.Visibility = Visibility.Visible;
-        // Disabling the focused button moves focus into the next tile. Keep the active
-        // command's button focusable; TileButton_Click still rejects duplicate execution.
-        TileButton.IsEnabled = available || running;
         ExecutionProgress.IsActive = running;
         ExecutionProgress.Visibility = running ? Visibility.Visible : Visibility.Collapsed;
-        ProtectedCursor = available ? InputSystemCursor.Create(InputSystemCursorShape.Hand) : null;
     }
 
     private static void OnIsToggleOnChanged(DependencyObject dependencyObject, DependencyPropertyChangedEventArgs args)
@@ -400,29 +361,4 @@ public sealed partial class MasterInfoTile : UserControl
         _ = VisualStateManager.GoToState(this, IsToggleOn ? "TileOn" : "TileOff", useTransitions);
     }
 
-    /// <summary>Prevents the click that follows a page-initiated long-press reorder from activating the tile.</summary>
-    /// <remarks>The page raises this while the pointer is still down, before the release click is dispatched.</remarks>
-    internal void SuppressNextActivation()
-    {
-        _suppressNextTap = true;
-    }
-
-    /// <summary>Transfers this button's active pointer to the page's reorder gesture.</summary>
-    /// <param name="pointer">The system pointer that is still pressed on this tile.</param>
-    internal void BeginReorderPointer(Pointer pointer)
-    {
-        _isReordering = true;
-        _pressedPoint = null;
-        SuppressNextActivation();
-        TileButton.ReleasePointerCapture(pointer);
-    }
-
-    /// <summary>Restores ordinary pointer, keyboard and UIA activation after this input turn.</summary>
-    internal void EndReorderPointer()
-    {
-        _isReordering = false;
-        _pressedPoint = null;
-        _ = VisualStateManager.GoToState(this, "Normal", true);
-        if (!DispatcherQueue.TryEnqueue(() => _suppressNextTap = false)) { _suppressNextTap = false; }
-    }
 }

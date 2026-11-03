@@ -219,7 +219,7 @@ internal static partial class LocalizationResources
             ["Master.Diagnostics.Failed"] = "بررسی ناموفق؛ برای تلاش مجدد کلیک کنید",
             ["Master.Diagnostics.Passed.Format"] = "{0}/{1} در دسترس",
             ["Master.Diagnostics.CurrentRoute"] = "از پراکسی فعلی ویندوز و مسیریابی TUN استفاده می‌کند.",
-            ["Master.Tile.ReorderHint"] = "برای تغییر ترتیب کاشی‌ها، این دستگیره را بکشید.",
+            ["Master.Tile.ReorderHint"] = "برای تغییر ترتیب کاشی را بکشید؛ برای ذخیره رها کنید یا برای لغو Esc را فشار دهید.",
             ["Master.Tile.RestoreRecommended"] = "بازیابی چیدمان پیشنهادی",
             ["Master.Tile.ShowAll"] = "نمایش همه",
             ["Master.Tile.HideAll"] = "پنهان کردن همه",

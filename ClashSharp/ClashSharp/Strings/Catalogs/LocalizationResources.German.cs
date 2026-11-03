@@ -219,7 +219,7 @@ internal static partial class LocalizationResources
             ["Master.Diagnostics.Failed"] = "Prüfung fehlgeschlagen; zum Wiederholen klicken",
             ["Master.Diagnostics.Passed.Format"] = "{0}/{1} erreichbar",
             ["Master.Diagnostics.CurrentRoute"] = "Verwendet den aktuellen Windows-Proxy und die TUN-Routen.",
-            ["Master.Tile.ReorderHint"] = "Ziehen Sie diesen Griff, um Kacheln neu anzuordnen.",
+            ["Master.Tile.ReorderHint"] = "Kachel zum Umordnen ziehen; zum Speichern loslassen oder mit Esc abbrechen.",
             ["Master.Tile.RestoreRecommended"] = "Empfohlenes Layout wiederherstellen",
             ["Master.Tile.ShowAll"] = "Alle anzeigen",
             ["Master.Tile.HideAll"] = "Alle ausblenden",

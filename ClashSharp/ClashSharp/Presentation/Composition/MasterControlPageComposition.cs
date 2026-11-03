@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Net;
 using System.Net.Http;
+using System.Security.Principal;
 using System.Threading;
 using System.Threading.Tasks;
 using ClashSharp.ApplicationModel.Presentation;
@@ -30,7 +31,8 @@ internal sealed record MasterControlPageDependencies(
     Action OpenSettings,
     Func<string, string> FilterDisplayText,
     Func<Action, IDisposable> SubscribeToDataChanges,
-    Func<Guid?> GetDataGenerationId);
+    Func<Guid?> GetDataGenerationId,
+    bool SupportsNativeTileDrag);
 
 /// <summary>Builds the explicit dependency graph for the master-control page.</summary>
 internal static class MasterControlPageComposition
@@ -137,7 +139,16 @@ internal static class MasterControlPageComposition
             openSettings,
             context.MainlandChinaTextDisplay.Apply,
             changed => new DataGenerationSubscription(settings, changed),
-            settings.GetBoundDataGenerationId);
+            settings.GetBoundDataGenerationId,
+            SupportsNativeTileDrag());
+    }
+
+    private static bool SupportsNativeTileDrag()
+    {
+        // WinUI/OLE drag-and-drop is unsupported in an elevated process. Keep reordering
+        // inside the owning XAML window in that case; never change the user's UAC policy.
+        using WindowsIdentity identity = WindowsIdentity.GetCurrent();
+        return !new WindowsPrincipal(identity).IsInRole(WindowsBuiltInRole.Administrator);
     }
 
     private static long GetWorkingSetBytes()

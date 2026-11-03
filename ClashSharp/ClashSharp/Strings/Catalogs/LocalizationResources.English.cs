@@ -219,7 +219,7 @@ internal static partial class LocalizationResources
             ["Master.Diagnostics.Failed"] = "Check failed; click to retry",
             ["Master.Diagnostics.Passed.Format"] = "{0}/{1} reachable",
             ["Master.Diagnostics.CurrentRoute"] = "Uses the current Windows proxy and TUN routing.",
-            ["Master.Tile.ReorderHint"] = "Drag this handle to reorder tiles.",
+            ["Master.Tile.ReorderHint"] = "Drag a tile to reorder; release to save or press Esc to cancel.",
             ["Master.Tile.RestoreRecommended"] = "Restore recommended layout",
             ["Master.Tile.ShowAll"] = "Show all tiles",
             ["Master.Tile.HideAll"] = "Hide all tiles",

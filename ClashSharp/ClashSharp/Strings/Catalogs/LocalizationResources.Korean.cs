@@ -219,7 +219,7 @@ internal static partial class LocalizationResources
             ["Master.Diagnostics.Failed"] = "확인 실패, 클릭하여 다시 시도",
             ["Master.Diagnostics.Passed.Format"] = "{0}/{1} 접속 가능",
             ["Master.Diagnostics.CurrentRoute"] = "현재 Windows 프록시와 TUN 라우팅을 사용합니다.",
-            ["Master.Tile.ReorderHint"] = "이 핸들을 끌어 타일 순서를 바꿉니다.",
+            ["Master.Tile.ReorderHint"] = "타일을 끌어 순서를 바꾸고 놓아서 저장하거나 Esc 키로 취소하세요.",
             ["Master.Tile.RestoreRecommended"] = "추천 배치로 복원",
             ["Master.Tile.ShowAll"] = "모두 표시",
             ["Master.Tile.HideAll"] = "모두 숨기기",

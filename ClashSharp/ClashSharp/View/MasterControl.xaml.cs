@@ -24,7 +24,6 @@ using Microsoft.UI.Xaml.Data;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Windows.Foundation;
-using VirtualKey = Windows.System.VirtualKey;
 
 namespace ClashSharp.View;
 
@@ -54,12 +53,6 @@ public sealed partial class MasterControl : Page
     private const double InfoTileEditorMaxListHeight = 420;
     private const double InfoTileEditorMaxDialogHeight = 756;
     private const double InfoTileEditorWindowChrome = 272;
-
-    /// <summary>Delay that turns a tile press into a reorder drag, matching the platform long press.</summary>
-    private const int InfoTileHoldDelayMilliseconds = 450;
-
-    /// <summary>Pointer travel that cancels the pending hold so ordinary clicks and scrolling still work.</summary>
-    private const double InfoTileHoldTolerance = 8;
 
     /// <summary>Bindable view model for this page.</summary>
     private readonly MasterControlViewModel _viewModel;
@@ -92,17 +85,14 @@ public sealed partial class MasterControl : Page
     private double _heroStatusItemWidth = PreferredHeroStatusItemWidth;
     private double _infoTileItemWidth = PreferredInfoTileWidth;
 
-    private DispatcherQueueTimer? _infoTileHoldTimer;
-    private Point _infoTilePressPoint;
-    private string? _infoTileDragTileId;
-    private string? _infoTilePressTileId;
-    private bool _infoTileOrderChanged;
-    // The grid owns capture only after a hold wins over the tile's ordinary button action.
-    private Pointer? _infoTilePointer;
-    private MasterInfoTile? _infoTileDragControl;
-    private long _infoTileGestureEpoch;
-    private bool _infoTileCaptureTransferInProgress;
-    private AppWindow? _infoTileHostWindow;
+    // GridView owns pointer capture, drag visuals, insertion animation and cancellation.
+    // Only a completed move from this data/page lifetime may enter the persistence queue.
+    private string[]? _infoTileDragInitialOrder;
+    private CancellationTokenSource? _infoTileDragLifetime;
+    private Guid? _infoTileDragGenerationId;
+
+    /// <summary>Gets whether this process can use WinUI's native drag-and-drop service.</summary>
+    public bool SupportsNativeTileDrag { get; }
 
     internal MasterControl(MasterControlPageDependencies dependencies)
     {
@@ -135,16 +125,10 @@ public sealed partial class MasterControl : Page
             ?? throw new ArgumentException("A latency-test function is required.", nameof(dependencies));
         _openSettings = dependencies.OpenSettings
             ?? throw new ArgumentException("A settings navigation function is required.", nameof(dependencies));
+        SupportsNativeTileDrag = dependencies.SupportsNativeTileDrag;
         InitializeComponent();
         DataContext = _viewModel;
-        // Long-press reordering is owned by this page: the tile keeps its native button for click,
-        // keyboard and UIA behavior, so the handled pointer events must be observed here.
-        InfoTileGrid.AddHandler(PointerPressedEvent, new PointerEventHandler(InfoTileGrid_PointerPressed), true);
-        InfoTileGrid.AddHandler(PointerMovedEvent, new PointerEventHandler(InfoTileGrid_PointerMoved), true);
-        InfoTileGrid.AddHandler(PointerReleasedEvent, new PointerEventHandler(InfoTileGrid_PointerReleased), true);
-        InfoTileGrid.AddHandler(PointerCanceledEvent, new PointerEventHandler(InfoTileGrid_PointerCanceled), true);
-        InfoTileGrid.AddHandler(PointerCaptureLostEvent, new PointerEventHandler(InfoTileGrid_PointerCaptureLost), true);
-        InfoTileGrid.AddHandler(KeyDownEvent, new KeyEventHandler(InfoTileGrid_KeyDown), true);
+        InitializeInfoTilePointerReorder();
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
     }
@@ -161,12 +145,7 @@ public sealed partial class MasterControl : Page
 
         CancellationTokenSource lifetime = new();
         _pageLifetime = lifetime;
-        if (XamlRoot is XamlRoot visualRoot
-            && AppWindow.GetFromWindowId(visualRoot.ContentIslandEnvironment.AppWindowId) is AppWindow hostWindow)
-        {
-            _infoTileHostWindow = hostWindow;
-            hostWindow.Changed += InfoTileHostWindow_Changed;
-        }
+        ObserveInfoTileHostWindow();
         await Task.WhenAll(_tileActions.DrainAsync(), _refreshSession.DrainAsync());
         await _dataChanges.DrainAsync();
         if (!ReferenceEquals(_pageLifetime, lifetime))
@@ -520,11 +499,6 @@ public sealed partial class MasterControl : Page
     /// <summary>Cancels and observes current-page loading when the page leaves the visual tree.</summary>
     private async void OnUnloaded(object sender, RoutedEventArgs e)
     {
-        if (_infoTileHostWindow is AppWindow hostWindow)
-        {
-            hostWindow.Changed -= InfoTileHostWindow_Changed;
-            _infoTileHostWindow = null;
-        }
         CancellationTokenSource? lifetime = _pageLifetime;
         if (lifetime is null)
         {
@@ -533,7 +507,8 @@ public sealed partial class MasterControl : Page
 
         _pageLifetime = null;
         _dataReady = false;
-        EndInfoTileGesture(restoreOrder: true);
+        StopObservingInfoTileHostWindow();
+        CancelInfoTileReorder();
         _dataChanges.Stop();
         _tileActions.Deactivate();
         _loadSession.Cancel();
@@ -1081,237 +1056,88 @@ public sealed partial class MasterControl : Page
     private void InfoTileGrid_ContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
     {
         ApplyInfoTileContainerWidth(args.ItemContainer);
+        if (args.InRecycleQueue)
+        {
+            args.ItemContainer.ClearValue(AutomationProperties.NameProperty);
+            args.ItemContainer.ClearValue(AutomationProperties.HelpTextProperty);
+        }
+        else if (args.Item is MasterControlInfoTileViewModel tile)
+        {
+            args.ItemContainer.SetBinding(AutomationProperties.NameProperty,
+                new Binding { Source = tile, Path = new PropertyPath(nameof(tile.Title)), Mode = BindingMode.OneWay });
+            args.ItemContainer.SetBinding(AutomationProperties.HelpTextProperty,
+                new Binding { Source = tile, Path = new PropertyPath(nameof(tile.ReorderHint)), Mode = BindingMode.OneWay });
+        }
     }
 
-    private void InfoTileGrid_PointerPressed(object sender, PointerRoutedEventArgs e)
+    private void InfoTileGrid_ItemClick(object sender, ItemClickEventArgs e)
     {
-        if (_infoTilePointer is not null || !_viewModel.CanEditTileLayout)
+        if (_infoTileDragInitialOrder is not null || _fallbackPointer is not null || _suppressFallbackClick
+            || !_dataReady || _dataChanges.IsInvalidated)
         {
             return;
         }
 
-        PointerPoint point = e.GetCurrentPoint(InfoTileGrid);
-        if (!(e.Pointer.PointerDeviceType == PointerDeviceType.Mouse
-                ? point.Properties.IsLeftButtonPressed : e.Pointer.IsInContact)
-            || FindInfoTileAt(point.Position) is not MasterControlInfoTileViewModel tile)
+        if (InfoTileGrid.ContainerFromItem(e.ClickedItem) is GridViewItem { ContentTemplateRoot: MasterInfoTile tile })
         {
+            tile.Activate();
+        }
+    }
+
+    private void InfoTileGrid_DragItemsStarting(object sender, DragItemsStartingEventArgs e)
+    {
+        if (_pageLifetime is null || !_dataReady || _dataChanges.IsInvalidated
+            || !_viewModel.CanEditTileLayout || e.Items.Count != 1)
+        {
+            e.Cancel = true;
             return;
         }
 
-        _infoTilePressPoint = point.Position;
-        _infoTilePressTileId = tile.Id;
-        _infoTilePointer = e.Pointer;
-        _infoTileGestureEpoch++;
-        DispatcherQueueTimer timer = DispatcherQueue.CreateTimer();
-        timer.Interval = TimeSpan.FromMilliseconds(InfoTileHoldDelayMilliseconds);
-        timer.IsRepeating = false;
-        timer.Tick += (_, _) =>
-        {
-            timer.Stop();
-            if (ReferenceEquals(_infoTileHoldTimer, timer))
-            {
-                BeginInfoTileDrag(tile.Id);
-            }
-        };
-        _infoTileHoldTimer = timer;
-        timer.Start();
+        _infoTileDragInitialOrder = _viewModel.VisibleInfoTiles.Select(static tile => tile.Id).ToArray();
+        _infoTileDragLifetime = _pageLifetime;
+        _infoTileDragGenerationId = _getDataGenerationId();
+        e.Data.RequestedOperation = Windows.ApplicationModel.DataTransfer.DataPackageOperation.Move;
     }
 
-    private void InfoTileGrid_PointerMoved(object sender, PointerRoutedEventArgs e)
+    private async void InfoTileGrid_DragItemsCompleted(ListViewBase sender, DragItemsCompletedEventArgs e)
     {
-        if (_infoTilePointer?.PointerId != e.Pointer.PointerId) { return; }
-        if (!_viewModel.CanEditTileLayout) { EndInfoTileGesture(restoreOrder: true); return; }
-        PointerPoint point = e.GetCurrentPoint(InfoTileGrid);
-        Point position = point.Position;
-        if (_infoTileDragTileId is null)
-        {
-            if (_infoTileHoldTimer is not null
-                && Distance(position, _infoTilePressPoint) > InfoTileHoldTolerance)
-            {
-                if (e.Pointer.PointerDeviceType == PointerDeviceType.Mouse && point.Properties.IsLeftButtonPressed
-                    && _infoTilePressTileId is string pressedTileId)
-                {
-                    // Desktop users can drag immediately after crossing the movement threshold.
-                    // Touch movement still cancels the hold so ordinary scrolling keeps working.
-                    CancelInfoTileHold();
-                    BeginInfoTileDrag(pressedTileId);
-                }
-                else
-                {
-                    EndInfoTileGesture(restoreOrder: false);
-                }
-            }
-
-            if (_infoTileDragTileId is null) { return; }
-        }
-
-        if (FindInfoTileAt(position) is MasterControlInfoTileViewModel target
-            && _viewModel.MoveVisibleInfoTile(_infoTileDragTileId, target.Id))
-        {
-            _infoTileOrderChanged = true;
-        }
+        await CompleteInfoTileReorderAsync(e.DropResult == Windows.ApplicationModel.DataTransfer.DataPackageOperation.Move);
     }
 
-    private async void InfoTileGrid_PointerReleased(object sender, PointerRoutedEventArgs e)
+    private async Task CompleteInfoTileReorderAsync(bool acceptedMove)
     {
-        if (_infoTilePointer?.PointerId != e.Pointer.PointerId) { return; }
-        bool wasDragging = _infoTileDragTileId is not null;
-        bool commit = _infoTileDragTileId is not null && _infoTileOrderChanged;
-        EndInfoTileGesture(restoreOrder: false);
-        if (wasDragging) { e.Handled = true; }
-        if (commit)
+        string[]? initialOrder = _infoTileDragInitialOrder;
+        bool canCommit = initialOrder is not null && ReferenceEquals(_infoTileDragLifetime, _pageLifetime)
+            && _pageLifetime is not null && !_dataChanges.IsInvalidated
+            && _infoTileDragGenerationId == _getDataGenerationId()
+            && acceptedMove;
+        _infoTileDragInitialOrder = null;
+        _infoTileDragLifetime = null;
+        _infoTileDragGenerationId = null;
+        if (!canCommit)
+        {
+            _viewModel.RestoreCommittedInfoTileOrder();
+            return;
+        }
+
+        if (!initialOrder!.SequenceEqual(_viewModel.VisibleInfoTiles.Select(static tile => tile.Id), StringComparer.Ordinal))
         {
             await CommitInfoTileOrderAsync();
         }
     }
 
-    private void InfoTileGrid_PointerCanceled(object sender, PointerRoutedEventArgs e)
+    private void CancelInfoTileReorder()
     {
-        if (_infoTilePointer?.PointerId != e.Pointer.PointerId) { return; }
-        // Releasing the original button can cancel its pressed state synchronously.
-        // Later system cancellation ends the gesture regardless of its routed source.
-        if (_infoTileCaptureTransferInProgress) { return; }
-        EndInfoTileGesture(restoreOrder: true);
-    }
-
-    private void InfoTileGrid_PointerCaptureLost(object sender, PointerRoutedEventArgs e)
-    {
-        if (_infoTilePointer?.PointerId != e.Pointer.PointerId) { return; }
-        long epoch = _infoTileGestureEpoch;
-        uint pointerId = e.Pointer.PointerId;
-        // Native release can drop capture before the release handler reaches us. Delay the
-        // decision one input turn, then distinguish a completed transfer from actual loss.
-        if (!DispatcherQueue.TryEnqueue(() =>
-        {
-            if (_infoTilePointer is not null && _infoTileGestureEpoch == epoch && !HasInfoTilePointerCapture(pointerId))
-            {
-                EndInfoTileGesture(restoreOrder: true);
-            }
-        })) { EndInfoTileGesture(restoreOrder: true); }
-    }
-
-    private void InfoTileHostWindow_Changed(AppWindow sender, AppWindowChangedEventArgs args)
-    {
-        // Observe the owning presenter so minimization does not depend on another pointer
-        // event or an island visibility notification.
-        if (!sender.IsVisible || sender.Presenter is OverlappedPresenter { State: OverlappedPresenterState.Minimized })
-        {
-            EndInfoTileGesture(restoreOrder: true);
-        }
-    }
-
-    private void InfoTileGrid_KeyDown(object sender, KeyRoutedEventArgs e)
-    {
-        if (e.Key != VirtualKey.Escape || _infoTilePointer is null) { return; }
-        EndInfoTileGesture(restoreOrder: true);
-        e.Handled = true;
-    }
-
-    private void BeginInfoTileDrag(string tileId)
-    {
-        _infoTileHoldTimer = null;
-        if (_infoTilePointer is not Pointer pointer
-            || pointer.PointerDeviceType != PointerDeviceType.Mouse && !pointer.IsInContact || !_viewModel.CanEditTileLayout
-            || FindInfoTileById(tileId) is not MasterControlInfoTileViewModel tile
-            || InfoTileGrid.ContainerFromItem(tile) is not GridViewItem container
-            || container.ContentTemplateRoot is not MasterInfoTile control)
-        {
-            EndInfoTileGesture(restoreOrder: true);
-            return;
-        }
-        _infoTileDragTileId = tileId;
-        _infoTileOrderChanged = false;
-        _infoTileDragControl = control;
-        bool captured;
-        _infoTileCaptureTransferInProgress = true;
-        try
-        {
-            control.BeginReorderPointer(pointer);
-            container.ReleasePointerCapture(pointer);
-            captured = HasInfoTilePointerCapture(pointer.PointerId) || InfoTileGrid.CapturePointer(pointer);
-        }
-        finally { _infoTileCaptureTransferInProgress = false; }
-        if (!captured || _infoTilePointer is null)
-        {
-            if (captured) { InfoTileGrid.ReleasePointerCapture(pointer); }
-            EndInfoTileGesture(restoreOrder: true);
-        }
-    }
-
-    private bool HasInfoTilePointerCapture(uint pointerId) =>
-        // WinUI can return null when the element has not captured any pointers yet.
-        InfoTileGrid.PointerCaptures?.Any(candidate => candidate.PointerId == pointerId) == true;
-
-    private void EndInfoTileGesture(bool restoreOrder)
-    {
-        Pointer? pointer = _infoTilePointer;
-        MasterInfoTile? control = _infoTileDragControl;
-        bool changed = _infoTileOrderChanged;
-        _infoTilePointer = null;
-        _infoTileDragControl = null;
-        _infoTileDragTileId = null;
-        _infoTilePressTileId = null;
-        _infoTileOrderChanged = false;
-        _infoTileGestureEpoch++;
-        CancelInfoTileHold();
-        if (pointer is not null) { InfoTileGrid.ReleasePointerCapture(pointer); }
-        control?.EndReorderPointer();
-        if (restoreOrder && changed) { _viewModel.RestoreCommittedInfoTileOrder(); }
-    }
-
-    private void CancelInfoTileHold()
-    {
-        if (_infoTileHoldTimer is not DispatcherQueueTimer timer)
+        ResetInfoTilePointerReorder();
+        if (_infoTileDragInitialOrder is null)
         {
             return;
         }
 
-        _infoTileHoldTimer = null;
-        timer.Stop();
-    }
-
-    private MasterControlInfoTileViewModel? FindInfoTileById(string tileId)
-    {
-        foreach (MasterControlInfoTileViewModel tile in _viewModel.VisibleInfoTiles)
-        {
-            if (StringComparer.Ordinal.Equals(tile.Id, tileId))
-            {
-                return tile;
-            }
-        }
-
-        return null;
-    }
-
-    private MasterControlInfoTileViewModel? FindInfoTileAt(Point position)
-    {
-        // Pointer positions are relative to the grid; hit testing requires XAML-root
-        // coordinates even when its search is limited to this subtree.
-        Point hostPosition = InfoTileGrid.TransformToVisual(null).TransformPoint(position);
-        foreach (UIElement element in VisualTreeHelper.FindElementsInHostCoordinates(hostPosition, InfoTileGrid))
-        {
-            for (DependencyObject? node = element; node is not null; node = VisualTreeHelper.GetParent(node))
-            {
-                if (node is GridViewItem { Content: MasterControlInfoTileViewModel tile })
-                {
-                    return tile;
-                }
-
-                if (ReferenceEquals(node, InfoTileGrid))
-                {
-                    break;
-                }
-            }
-        }
-
-        return null;
-    }
-
-    private static double Distance(Point first, Point second)
-    {
-        double deltaX = first.X - second.X;
-        double deltaY = first.Y - second.Y;
-        return Math.Sqrt((deltaX * deltaX) + (deltaY * deltaY));
+        _infoTileDragInitialOrder = null;
+        _infoTileDragLifetime = null;
+        _infoTileDragGenerationId = null;
+        _viewModel.RestoreCommittedInfoTileOrder();
     }
 
     private async Task CommitInfoTileOrderAsync()
@@ -1469,5 +1295,296 @@ public sealed partial class MasterControl : Page
         Grid.SetRow(button, row);
         Grid.SetColumn(button, column);
         Grid.SetColumnSpan(button, columnSpan);
+    }
+
+    private Pointer? _fallbackPointer;
+    private string? _fallbackTileId;
+    private Point _fallbackPressPoint;
+    private Point _fallbackPreviewOffset;
+    private Point _fallbackLastPoint;
+    private Point _fallbackLastRootPoint;
+    private DispatcherQueueTimer? _fallbackHoldTimer;
+    private DispatcherQueueTimer? _fallbackScrollTimer;
+    private bool _fallbackCaptureTransfer;
+    private bool _suppressFallbackClick;
+    private AppWindow? _infoTileHostWindow;
+
+    private void InitializeInfoTilePointerReorder()
+    {
+        if (SupportsNativeTileDrag) { return; }
+        InfoTileGrid.AddHandler(PointerPressedEvent, new PointerEventHandler(InfoTileGrid_PointerPressed), true);
+        InfoTileGrid.AddHandler(PointerMovedEvent, new PointerEventHandler(InfoTileGrid_PointerMoved), true);
+        InfoTileGrid.AddHandler(PointerReleasedEvent, new PointerEventHandler(InfoTileGrid_PointerReleased), true);
+        InfoTileGrid.AddHandler(PointerCanceledEvent, new PointerEventHandler(InfoTileGrid_PointerCanceled), true);
+        InfoTileGrid.AddHandler(PointerCaptureLostEvent, new PointerEventHandler(InfoTileGrid_PointerCaptureLost), true);
+        InfoTileGrid.AddHandler(KeyDownEvent, new KeyEventHandler(InfoTileGrid_KeyDown), true);
+    }
+
+    private void ObserveInfoTileHostWindow()
+    {
+        if (XamlRoot is XamlRoot visualRoot
+            && AppWindow.GetFromWindowId(visualRoot.ContentIslandEnvironment.AppWindowId) is AppWindow hostWindow)
+        {
+            _infoTileHostWindow = hostWindow;
+            hostWindow.Changed += InfoTileHostWindow_Changed;
+        }
+    }
+
+    private void StopObservingInfoTileHostWindow()
+    {
+        if (_infoTileHostWindow is not AppWindow hostWindow) { return; }
+        hostWindow.Changed -= InfoTileHostWindow_Changed;
+        _infoTileHostWindow = null;
+    }
+
+    private void InfoTileHostWindow_Changed(AppWindow sender, AppWindowChangedEventArgs args)
+    {
+        if (!sender.IsVisible || sender.Presenter is OverlappedPresenter { State: OverlappedPresenterState.Minimized })
+        {
+            CancelInfoTileReorder();
+        }
+    }
+
+    private void InfoTileGrid_PointerPressed(object sender, PointerRoutedEventArgs e)
+    {
+        if (_fallbackPointer is not null || _infoTileDragInitialOrder is not null
+            || !_dataReady || _dataChanges.IsInvalidated || !_viewModel.CanEditTileLayout)
+        {
+            return;
+        }
+
+        PointerPoint point = e.GetCurrentPoint(InfoTileGrid);
+        if (!(e.Pointer.PointerDeviceType == PointerDeviceType.Mouse
+                ? point.Properties.IsLeftButtonPressed : e.Pointer.IsInContact)
+            || FindInfoTileAt(point.Position) is not GridViewItem { Content: MasterControlInfoTileViewModel tile } container)
+        {
+            return;
+        }
+
+        _fallbackPointer = e.Pointer;
+        _fallbackTileId = tile.Id;
+        _fallbackPressPoint = _fallbackLastPoint = point.Position;
+        _fallbackLastRootPoint = e.GetCurrentPoint(InfoTileDragOverlay).Position;
+        Rect bounds = GetInfoTileBounds(container);
+        _fallbackPreviewOffset = new Point(point.Position.X - bounds.X, point.Position.Y - bounds.Y);
+        // The item is now the only child input owner. Release its capture before the grid
+        // takes the pointer, so movement remains routed even after the source slot moves.
+        _fallbackCaptureTransfer = true;
+        bool captured;
+        try
+        {
+            container.ReleasePointerCapture(e.Pointer);
+            captured = InfoTileGrid.CapturePointer(e.Pointer);
+        }
+        finally { _fallbackCaptureTransfer = false; }
+        if (!captured) { ResetInfoTilePointerReorder(); return; }
+        container.Focus(FocusState.Pointer);
+        e.Handled = true;
+        DispatcherQueueTimer timer = DispatcherQueue.CreateTimer();
+        timer.Interval = TimeSpan.FromMilliseconds(450);
+        timer.IsRepeating = false;
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            if (ReferenceEquals(_fallbackHoldTimer, timer)) { BeginInfoTilePointerReorder(); }
+        };
+        _fallbackHoldTimer = timer;
+        timer.Start();
+    }
+
+    private void InfoTileGrid_PointerMoved(object sender, PointerRoutedEventArgs e)
+    {
+        if (_fallbackPointer?.PointerId != e.Pointer.PointerId) { return; }
+        if (!_viewModel.CanEditTileLayout || _dataChanges.IsInvalidated) { CancelInfoTileReorder(); return; }
+        PointerPoint point = e.GetCurrentPoint(InfoTileGrid);
+        _fallbackLastPoint = point.Position;
+        _fallbackLastRootPoint = e.GetCurrentPoint(InfoTileDragOverlay).Position;
+        if (_infoTileDragInitialOrder is null)
+        {
+            double x = point.Position.X - _fallbackPressPoint.X;
+            double y = point.Position.Y - _fallbackPressPoint.Y;
+            if (x * x + y * y < 64) { return; }
+            if (e.Pointer.PointerDeviceType != PointerDeviceType.Mouse)
+            {
+                // A touch pan before the hold is scrolling, never a reorder.
+                CancelInfoTileReorder();
+                return;
+            }
+            if (!point.Properties.IsLeftButtonPressed) { CancelInfoTileReorder(); return; }
+            BeginInfoTilePointerReorder();
+        }
+
+        if (_infoTileDragInitialOrder is null) { return; }
+        e.Handled = true;
+        UpdateInfoTilePointerPreview();
+        MoveInfoTilePointerTarget();
+    }
+
+    private void MoveInfoTilePointerTarget()
+    {
+        if (FindInfoTileAt(_fallbackLastPoint) is GridViewItem { Content: MasterControlInfoTileViewModel target }
+            && _fallbackTileId is string sourceId && _viewModel.MoveVisibleInfoTile(sourceId, target.Id))
+        {
+            // Layout is deferred by XAML. Update the outline after the actual new slot is arranged.
+            DispatcherQueue.TryEnqueue(UpdateInfoTileDropOutline);
+        }
+    }
+
+    private void BeginInfoTilePointerReorder()
+    {
+        _fallbackHoldTimer?.Stop();
+        _fallbackHoldTimer = null;
+        if (_fallbackPointer is null || !_viewModel.CanEditTileLayout || _dataChanges.IsInvalidated
+            || FindInfoTileContainer(_fallbackTileId) is not GridViewItem { Content: MasterControlInfoTileViewModel tile } container)
+        {
+            CancelInfoTileReorder();
+            return;
+        }
+
+        _infoTileDragInitialOrder = _viewModel.VisibleInfoTiles.Select(static item => item.Id).ToArray();
+        _infoTileDragLifetime = _pageLifetime;
+        _infoTileDragGenerationId = _getDataGenerationId();
+        _suppressFallbackClick = true;
+        InfoTileDragContent.ContentTemplate = InfoTileGrid.ItemTemplate;
+        InfoTileDragContent.Content = tile;
+        InfoTileDragPreview.Width = container.ActualWidth;
+        InfoTileDragPreview.Height = container.ActualHeight;
+        InfoTileDragScale.CenterX = container.ActualWidth / 2;
+        InfoTileDragScale.CenterY = container.ActualHeight / 2;
+        InfoTileDragPreview.Translation = new System.Numerics.Vector3(0, 0, 24);
+        InfoTileDragOverlay.Visibility = Visibility.Visible;
+        (container.ContentTemplateRoot as MasterInfoTile)?.ResetPointerFeedback();
+        container.Opacity = 0.25;
+        UpdateInfoTilePointerPreview();
+        UpdateInfoTileDropOutline();
+        DispatcherQueueTimer scrollTimer = DispatcherQueue.CreateTimer();
+        scrollTimer.Interval = TimeSpan.FromMilliseconds(50);
+        scrollTimer.Tick += (_, _) => ScrollInfoTilePointerIntoView();
+        _fallbackScrollTimer = scrollTimer;
+        scrollTimer.Start();
+    }
+
+    private void ScrollInfoTilePointerIntoView()
+    {
+        if (_infoTileDragInitialOrder is null) { return; }
+        Point viewport = InfoTileDragOverlay.TransformToVisual(RootScrollViewer).TransformPoint(_fallbackLastRootPoint);
+        if (viewport.X < 0 || viewport.X > RootScrollViewer.ActualWidth) { return; }
+        double delta = viewport.Y < 40 ? -16 : viewport.Y > RootScrollViewer.ActualHeight - 40 ? 16 : 0;
+        double offset = Math.Clamp(RootScrollViewer.VerticalOffset + delta, 0, RootScrollViewer.ScrollableHeight);
+        if (delta == 0 || Math.Abs(offset - RootScrollViewer.VerticalOffset) < 1) { return; }
+        RootScrollViewer.ChangeView(null, offset, null, disableAnimation: true);
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            if (_infoTileDragInitialOrder is null) { return; }
+            _fallbackLastPoint = InfoTileDragOverlay.TransformToVisual(InfoTileGrid).TransformPoint(_fallbackLastRootPoint);
+            MoveInfoTilePointerTarget();
+            UpdateInfoTileDropOutline();
+        });
+    }
+
+    private async void InfoTileGrid_PointerReleased(object sender, PointerRoutedEventArgs e)
+    {
+        if (_fallbackPointer?.PointerId != e.Pointer.PointerId) { return; }
+        Point position = e.GetCurrentPoint(InfoTileGrid).Position;
+        bool dragging = _infoTileDragInitialOrder is not null;
+        GridViewItem? clicked = !dragging ? FindInfoTileAt(position) : null;
+        bool inside = position.X >= 0 && position.Y >= 0
+            && position.X <= InfoTileGrid.ActualWidth && position.Y <= InfoTileGrid.ActualHeight;
+        Point viewport = e.GetCurrentPoint(RootScrollViewer).Position;
+        inside &= viewport.X >= 0 && viewport.Y >= 0
+            && viewport.X <= RootScrollViewer.ActualWidth && viewport.Y <= RootScrollViewer.ActualHeight;
+        string? tileId = _fallbackTileId;
+        _suppressFallbackClick = true;
+        ResetInfoTilePointerReorder();
+        e.Handled = true;
+        if (dragging)
+        {
+            await CompleteInfoTileReorderAsync(inside);
+        }
+        else if (clicked is { Content: MasterControlInfoTileViewModel tile, ContentTemplateRoot: MasterInfoTile control }
+            && StringComparer.Ordinal.Equals(tile.Id, tileId))
+        {
+            control.Activate();
+        }
+    }
+
+    private void InfoTileGrid_PointerCanceled(object sender, PointerRoutedEventArgs e)
+    {
+        if (!_fallbackCaptureTransfer && _fallbackPointer?.PointerId == e.Pointer.PointerId) { CancelInfoTileReorder(); }
+    }
+
+    private void InfoTileGrid_PointerCaptureLost(object sender, PointerRoutedEventArgs e)
+    {
+        if (_fallbackCaptureTransfer || _fallbackPointer?.PointerId != e.Pointer.PointerId) { return; }
+        Pointer pointer = _fallbackPointer;
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            if (ReferenceEquals(_fallbackPointer, pointer)
+                && InfoTileGrid.PointerCaptures?.Any(candidate => candidate.PointerId == pointer.PointerId) != true)
+            {
+                CancelInfoTileReorder();
+            }
+        });
+    }
+
+    private void InfoTileGrid_KeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (e.Key != Windows.System.VirtualKey.Escape || _fallbackPointer is null) { return; }
+        _suppressFallbackClick = true;
+        CancelInfoTileReorder();
+        e.Handled = true;
+    }
+
+    private GridViewItem? FindInfoTileContainer(string? tileId) => tileId is null ? null
+        : _viewModel.VisibleInfoTiles.Where(tile => StringComparer.Ordinal.Equals(tile.Id, tileId))
+            .Select(tile => InfoTileGrid.ContainerFromItem(tile) as GridViewItem).FirstOrDefault();
+
+    private Rect GetInfoTileBounds(GridViewItem container) =>
+        container.TransformToVisual(InfoTileGrid).TransformBounds(new Rect(0, 0, container.ActualWidth, container.ActualHeight));
+
+    private GridViewItem? FindInfoTileAt(Point position) => _viewModel.VisibleInfoTiles
+        .Select(tile => InfoTileGrid.ContainerFromItem(tile) as GridViewItem)
+        .FirstOrDefault(container => container is not null && GetInfoTileBounds(container).Contains(position));
+
+    private void UpdateInfoTilePointerPreview()
+    {
+        Point position = InfoTileGrid.TransformToVisual(InfoTileDragOverlay).TransformPoint(_fallbackLastPoint);
+        Canvas.SetLeft(InfoTileDragPreview, position.X - _fallbackPreviewOffset.X);
+        Canvas.SetTop(InfoTileDragPreview, position.Y - _fallbackPreviewOffset.Y);
+    }
+
+    private void UpdateInfoTileDropOutline()
+    {
+        if (_infoTileDragInitialOrder is null || FindInfoTileContainer(_fallbackTileId) is not GridViewItem container) { return; }
+        Rect bounds = container.TransformToVisual(InfoTileDragOverlay)
+            .TransformBounds(new Rect(0, 0, container.ActualWidth, container.ActualHeight));
+        Canvas.SetLeft(InfoTileDropOutline, bounds.X);
+        Canvas.SetTop(InfoTileDropOutline, bounds.Y);
+        InfoTileDropOutline.Width = bounds.Width;
+        InfoTileDropOutline.Height = bounds.Height;
+        container.Opacity = 0.25;
+    }
+
+    private void ResetInfoTilePointerReorder()
+    {
+        Pointer? pointer = _fallbackPointer;
+        _fallbackPointer = null;
+        _fallbackTileId = null;
+        _fallbackHoldTimer?.Stop();
+        _fallbackHoldTimer = null;
+        _fallbackScrollTimer?.Stop();
+        _fallbackScrollTimer = null;
+        if (pointer is not null) { InfoTileGrid.ReleasePointerCapture(pointer); }
+        InfoTileDragOverlay.Visibility = Visibility.Collapsed;
+        InfoTileDragContent.Content = null;
+        foreach (MasterControlInfoTileViewModel tile in _viewModel.VisibleInfoTiles)
+        {
+            if (InfoTileGrid.ContainerFromItem(tile) is GridViewItem container)
+            {
+                container.Opacity = 1;
+                (container.ContentTemplateRoot as MasterInfoTile)?.ResetPointerFeedback();
+            }
+        }
+        if (!DispatcherQueue.TryEnqueue(() => _suppressFallbackClick = false)) { _suppressFallbackClick = false; }
     }
 }

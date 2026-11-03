@@ -27,28 +27,25 @@
         VerticalScrollBarVisibility="Auto"
         HorizontalScrollBarVisibility="Disabled"
         HorizontalContentAlignment="Stretch">
-        <Grid>
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" MaxWidth="1040" />
-            </Grid.ColumnDefinitions>
+        <Grid MaxWidth="1040" HorizontalAlignment="Stretch">
             <StackPanel Spacing="24" Style="{StaticResource ClashReadingPagePanelStyle}">
                 <TextBlock Text="{Binding PageTitleText}" Style="{ThemeResource TitleTextBlockStyle}" TextWrapping="Wrap" AutomationProperties.HeadingLevel="Level1" />
 
-                <Grid Style="{StaticResource ClashSectionGridStyle}" Padding="0,8" RowSpacing="20" ColumnSpacing="24" RowDefinitions="Auto,Auto" ColumnDefinitions="Auto,*">
-                    <Image Source="ms-appx:///Assets/Square150x150Logo.scale-200.png" Width="96" Height="96" Stretch="Uniform" VerticalAlignment="Center" />
-                    <StackPanel Grid.Column="1" Spacing="4">
-                        <TextBlock Text="{Binding AppNameText}" Style="{ThemeResource TitleTextBlockStyle}" TextWrapping="Wrap" AutomationProperties.HeadingLevel="Level1" />
-                        <TextBlock Text="{Binding VersionSummaryText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-                        <TextBlock Text="{Binding RuntimeValueText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-                        <TextBlock Text="{Binding AppDescriptionText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" Margin="0,4,0,0" />
+                <Grid Style="{StaticResource ClashSectionGridStyle}" Padding="0,8" RowSpacing="24" RowDefinitions="Auto,Auto">
+                    <StackPanel x:Name="AboutBrand" Spacing="8" Padding="16,8,16,16" HorizontalAlignment="Center" MaxWidth="720">
+                        <Image x:Name="AboutLogo" Source="ms-appx:///Assets/Square150x150Logo.scale-200.png" Width="112" Height="112" Stretch="Uniform" HorizontalAlignment="Center" Margin="0,0,0,8" AutomationProperties.AccessibilityView="Raw" />
+                        <TextBlock Text="{Binding AppNameText}" Style="{ThemeResource TitleTextBlockStyle}" TextWrapping="Wrap" TextAlignment="Center" AutomationProperties.HeadingLevel="Level2" />
+                        <TextBlock Text="{Binding VersionSummaryText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" TextAlignment="Center" />
+                        <TextBlock Text="{Binding RuntimeValueText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" TextAlignment="Center" />
+                        <TextBlock Text="{Binding AppDescriptionText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" TextAlignment="Center" Margin="0,4,0,0" />
                     </StackPanel>
-                    <Grid Grid.Row="1" Grid.ColumnSpan="2" ColumnDefinitions="*,*" ColumnSpacing="24"
+                    <Grid Grid.Row="1" ColumnDefinitions="*,*" ColumnSpacing="24"
                           BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="0,1,0,0" Padding="0,16,0,0">
-                        <StackPanel Spacing="4">
+                        <StackPanel Spacing="4" HorizontalAlignment="Center">
                             <TextBlock x:Name="AuthorTitleText" Text="{Binding AuthorTitleText}" Style="{StaticResource ClashSecondaryCaptionTextBlockStyle}" TextWrapping="Wrap" />
                             <TextBlock x:Name="AuthorValueText" Text="{Binding AuthorValueText}" Style="{ThemeResource BodyStrongTextBlockStyle}" TextWrapping="Wrap" />
                         </StackPanel>
-                        <StackPanel Grid.Column="1" Spacing="4">
+                        <StackPanel Grid.Column="1" Spacing="4" HorizontalAlignment="Center">
                             <TextBlock x:Name="LicenseTitleText" Text="{Binding LicenseTitleText}" Style="{StaticResource ClashSecondaryCaptionTextBlockStyle}" TextWrapping="Wrap" />
                             <TextBlock x:Name="LicenseValueText" Text="{Binding LicenseValueText}" Style="{ThemeResource BodyStrongTextBlockStyle}" TextWrapping="Wrap" />
                         </StackPanel>

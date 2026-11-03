@@ -219,7 +219,7 @@ internal static partial class LocalizationResources
             ["Master.Diagnostics.Failed"] = "Ошибка проверки; нажмите для повтора",
             ["Master.Diagnostics.Passed.Format"] = "Доступно: {0}/{1}",
             ["Master.Diagnostics.CurrentRoute"] = "Используется текущий прокси Windows и маршрутизация TUN.",
-            ["Master.Tile.ReorderHint"] = "Перетащите этот маркер, чтобы изменить порядок плиток.",
+            ["Master.Tile.ReorderHint"] = "Перетащите плитку для изменения порядка; отпустите для сохранения или нажмите Esc для отмены.",
             ["Master.Tile.RestoreRecommended"] = "Вернуть рекомендуемую раскладку",
             ["Master.Tile.ShowAll"] = "Показать все",
             ["Master.Tile.HideAll"] = "Скрыть все",
