@@ -2063,13 +2063,12 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("xmlns:components=\"using:ClashSharp.Components\"", masterControlXaml, StringComparison.Ordinal);
         Assert.Equal(4, CountOccurrences(masterControlXaml, "components:MasterModeButton"));
         Assert.Contains("x:Name=\"InfoTileGrid\"", masterControlXaml, StringComparison.Ordinal);
-        Assert.Contains("CanReorderItems=\"{x:Bind SupportsNativeTileDrag}\"", masterControlXaml, StringComparison.Ordinal);
-        Assert.Contains("CanDragItems=\"{x:Bind SupportsNativeTileDrag}\"", masterControlXaml, StringComparison.Ordinal);
-        Assert.Contains("AllowDrop=\"True\"", masterControlXaml, StringComparison.Ordinal);
+        Assert.Contains("CanReorderItems=\"False\"", masterControlXaml, StringComparison.Ordinal);
+        Assert.Contains("CanDragItems=\"False\"", masterControlXaml, StringComparison.Ordinal);
         Assert.Contains("IsSwipeEnabled=\"True\"", masterControlXaml, StringComparison.Ordinal);
         Assert.Contains("ItemClick=\"InfoTileGrid_ItemClick\"", masterControlXaml, StringComparison.Ordinal);
-        Assert.Contains("DragItemsStarting=\"InfoTileGrid_DragItemsStarting\"", masterControlXaml, StringComparison.Ordinal);
-        Assert.Contains("DragItemsCompleted=\"InfoTileGrid_DragItemsCompleted\"", masterControlXaml, StringComparison.Ordinal);
+        Assert.Contains("InfoTileGrid_PointerPressed", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("InfoTileGrid_PointerReleased", masterControlCode, StringComparison.Ordinal);
         Assert.DoesNotContain("BeginReorderPointer(", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("ReorderThemeTransition", masterControlXaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"HeroStatusItemGrid\"", masterControlXaml, StringComparison.Ordinal);
@@ -2120,7 +2119,9 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("TileOff", infoTileXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("ToggleThumb", infoTileXaml, StringComparison.Ordinal);
         Assert.Contains("ReorderHint", infoTileXaml, StringComparison.Ordinal);
-        Assert.Contains("&#xE784;", infoTileXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("&#xE784;", infoTileXaml, StringComparison.Ordinal);
+        Assert.Contains("<PlaneProjection", infoTileXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("InfoTileDropOutline", masterControlXaml, StringComparison.Ordinal);
         Assert.Contains("DoubleAnimation", infoTileXaml, StringComparison.Ordinal);
         Assert.Contains("TextWrapping=\"NoWrap\"", infoTileXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("ToggleSwitch", infoTileXaml, StringComparison.Ordinal);
@@ -2132,7 +2133,7 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("tile.IsVisible)));", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("Text = _viewModel.InfoTileSelectionDescriptionText", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("await _viewModel.SetVisibleInfoTileIdsAsync(", masterControlCode, StringComparison.Ordinal);
-        Assert.Contains("e.DropResult == Windows.ApplicationModel.DataTransfer.DataPackageOperation.Move", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("SettleInfoTilePreviewAsync()", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("_infoTileDragGenerationId == _getDataGenerationId()", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("_viewModel.RestoreCommittedInfoTileOrder();", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("MasterControlTileAction.ShowStartupPrompt", masterControlCode, StringComparison.Ordinal);

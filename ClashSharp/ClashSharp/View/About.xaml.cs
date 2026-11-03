@@ -54,14 +54,14 @@ public sealed partial class About : Page
         AboutCards.ColumnDefinitions[1].Width = columns == 2
             ? new GridLength(1, GridUnitType.Star)
             : new GridLength(0);
-        AboutCards.ColumnSpacing = columns == 2 ? 32 : 0;
+        AboutCards.ColumnSpacing = columns == 2 ? 24 : 0;
         AboutCards.RowDefinitions.Clear();
         for (int row = 0; row < 4 / columns; row++)
         {
             AboutCards.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         }
 
-        Grid[] cards = [GitHubCard, UpdateCard, MihomoCard, ProxyInformationCard];
+        Grid[] cards = [UpdateCard, ProxyInformationCard, GitHubCard, MihomoCard];
         for (int index = 0; index < cards.Length; index++)
         {
             Grid.SetRow(cards[index], index / columns);
@@ -74,7 +74,11 @@ public sealed partial class About : Page
     /// <param name="e">Routed event arguments. Not null.</param>
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
-        await _loadSession.RunAsync(_viewModel.LoadAsync);
+        await _loadSession.RunAsync(async token =>
+        {
+            _viewModel.SetProxyPort(_readProxyInformation().MixedPort);
+            await _viewModel.LoadAsync(token);
+        });
     }
 
     /// <summary>Cancels update and core probes when the page leaves the visual tree.</summary>

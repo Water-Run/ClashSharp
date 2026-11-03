@@ -9,6 +9,7 @@
     <Grid
         x:Name="TileRoot"
         Style="{StaticResource ClashCardGridStyle}"
+        BorderThickness="0"
         MinHeight="116"
         PointerEntered="TileRoot_PointerEntered"
         PointerExited="TileRoot_PointerExited"
@@ -44,27 +45,24 @@
         <Grid.RenderTransform>
             <ScaleTransform x:Name="TileScaleTransform" CenterX="110" CenterY="58" />
         </Grid.RenderTransform>
+        <Grid.Projection>
+            <PlaneProjection x:Name="TileTiltProjection" />
+        </Grid.Projection>
         <VisualStateManager.VisualStateGroups>
             <VisualStateGroup x:Name="PointerStates">
                 <VisualState x:Name="Normal">
                     <Storyboard>
                         <DoubleAnimation Storyboard.TargetName="HoverOverlay" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.12" />
-                        <DoubleAnimation Storyboard.TargetName="TileScaleTransform" Storyboard.TargetProperty="ScaleX" To="1" Duration="0:0:0.12" />
-                        <DoubleAnimation Storyboard.TargetName="TileScaleTransform" Storyboard.TargetProperty="ScaleY" To="1" Duration="0:0:0.12" />
                     </Storyboard>
                 </VisualState>
                 <VisualState x:Name="PointerOver">
                     <Storyboard>
                         <DoubleAnimation Storyboard.TargetName="HoverOverlay" Storyboard.TargetProperty="Opacity" To="0.08" Duration="0:0:0.12" />
-                        <DoubleAnimation Storyboard.TargetName="TileScaleTransform" Storyboard.TargetProperty="ScaleX" To="1" Duration="0:0:0.12" />
-                        <DoubleAnimation Storyboard.TargetName="TileScaleTransform" Storyboard.TargetProperty="ScaleY" To="1" Duration="0:0:0.12" />
                     </Storyboard>
                 </VisualState>
                 <VisualState x:Name="Pressed">
                     <Storyboard>
                         <DoubleAnimation Storyboard.TargetName="HoverOverlay" Storyboard.TargetProperty="Opacity" To="0.12" Duration="0:0:0.06" />
-                        <DoubleAnimation Storyboard.TargetName="TileScaleTransform" Storyboard.TargetProperty="ScaleX" To="0.99" Duration="0:0:0.06" />
-                        <DoubleAnimation Storyboard.TargetName="TileScaleTransform" Storyboard.TargetProperty="ScaleY" To="0.99" Duration="0:0:0.06" />
                     </Storyboard>
                 </VisualState>
             </VisualStateGroup>
@@ -120,7 +118,6 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
             <FontIcon
@@ -136,12 +133,6 @@
                 Style="{ThemeResource CaptionTextBlockStyle}"
                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                 TextTrimming="CharacterEllipsis" />
-            <FontIcon
-                Grid.Column="2"
-                Glyph="&#xE784;"
-                FontSize="12"
-                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                IsHitTestVisible="False" />
         </Grid>
 
         <Grid Grid.Row="1" ColumnSpacing="8">

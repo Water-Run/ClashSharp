@@ -172,6 +172,31 @@ public sealed partial class DisplayPageViewModelTests
         Assert.Equal("mihomo available: v1.19.11", viewModel.MihomoStatusText);
     }
 
+    [Theory]
+    [InlineData(1)]
+    [InlineData(10000)]
+    [InlineData(65535)]
+    public void AboutViewModel_ConfiguredEndpointIsAvailableBeforeNetworkChecks(int port)
+    {
+        AboutViewModel viewModel = new(new FakeDisplayLocalization(), new FakeAboutCore(),
+            new FakeApplicationUpdateChecker(), new FakeUriLauncher(), new TestApplicationErrorSink());
+        Assert.Empty(viewModel.ProxyEntryText);
+        viewModel.SetProxyPort(port);
+        Assert.Equal($"Configured proxy: 127.0.0.1:{port}", viewModel.ProxyEntryText);
+        viewModel.RefreshLocalization();
+        Assert.Equal($"Configured proxy: 127.0.0.1:{port}", viewModel.ProxyEntryText);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(65536)]
+    public void AboutViewModel_RejectsInvalidProxyPort(int port)
+    {
+        AboutViewModel viewModel = new(new FakeDisplayLocalization(), new FakeAboutCore(),
+            new FakeApplicationUpdateChecker(), new FakeUriLauncher(), new TestApplicationErrorSink());
+        Assert.Throws<ArgumentOutOfRangeException>(() => viewModel.SetProxyPort(port));
+    }
+
     /// <summary>Verifies core version output is reduced to the stable semantic version token when possible.</summary>
     [Theory]
     [InlineData("Mihomo Meta v1.19.11 windows amd64 with go1.24.4", "v1.19.11")]
@@ -277,6 +302,7 @@ public sealed partial class DisplayPageViewModelTests
                 "Page.About.Description" => "About description",
                 "About.App.Description" => "App description",
                 "About.Author.Title" => "Author",
+                "Settings.ProxyInformation.LocalEntry.Format" => "Configured proxy: 127.0.0.1:{0}",
                 "About.Author.Value" => "WaterRun",
                 "About.OpenSource.Title" => "Open source",
                 "About.OpenSource.Description" => "AGPL",

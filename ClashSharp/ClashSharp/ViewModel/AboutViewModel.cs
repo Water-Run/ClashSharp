@@ -48,6 +48,7 @@ internal sealed class AboutViewModel : ObservableObject, ILocalizedPresentation
         OnPropertyChanged(nameof(ProxyInformationTitleText));
         OnPropertyChanged(nameof(ProxyInformationDescriptionText));
         OnPropertyChanged(nameof(ProxyInformationButtonText));
+        OnPropertyChanged(nameof(ProxyEntryText));
         RefreshCoreStatusText();
         RefreshUpdateStatusText();
     }
@@ -79,6 +80,7 @@ internal sealed class AboutViewModel : ObservableObject, ILocalizedPresentation
     private string? _coreVersion;
     private bool _coreProbeFinished;
     private ApplicationUpdateCheckResult? _updateResult;
+    private int? _mixedPort;
 
     /// <summary>Initializes an about view model.</summary>
     /// <param name="localization">Localization provider. Must not be null.</param>
@@ -230,6 +232,22 @@ internal sealed class AboutViewModel : ObservableObject, ILocalizedPresentation
     /// <summary>Gets the proxy information button text.</summary>
     /// <value>Localized proxy information button text.</value>
     public string ProxyInformationButtonText => _localization.GetString("About.ProxyInformation.Open");
+
+    /// <summary>Gets the configured local proxy endpoint without implying that the core is running.</summary>
+    public string ProxyEntryText => _mixedPort is int port
+        ? string.Format(CultureInfo.CurrentCulture, _localization.GetString("Settings.ProxyInformation.LocalEntry.Format"), port)
+        : string.Empty;
+
+    /// <summary>Publishes the current configured port when the page enters its owned load session.</summary>
+    /// <param name="port">Configured local proxy port, between 1 and 65535 inclusive.</param>
+    public void SetProxyPort(int port)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(port, 1);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(port, 65535);
+        if (_mixedPort == port) { return; }
+        _mixedPort = port;
+        OnPropertyChanged(nameof(ProxyEntryText));
+    }
 
     /// <summary>Gets bundled mihomo status text.</summary>
     /// <value>Status text; never null.</value>

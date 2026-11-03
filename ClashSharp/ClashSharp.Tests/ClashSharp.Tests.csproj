@@ -138,6 +138,7 @@
     <Compile Include="..\ClashSharp\Service\MasterHeroStatusLayoutService.cs" Link="Service\MasterHeroStatusLayoutService.cs" />
     <Compile Include="..\ClashSharp\Service\MasterInfoTileLayoutService.cs" Link="Service\MasterInfoTileLayoutService.cs" />
     <Compile Include="..\ClashSharp\Presentation\Layout\MasterControlLayoutPolicy.cs" Link="Presentation\Layout\MasterControlLayoutPolicy.cs" />
+    <Compile Include="..\ClashSharp\Presentation\Layout\MasterTileMotionPolicy.cs" Link="Presentation\Layout\MasterTileMotionPolicy.cs" />
     <Compile Include="..\ClashSharp\Presentation\Dialogs\DialogPresentationGate.cs" Link="Presentation\Dialogs\DialogPresentationGate.cs" />
     <Compile Include="..\ClashSharp\Presentation\Lifecycle\PageLoadSession.cs" Link="Presentation\Lifecycle\PageLoadSession.cs" />
     <Compile Include="..\ClashSharp\Presentation\Lifecycle\PageOperationSession.cs" Link="Presentation\Lifecycle\PageOperationSession.cs" />

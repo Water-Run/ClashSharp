@@ -3,12 +3,15 @@ using System.Linq;
 using System.Windows.Input;
 using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.Presentation.Dialogs;
+using ClashSharp.Presentation.Layout;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Data;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Animation;
 using Windows.Foundation;
+using Windows.UI.ViewManagement;
 
 namespace ClashSharp.Components;
 
@@ -18,6 +21,12 @@ public sealed partial class MasterInfoTile : UserControl
     private ICommand? _observedCommand;
 
     private bool _isLoaded;
+    private bool _isPressActive;
+    private bool _isInReorderContext;
+    private bool _isSelectedForEditing;
+    private Storyboard? _tiltAnimation;
+    private Storyboard? _contextAnimation;
+    private readonly UISettings _motionSettings = new();
 
     /// <summary>Identifies the recent rate samples shown as a compact trend.</summary>
     public static readonly DependencyProperty HistoryProperty = DependencyProperty.Register(
@@ -130,8 +139,14 @@ public sealed partial class MasterInfoTile : UserControl
         // The containing GridViewItem is the sole semantic input owner. A child Button
         // captures the pointer before GridView can recognize its standard reorder gesture.
         AddHandler(PointerPressedEvent, new PointerEventHandler(TileRoot_PointerPressed), true);
+        AddHandler(PointerMovedEvent, new PointerEventHandler(TileRoot_PointerMoved), true);
         AddHandler(PointerReleasedEvent, new PointerEventHandler(TileRoot_PointerReleased), true);
         AddHandler(PointerCanceledEvent, new PointerEventHandler(TileRoot_PointerCanceled), true);
+        SizeChanged += (_, _) =>
+        {
+            TileScaleTransform.CenterX = ActualWidth / 2;
+            TileScaleTransform.CenterY = ActualHeight / 2;
+        };
     }
 
     /// <summary>Gets or sets the tile's primary label.</summary>
@@ -205,6 +220,10 @@ public sealed partial class MasterInfoTile : UserControl
     }
 
     /// <summary>Combines the current tile text without empty or repeated explanations.</summary>
+    /// <param name="value">Current primary value.</param>
+    /// <param name="detail">Current secondary value.</param>
+    /// <param name="description">Explanation of the tile's action or data.</param>
+    /// <param name="reorderHint">Localized press-and-hold and arrangement guidance.</param>
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1822:Mark members as static", Justification = "WinUI x:Bind calls this function through the control instance.")]
     public string GetTooltipText(string value, string detail, string description, string reorderHint) =>
         string.Join(Environment.NewLine, new[] { value, detail, description, reorderHint }
@@ -279,16 +298,30 @@ public sealed partial class MasterInfoTile : UserControl
 
     private void TileRoot_PointerExited(object sender, PointerRoutedEventArgs e)
     {
-        _ = VisualStateManager.GoToState(this, "Normal", true);
+        if (!_isPressActive) { _ = VisualStateManager.GoToState(this, "Normal", true); }
     }
 
     private void TileRoot_PointerPressed(object sender, PointerRoutedEventArgs e)
     {
+        BeginPressFeedback(e.GetCurrentPoint(this).Position);
+    }
+
+    /// <summary>Starts position-sensitive feedback after the grid has taken input ownership.</summary>
+    internal void BeginPressFeedback(Point point)
+    {
+        _isPressActive = true;
+        UpdatePressFeedback(point);
         _ = VisualStateManager.GoToState(this, "Pressed", true);
+    }
+
+    private void TileRoot_PointerMoved(object sender, PointerRoutedEventArgs e)
+    {
+        UpdatePressFeedback(e.GetCurrentPoint(this).Position);
     }
 
     private void TileRoot_PointerReleased(object sender, PointerRoutedEventArgs e)
     {
+        ResetPointerFeedback();
         _ = VisualStateManager.GoToState(this, "PointerOver", true);
     }
 
@@ -298,7 +331,84 @@ public sealed partial class MasterInfoTile : UserControl
     }
 
     /// <summary>Clears press feedback when the containing grid ends or transfers the pointer.</summary>
-    internal void ResetPointerFeedback() => VisualStateManager.GoToState(this, "Normal", true);
+    internal void ResetPointerFeedback()
+    {
+        _isPressActive = false;
+        AnimateTilt(default, MasterTileMotionPolicy.ReleaseMilliseconds);
+        _ = VisualStateManager.GoToState(this, "Normal", true);
+    }
+
+    /// <summary>Updates depression and tilt from a point in the unprojected tile's coordinates.</summary>
+    internal void UpdatePressFeedback(Point point)
+    {
+        if (!_isPressActive || _isInReorderContext) { return; }
+        MasterTileMotionPolicy.PressPose pose = _motionSettings.AnimationsEnabled
+            ? MasterTileMotionPolicy.GetPressPose(point.X, point.Y, ActualWidth, ActualHeight) : default;
+        AnimateTilt(pose, MasterTileMotionPolicy.PressMilliseconds);
+    }
+
+    /// <summary>Gives surrounding tiles the compact editing appearance without changing layout geometry.</summary>
+    internal void SetReorderContext(bool active, bool selected = false)
+    {
+        if (_isInReorderContext == active && _isSelectedForEditing == selected) { return; }
+        _isInReorderContext = active;
+        _isSelectedForEditing = selected;
+        ResetPointerFeedback();
+        double x = TileScaleTransform.ScaleX;
+        double y = TileScaleTransform.ScaleY;
+        _contextAnimation?.Stop();
+        TileScaleTransform.ScaleX = x;
+        TileScaleTransform.ScaleY = y;
+        double scale = active && _motionSettings.AnimationsEnabled
+            ? selected ? MasterTileMotionPolicy.SelectedScale : MasterTileMotionPolicy.SurroundingScale : 1;
+        Storyboard animation = new();
+        AddMotion(animation, TileScaleTransform, nameof(ScaleTransform.ScaleX), scale, MasterTileMotionPolicy.ReleaseMilliseconds);
+        AddMotion(animation, TileScaleTransform, nameof(ScaleTransform.ScaleY), scale, MasterTileMotionPolicy.ReleaseMilliseconds);
+        _contextAnimation = animation;
+        animation.Begin();
+    }
+
+    private void AnimateTilt(MasterTileMotionPolicy.PressPose pose, int milliseconds)
+    {
+        double x = TileTiltProjection.RotationX;
+        double y = TileTiltProjection.RotationY;
+        double depth = TileTiltProjection.GlobalOffsetZ;
+        if (_tiltAnimation is null && Math.Abs(x - pose.RotationX) < 0.001 && Math.Abs(y - pose.RotationY) < 0.001
+            && Math.Abs(depth - pose.Depth) < 0.001) { return; }
+        _tiltAnimation?.Stop();
+        TileTiltProjection.RotationX = x;
+        TileTiltProjection.RotationY = y;
+        TileTiltProjection.GlobalOffsetZ = depth;
+        Storyboard animation = new();
+        AddMotion(animation, TileTiltProjection, nameof(PlaneProjection.RotationX), pose.RotationX, milliseconds);
+        AddMotion(animation, TileTiltProjection, nameof(PlaneProjection.RotationY), pose.RotationY, milliseconds);
+        AddMotion(animation, TileTiltProjection, nameof(PlaneProjection.GlobalOffsetZ), pose.Depth, milliseconds);
+        _tiltAnimation = animation;
+        animation.Completed += (_, _) =>
+        {
+            if (!ReferenceEquals(_tiltAnimation, animation)) { return; }
+            _tiltAnimation = null;
+            animation.Stop();
+            TileTiltProjection.RotationX = pose.RotationX;
+            TileTiltProjection.RotationY = pose.RotationY;
+            TileTiltProjection.GlobalOffsetZ = pose.Depth;
+        };
+        animation.Begin();
+    }
+
+    private void AddMotion(Storyboard owner, DependencyObject target, string property, double value, int milliseconds)
+    {
+        DoubleAnimation animation = new()
+        {
+            To = value,
+            Duration = TimeSpan.FromMilliseconds(_motionSettings.AnimationsEnabled ? milliseconds : 0),
+            EnableDependentAnimation = true,
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
+        };
+        Storyboard.SetTarget(animation, target);
+        Storyboard.SetTargetProperty(animation, property);
+        owner.Children.Add(animation);
+    }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
@@ -310,6 +420,15 @@ public sealed partial class MasterInfoTile : UserControl
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
         _isLoaded = false;
+        _isPressActive = false;
+        _tiltAnimation?.Stop();
+        _contextAnimation?.Stop();
+        _tiltAnimation = null;
+        _contextAnimation = null;
+        _isInReorderContext = false;
+        _isSelectedForEditing = false;
+        TileTiltProjection.RotationX = TileTiltProjection.RotationY = TileTiltProjection.GlobalOffsetZ = 0;
+        TileScaleTransform.ScaleX = TileScaleTransform.ScaleY = 1;
         WindowDialogCoordinator.TryDismissTransient(XamlRoot, TileDetailsFlyout.Hide);
         ObserveCommand();
     }
