@@ -109,8 +109,9 @@ public sealed class WindowsPackageFootprintReaderTests
 
     private const string BlockMapOrdered = """
         <?xml version="1.0" encoding="UTF-8"?>
-        <BlockMap xmlns="http://schemas.microsoft.com/appx/2010/blockmap" HashMethod="http://www.w3.org/2001/04/xmlenc#sha256">
-          <File Name="a.dll" Size="70000" LfhSize="37"><Block Hash="AAA=" Size="1200"/><Block Hash="BBB="/></File>
+        <BlockMap xmlns="http://schemas.microsoft.com/appx/2010/blockmap" xmlns:b4="http://schemas.microsoft.com/appx/2021/blockmap"
+            IgnorableNamespaces="b4" HashMethod="http://www.w3.org/2001/04/xmlenc#sha256">
+          <File Name="a.dll" Size="70000" LfhSize="37"><Block Hash="AAA=" Size="1200"/><Block Hash="BBB="/><b4:FileHash Hash="FFF="/></File>
           <File Name="b.dll" Size="10" LfhSize="37"><Block Hash="CCC="/></File>
         </BlockMap>
         """;
@@ -145,6 +146,8 @@ public sealed class WindowsPackageFootprintReaderTests
     [InlineData("<BlockMap xmlns=\"http://schemas.microsoft.com/appx/2010/blockmap\" HashMethod=\"m\"><File Name=\"a\" Size=\"x\"/></BlockMap>")]
     [InlineData("<BlockMap xmlns=\"urn:other\" HashMethod=\"m\"><File Name=\"a\" Size=\"1\"/></BlockMap>")]
     [InlineData("<BlockMap xmlns=\"http://schemas.microsoft.com/appx/2010/blockmap\" HashMethod=\"m\"></BlockMap>")]
+    [InlineData("<BlockMap xmlns=\"http://schemas.microsoft.com/appx/2010/blockmap\" xmlns:b4=\"http://schemas.microsoft.com/appx/2021/blockmap\" HashMethod=\"m\"><File Name=\"a\" Size=\"1\"><Block Hash=\"A\"/><b4:FileHash/></File></BlockMap>")]
+    [InlineData("<BlockMap xmlns=\"http://schemas.microsoft.com/appx/2010/blockmap\" xmlns:b4=\"http://schemas.microsoft.com/appx/2021/blockmap\" HashMethod=\"m\"><File Name=\"a\" Size=\"1\"><Block Hash=\"A\"/><b4:Unknown Hash=\"B\"/></File></BlockMap>")]
     public void UnreadableOrMalformedBlockMapsHaveNoPayloadDigest(string blockMap)
     {
         Assert.Null(WindowsPackageFootprintReader.DigestPayload(System.Text.Encoding.UTF8.GetBytes(blockMap)));

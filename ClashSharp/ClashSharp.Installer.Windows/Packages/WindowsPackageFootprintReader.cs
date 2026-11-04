@@ -18,6 +18,7 @@ internal sealed class WindowsPackageFootprintReader : IWindowsPackageFootprintRe
     private const string SignatureName = "AppxSignature.p7x";
     private const string BlockMapName = "AppxBlockMap.xml";
     private const string BlockMapNamespace = "http://schemas.microsoft.com/appx/2010/blockmap";
+    private const string BlockMap2021Namespace = "http://schemas.microsoft.com/appx/2021/blockmap";
     internal const int MaximumSignatureBytes = 4 * 1024 * 1024;
     internal const int MaximumBlockMapBytes = 16 * 1024 * 1024;
 
@@ -201,6 +202,17 @@ internal sealed class WindowsPackageFootprintReader : IWindowsPackageFootprintRe
             {
                 if (reader.NodeType != XmlNodeType.Element)
                 {
+                    continue;
+                }
+                if (reader.Depth == 2 && reader.NamespaceURI == BlockMap2021Namespace && reader.LocalName == "FileHash"
+                    && current is not null)
+                {
+                    // The 2021 schema adds a whole-file hash. The block hashes already determine every byte
+                    // and packaging tools differ in whether they emit it, so it is checked but not digested.
+                    if (string.IsNullOrEmpty(reader.GetAttribute("Hash")))
+                    {
+                        return null;
+                    }
                     continue;
                 }
                 if (reader.NamespaceURI != BlockMapNamespace)
