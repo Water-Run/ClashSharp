@@ -87,6 +87,87 @@
                 <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
                 <Setter Property="BorderThickness" Value="0,0,0,1" />
             </Style>
+
+            <!-- Windows 11 settings geometry: in-page cards use the control radius and stack 4 DIP apart.
+                 The square ClashCardGridStyle remains reserved for the Metro surfaces on Master Control. -->
+            <x:Double x:Key="ClashSettingsCardSpacing">4</x:Double>
+            <Thickness x:Key="ClashSettingsCardPadding">16,12</Thickness>
+
+            <Style x:Key="ClashSettingsCardStyle" TargetType="Grid">
+                <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
+                <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="{ThemeResource ControlCornerRadius}" />
+                <Setter Property="Padding" Value="{StaticResource ClashSettingsCardPadding}" />
+                <Setter Property="MinHeight" Value="68" />
+            </Style>
+
+            <!-- Larger content surfaces such as charts, rankings and identity headers use the overlay radius. -->
+            <Style x:Key="ClashSurfaceCardStyle" TargetType="Grid">
+                <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
+                <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="{ThemeResource OverlayCornerRadius}" />
+                <Setter Property="Padding" Value="20" />
+            </Style>
+
+            <Style x:Key="ClashSectionHeaderTextBlockStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyStrongTextBlockStyle}">
+                <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
+                <Setter Property="TextWrapping" Value="Wrap" />
+                <Setter Property="Margin" Value="1,24,0,4" />
+            </Style>
+
+            <Style x:Key="ClashPageHeaderDescriptionTextBlockStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyTextBlockStyle}">
+                <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+                <Setter Property="TextWrapping" Value="Wrap" />
+            </Style>
+
+            <Style x:Key="ClashCardIconStyle" TargetType="FontIcon">
+                <Setter Property="FontSize" Value="20" />
+                <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+
+            <Style x:Key="ClashStatLabelTextBlockStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionTextBlockStyle}">
+                <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+                <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+
+            <Style x:Key="ClashStatValueTextBlockStyle" TargetType="TextBlock" BasedOn="{StaticResource TitleTextBlockStyle}">
+                <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
+                <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+                <Setter Property="TextWrapping" Value="NoWrap" />
+            </Style>
+
+            <!-- Neutral and accent status badges follow the InfoBadge pill geometry. Text inside a badge
+                 always uses a text token so meaning never depends on the fill color alone. -->
+            <Style x:Key="ClashNeutralBadgeStyle" TargetType="Border">
+                <Setter Property="Background" Value="{ThemeResource ControlFillColorSecondaryBrush}" />
+                <Setter Property="BorderBrush" Value="{ThemeResource ControlStrokeColorDefaultBrush}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="10" />
+                <Setter Property="Padding" Value="8,1,8,2" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+
+            <Style x:Key="ClashAccentBadgeStyle" TargetType="Border">
+                <Setter Property="Background" Value="{ThemeResource AccentFillColorDefaultBrush}" />
+                <Setter Property="CornerRadius" Value="10" />
+                <Setter Property="Padding" Value="8,1,8,2" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+
+            <Style x:Key="ClashCardListItemStyle" TargetType="ListViewItem">
+                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
+                <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="{ThemeResource OverlayCornerRadius}" />
+                <Setter Property="Margin" Value="0,0,0,4" />
+                <Setter Property="Padding" Value="16,0" />
+                <Setter Property="MinHeight" Value="68" />
+            </Style>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

@@ -1,11 +1,15 @@
 using System;
 using System.Globalization;
+using System.Runtime.InteropServices;
 using ClashSharp.Presentation.Composition;
 using ClashSharp.Presentation.Dialogs;
 using ClashSharp.Presentation.Lifecycle;
 using ClashSharp.ViewModel;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Windows.ApplicationModel.DataTransfer;
+using SystemClipboard = Windows.ApplicationModel.DataTransfer.Clipboard;
 
 namespace ClashSharp.View;
 
@@ -25,6 +29,9 @@ public sealed partial class About : Page
     private readonly Func<AboutPageComposition.ProxyInformation> _readProxyInformation;
 
     private readonly PageLoadSession _loadSession = new();
+
+    /// <summary>Restores the copy button label after its transient confirmation; owned and stopped by this page.</summary>
+    private DispatcherQueueTimer? _copyFeedbackTimer;
 
     /// <summary>Initializes the page from an explicit composition contract.</summary>
     internal About(AboutPageComposition.Dependencies dependencies)
@@ -55,6 +62,49 @@ public sealed partial class About : Page
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
         _loadSession.Cancel();
+        _copyFeedbackTimer?.Stop();
+        ShowCopyIdleState();
+    }
+
+    /// <summary>Copies non-sensitive application identity lines, then confirms the result on the button itself.</summary>
+    private void CopyInformationButton_Click(object sender, RoutedEventArgs e)
+    {
+        DataPackage package = new() { RequestedOperation = DataPackageOperation.Copy };
+        package.SetText(_viewModel.CopyInformationText);
+        bool copied;
+        try
+        {
+            SystemClipboard.SetContent(package);
+            // Materialize the text now so other processes, including RDP clients, can read it immediately.
+            SystemClipboard.Flush();
+            copied = true;
+        }
+        catch (COMException)
+        {
+            // Another process owns the clipboard; the visible failure label is the complete user-facing result.
+            copied = false;
+        }
+
+        CopyFeedbackGlyph.Glyph = copied ? "\uE73E" : "\uE783";
+        CopyFeedbackText.Text = copied ? _viewModel.CopiedText : _viewModel.CopyFailedText;
+        CopyIdleContent.Visibility = Visibility.Collapsed;
+        CopyFeedbackContent.Visibility = Visibility.Visible;
+        if (_copyFeedbackTimer is null)
+        {
+            _copyFeedbackTimer = DispatcherQueue.CreateTimer();
+            _copyFeedbackTimer.Interval = TimeSpan.FromSeconds(2);
+            _copyFeedbackTimer.IsRepeating = false;
+            _copyFeedbackTimer.Tick += (_, _) => ShowCopyIdleState();
+        }
+
+        _copyFeedbackTimer.Stop();
+        _copyFeedbackTimer.Start();
+    }
+
+    private void ShowCopyIdleState()
+    {
+        CopyFeedbackContent.Visibility = Visibility.Collapsed;
+        CopyIdleContent.Visibility = Visibility.Visible;
     }
 
     /// <summary>Opens local proxy and core path information in a dialog.</summary>

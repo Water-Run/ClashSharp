@@ -337,9 +337,9 @@ public sealed class AppResourcePackagingTests
         Assert.DoesNotContain(".Instance", aboutCode, StringComparison.Ordinal);
     }
 
-    /// <summary>Verifies app identity stays prominent while runtime metadata remains in the native details expander.</summary>
+    /// <summary>Verifies About follows the Windows Settings About layout: identity header, then a specification card.</summary>
     [Fact]
-    public void AboutXaml_SeparatesIdentityFromExpandableMetadata()
+    public void AboutXaml_SeparatesIdentityHeaderFromSpecificationCard()
     {
         string aboutXamlPath = FindSourceFile("ClashSharp", "ClashSharp", "View", "About.xaml");
 
@@ -356,12 +356,92 @@ public sealed class AppResourcePackagingTests
         Assert.True(runtimeIndex > descriptionIndex, "Secondary runtime metadata must follow the compact identity section.");
         XNamespace presentation = "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
         XNamespace xaml = "http://schemas.microsoft.com/winfx/2006/xaml";
-        XElement details = XDocument.Parse(aboutXaml).Descendants(presentation + "Expander")
-            .Single(element => (string?)element.Attribute(xaml + "Name") == "AboutInformationExpander");
-        Assert.Contains(details.Descendants(presentation + "TextBlock"), element =>
+        XDocument document = XDocument.Parse(aboutXaml);
+        XElement identity = document.Descendants(presentation + "Grid")
+            .Single(element => (string?)element.Attribute(xaml + "Name") == "AboutBrand");
+        XElement specifications = document.Descendants(presentation + "Grid")
+            .Single(element => (string?)element.Attribute(xaml + "Name") == "AboutInformationCard");
+        Assert.Equal("{StaticResource ClashSurfaceCardStyle}", (string?)identity.Attribute("Style"));
+        Assert.Contains(identity.Descendants(presentation + "TextBlock"), element =>
+            (string?)element.Attribute("Text") == "{Binding AppDescriptionText}");
+        Assert.Contains(specifications.Descendants(presentation + "TextBlock"), element =>
             (string?)element.Attribute("Text") == "{Binding RuntimeValueText}");
+        Assert.Contains(specifications.Descendants(presentation + "TextBlock"), element =>
+            (string?)element.Attribute("Text") == "{Binding CoreValueText}");
+        Assert.Contains(specifications.Descendants(presentation + "Button"), element =>
+            (string?)element.Attribute("Click") == "CopyInformationButton_Click");
+        Assert.Empty(document.Descendants(presentation + "Expander"));
         Assert.DoesNotContain("x:Name=\"VersionLabelText\"", aboutXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("x:Name=\"RuntimeTitleText\"", aboutXaml, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies in-page cards use Windows 11 geometry while Master Control keeps its square Metro surfaces.</summary>
+    [Fact]
+    public void AppXaml_SeparatesFluentCardGeometryFromMetroSurfaces()
+    {
+        XNamespace presentation = "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
+        XNamespace xaml = "http://schemas.microsoft.com/winfx/2006/xaml";
+        XDocument app = XDocument.Load(FindSourceFile("ClashSharp", "ClashSharp", "App.xaml"));
+        string Setter(string styleKey, string property) => (string)app.Descendants(presentation + "Style")
+            .Single(style => (string?)style.Attribute(xaml + "Key") == styleKey)
+            .Elements(presentation + "Setter")
+            .Single(setter => (string?)setter.Attribute("Property") == property)
+            .Attribute("Value")!;
+
+        Assert.Equal("{ThemeResource ControlCornerRadius}", Setter("ClashSettingsCardStyle", "CornerRadius"));
+        Assert.Equal("{ThemeResource OverlayCornerRadius}", Setter("ClashSurfaceCardStyle", "CornerRadius"));
+        Assert.Equal("{ThemeResource OverlayCornerRadius}", Setter("ClashCardListItemStyle", "CornerRadius"));
+        Assert.Equal("0", Setter("ClashCardGridStyle", "CornerRadius"));
+        Assert.Contains(app.Descendants(xaml + "Double"), element =>
+            (string?)element.Attribute(xaml + "Key") == "ClashSettingsCardSpacing" && element.Value == "4");
+
+        string settingRow = File.ReadAllText(FindSourceFile("ClashSharp", "ClashSharp", "Components", "SettingRow.xaml"));
+        Assert.Contains("Style=\"{StaticResource ClashSettingsCardStyle}\"", settingRow, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"HeaderIcon\"", settingRow, StringComparison.Ordinal);
+        Assert.DoesNotContain("ClashCardGridStyle", settingRow, StringComparison.Ordinal);
+        foreach (string metroSurface in new[] { "MasterInfoTile.xaml", "MasterModeButton.xaml" })
+        {
+            string component = File.ReadAllText(FindSourceFile("ClashSharp", "ClashSharp", "Components", metroSurface));
+            Assert.Contains("Style=\"{StaticResource ClashCardGridStyle}\"", component, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>Verifies every settings card carries a Fluent glyph and the page stacks cards with Windows spacing.</summary>
+    [Fact]
+    public void SettingsXaml_GivesEveryCardAnIconAndCompactSpacing()
+    {
+        string settingsXaml = File.ReadAllText(FindSourceFile("ClashSharp", "ClashSharp", "View", "Settings.xaml"));
+        XNamespace presentation = "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
+        XNamespace components = "using:ClashSharp.Components";
+        XElement[] rows = XDocument.Parse(settingsXaml).Descendants(components + "SettingRow").ToArray();
+
+        Assert.NotEmpty(rows);
+        Assert.All(rows, row => Assert.False(
+            string.IsNullOrWhiteSpace((string?)row.Attribute("Icon")),
+            $"Settings row {(string?)row.Attribute("Title")} has no icon."));
+        Assert.Contains("x:Name=\"SettingsContentPanel\" Spacing=\"{StaticResource ClashSettingsCardSpacing}\"", settingsXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("SubtitleTextBlockStyle", settingsXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("ClashCardGridStyle", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains(XDocument.Parse(settingsXaml).Descendants(presentation + "TextBlock"), element =>
+            (string?)element.Attribute("Style") == "{StaticResource ClashSectionHeaderTextBlockStyle}");
+    }
+
+    /// <summary>Verifies Statistics draws headline tiles, a single-series daily chart and native share bars.</summary>
+    [Fact]
+    public void StatisticsXaml_UsesStatTilesChartAndShareBars()
+    {
+        string statistics = File.ReadAllText(FindSourceFile("ClashSharp", "ClashSharp", "View", "Statistics.xaml"));
+
+        Assert.Contains("ItemsSource=\"{Binding DailyChartBars}\"", statistics, StringComparison.Ordinal);
+        Assert.Contains("Converter={StaticResource FractionToLengthConverter}", statistics, StringComparison.Ordinal);
+        Assert.Contains("Background=\"{ThemeResource AccentFillColorDefaultBrush}\" CornerRadius=\"4,4,0,0\"", statistics, StringComparison.Ordinal);
+        Assert.Contains("ToolTipService.ToolTip=\"{Binding AccessibleText}\"", statistics, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.Name=\"{Binding AccessibleText}\"", statistics, StringComparison.Ordinal);
+        Assert.Contains("Value=\"{Binding SharePercent}\"", statistics, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"SummaryCards\"", statistics, StringComparison.Ordinal);
+        Assert.Contains("Style=\"{StaticResource ClashStatValueTextBlockStyle}\"", statistics, StringComparison.Ordinal);
+        Assert.DoesNotContain("<ListView", statistics, StringComparison.Ordinal);
+        Assert.DoesNotContain("ClashCardGridStyle", statistics, StringComparison.Ordinal);
     }
 
     /// <summary>Verifies the add-subscription dialog uses localization keys instead of hard-coded Chinese labels.</summary>
@@ -2954,7 +3034,8 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("Text=\"{Binding Value, ElementName=Root}\"", masterInfoTile, StringComparison.Ordinal);
         Assert.Contains("Foreground=\"{ThemeResource TextFillColorPrimaryBrush}\"", masterInfoTile, StringComparison.Ordinal);
         Assert.Contains("Text=\"{Binding Value}\" Style=\"{ThemeResource BodyStrongTextBlockStyle}\" Foreground=\"{ThemeResource TextFillColorPrimaryBrush}\"", masterControl, StringComparison.Ordinal);
-        Assert.Contains("x:Name=\"TotalTrafficText\" Text=\"{Binding TotalTrafficText}\" Style=\"{ThemeResource BodyTextBlockStyle}\" Foreground=\"{ThemeResource TextFillColorPrimaryBrush}\"", statistics, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"TotalTrafficText\" Text=\"{Binding TotalTrafficText}\" Style=\"{ThemeResource CaptionTextBlockStyle}\" Foreground=\"{ThemeResource TextFillColorSecondaryBrush}\"", statistics, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"TotalTransferValueText\" Text=\"{Binding TotalTransferValueText}\" Style=\"{StaticResource ClashStatValueTextBlockStyle}\"", statistics, StringComparison.Ordinal);
         Assert.Contains("Text=\"{Binding ConditionsSummary}\" Style=\"{ThemeResource BodyTextBlockStyle}\" Foreground=\"{ThemeResource TextFillColorPrimaryBrush}\"", triggers, StringComparison.Ordinal);
         Assert.Contains("Grid.Column=\"1\" Text=\"{Binding LevelDisplay}\" Style=\"{ThemeResource CaptionTextBlockStyle}\" Foreground=\"{ThemeResource TextFillColorPrimaryBrush}\"", logs, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"ActiveProfileText\" Text=\"{Binding ActiveProfileText}\" Style=\"{ThemeResource BodyTextBlockStyle}\" Foreground=\"{ThemeResource TextFillColorPrimaryBrush}\"", profiles, StringComparison.Ordinal);

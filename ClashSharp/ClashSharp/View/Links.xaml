@@ -23,7 +23,7 @@
         </Grid.RowDefinitions>
         <StackPanel Spacing="4">
             <TextBlock x:Name="PageTitleText" Text="{Binding PageTitleText}" Style="{ThemeResource TitleTextBlockStyle}" TextWrapping="Wrap" AutomationProperties.HeadingLevel="Level1" />
-            <TextBlock x:Name="DescriptionText" Text="{Binding DescriptionText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+            <TextBlock x:Name="DescriptionText" Text="{Binding DescriptionText}" Style="{StaticResource ClashPageHeaderDescriptionTextBlockStyle}" />
         </StackPanel>
 
         <CommandBar Style="{StaticResource ClashPageCommandBarStyle}" x:Name="LinkCommands" Grid.Row="1" Margin="0,12,0,0" DefaultLabelPosition="Right" Background="Transparent">
@@ -57,29 +57,46 @@
         <InfoBar Grid.Row="2" Margin="0,12,0,0" IsOpen="{Binding HasStatusText, Mode=OneWay}" IsClosable="False"
                  Severity="{Binding StatusSeverity, Converter={StaticResource PageStatusSeverityConverter}}" Message="{Binding StatusText}"
                  Visibility="{Binding HasStatusText, Converter={StaticResource BooleanToVisibilityConverter}}" />
-        <ListView Grid.Row="3" Margin="0,16,0,0" x:Name="SubscriptionLinksList" Style="{StaticResource ClashDataListStyle}" ItemsSource="{Binding SubscriptionLinks}" SelectedItem="{Binding SelectedLink, Mode=TwoWay}" SelectionMode="Single"
+        <!-- Each subscription is its own card; selection keeps the native list indicator for the command bar. -->
+        <ListView Grid.Row="3" Margin="0,16,0,0" x:Name="SubscriptionLinksList" ItemsSource="{Binding SubscriptionLinks}" SelectedItem="{Binding SelectedLink, Mode=TwoWay}" SelectionMode="Single"
+                  ItemContainerStyle="{StaticResource ClashCardListItemStyle}" Padding="0" VerticalAlignment="Top"
                   Visibility="{Binding HasLinks, Converter={StaticResource BooleanToVisibilityConverter}}">
             <ListView.ItemTemplate>
                 <DataTemplate>
-                    <StackPanel Padding="4,10" Spacing="6">
-                        <TextBlock Text="{Binding NameDisplay}" TextWrapping="Wrap" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-                        <TextBlock Text="{Binding UriDisplay}" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding UriDisplay}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                        <TextBlock Text="{Binding StatusDisplay}" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-                        <Grid ColumnSpacing="20" RowSpacing="4">
+                    <Grid Padding="4,16" ColumnSpacing="16" RowSpacing="4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <FontIcon Grid.RowSpan="2" Glyph="&#xE71B;" Style="{StaticResource ClashCardIconStyle}" VerticalAlignment="Top" Margin="0,2,0,0" AutomationProperties.AccessibilityView="Raw" />
+                        <TextBlock Grid.Column="1" Text="{Binding NameDisplay}" TextWrapping="Wrap" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                        <Border Grid.Column="2" Style="{StaticResource ClashNeutralBadgeStyle}" ToolTipService.ToolTip="{Binding StatusDisplay}">
+                            <TextBlock Text="{Binding StatusDisplay}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" MaxWidth="240" TextTrimming="CharacterEllipsis" />
+                        </Border>
+                        <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Text="{Binding UriDisplay}" Style="{ThemeResource CaptionTextBlockStyle}" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding UriDisplay}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <StackPanel Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2" Margin="0,10,0,0" Spacing="6">
+                            <TextBlock Text="{Binding UsageDisplay}" TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                            <ProgressBar Minimum="0" Maximum="100" Value="{Binding UsagePercent}" AutomationProperties.AccessibilityView="Raw"
+                                         Visibility="{Binding HasUsageQuota, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                        </StackPanel>
+                        <Grid Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="2" Margin="0,8,0,0" ColumnSpacing="24" RowSpacing="4">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                            </Grid.RowDefinitions>
                             <TextBlock Text="{Binding ScheduleDisplay}" TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                             <TextBlock Grid.Column="1" Text="{Binding UpdatedSummary}" TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                            <TextBlock Grid.Row="1" Text="{Binding UsageDisplay}" TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding ExpiryDisplay}" TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock Grid.Column="2" Text="{Binding ExpiryDisplay}" TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                         </Grid>
-                    </StackPanel>
+                    </Grid>
                 </DataTemplate>
             </ListView.ItemTemplate>
         </ListView>

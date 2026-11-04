@@ -28,29 +28,53 @@
         </Grid.RowDefinitions>
         <StackPanel Spacing="4">
             <TextBlock x:Name="PageTitleText" Text="{Binding PageTitleText}" Style="{ThemeResource TitleTextBlockStyle}" TextWrapping="Wrap" AutomationProperties.HeadingLevel="Level1" />
-            <TextBlock x:Name="DescriptionText" Text="{Binding DescriptionText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+            <TextBlock x:Name="DescriptionText" Text="{Binding DescriptionText}" Style="{StaticResource ClashPageHeaderDescriptionTextBlockStyle}" />
         </StackPanel>
 
-        <Grid Grid.Row="1" Margin="0,12,0,0" ColumnSpacing="12" RowSpacing="8">
+        <!-- Current profile summary, then the subscription import card directly below it. -->
+        <Grid Grid.Row="1" Margin="0,16,0,0" Style="{StaticResource ClashSettingsCardStyle}" ColumnSpacing="16">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="1*" />
-                <ColumnDefinition Width="2*" />
                 <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <FontIcon Glyph="&#xE8F1;" Style="{StaticResource ClashCardIconStyle}" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" Margin="2,0,2,0" AutomationProperties.AccessibilityView="Raw" />
+            <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                <TextBlock x:Name="CurrentProfileTitleText" Text="{Binding CurrentProfileTitleText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                <TextBlock x:Name="ActiveProfileText" Text="{Binding ActiveProfileText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" TextWrapping="Wrap" />
+            </StackPanel>
+        </Grid>
+
+        <Grid Grid.Row="2" Margin="0,4,0,0" Style="{StaticResource ClashSettingsCardStyle}" ColumnSpacing="16" RowSpacing="10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
-            <TextBox x:Name="SubscriptionImportName" Header="{Binding ImportNameText}" Text="{Binding SubscriptionName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding CanImport}" />
-            <TextBox x:Name="SubscriptionImportUrl" Grid.Column="1" Header="{Binding ImportSubscriptionText}" PlaceholderText="{Binding ImportUrlPlaceholderText}" Text="{Binding SubscriptionUri, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding CanImport}" />
-            <Button x:Name="ImportSubscriptionButton" Grid.Column="2" Content="{Binding ImportActionText}" VerticalAlignment="Bottom" IsEnabled="{Binding CanImport}" Click="ImportSubscriptionButton_Click" />
-            <StackPanel Grid.Row="1" Grid.ColumnSpan="3" Spacing="4" Visibility="{Binding IsImporting, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <FontIcon Glyph="&#xE896;" Style="{StaticResource ClashCardIconStyle}" Margin="2,0,2,0" AutomationProperties.AccessibilityView="Raw" />
+            <TextBlock Grid.Column="1" Text="{Binding ImportSubscriptionText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" VerticalAlignment="Center" TextWrapping="Wrap" />
+            <Grid Grid.Row="1" Grid.Column="1" ColumnSpacing="8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="2*" />
+                    <ColumnDefinition Width="1*" MinWidth="120" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBox x:Name="SubscriptionImportUrl" PlaceholderText="{Binding ImportUrlPlaceholderText}" Text="{Binding SubscriptionUri, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding CanImport}"
+                         AutomationProperties.Name="{Binding ImportSubscriptionText}" />
+                <TextBox x:Name="SubscriptionImportName" Grid.Column="1" PlaceholderText="{Binding ImportNameText}" Text="{Binding SubscriptionName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding CanImport}"
+                         AutomationProperties.Name="{Binding ImportNameText}" />
+                <Button x:Name="ImportSubscriptionButton" Grid.Column="2" Content="{Binding ImportActionText}" MinWidth="96" Style="{StaticResource AccentButtonStyle}" IsEnabled="{Binding CanImport}" Click="ImportSubscriptionButton_Click" />
+            </Grid>
+            <StackPanel Grid.Row="2" Grid.Column="1" Spacing="6" Visibility="{Binding IsImporting, Converter={StaticResource BooleanToVisibilityConverter}}">
                 <ProgressBar IsIndeterminate="{Binding IsImporting}" />
-                <TextBlock Text="{Binding ImportProgressText}" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding ImportProgressText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
             </StackPanel>
         </Grid>
 
-        <CommandBar Style="{StaticResource ClashPageCommandBarStyle}" x:Name="ProfileCommands" Grid.Row="2" Margin="0,12,0,0" DefaultLabelPosition="Right" Background="Transparent">
+        <CommandBar Style="{StaticResource ClashPageCommandBarStyle}" x:Name="ProfileCommands" Grid.Row="3" Margin="0,16,0,0" DefaultLabelPosition="Right" Background="Transparent">
             <AppBarButton x:Name="ImportProfileButton" Label="{Binding ImportProfileText}" Click="ImportProfileButton_Click">
                 <AppBarButton.Icon>
                     <FontIcon Glyph="&#xE8E5;" />
@@ -84,21 +108,14 @@
             </AppBarButton>
         </CommandBar>
 
-        <InfoBar Grid.Row="3" Margin="0,12,0,0" IsOpen="{Binding HasStatusText, Mode=OneWay}" IsClosable="False"
+        <InfoBar Grid.Row="4" Margin="0,8,0,0" IsOpen="{Binding HasStatusText, Mode=OneWay}" IsClosable="False"
                  Severity="{Binding StatusSeverity, Converter={StaticResource PageStatusSeverityConverter}}" Message="{Binding StatusText}"
                  Visibility="{Binding HasStatusText, Converter={StaticResource BooleanToVisibilityConverter}}">
             <InfoBar.ActionButton>
                 <Button Content="{Binding SetActiveProfileText}" Click="SetActiveProfileButton_Click" Visibility="{Binding CanUseImportedProfile, Converter={StaticResource BooleanToVisibilityConverter}}" />
             </InfoBar.ActionButton>
         </InfoBar>
-        <Grid Grid.Row="4" Margin="0,16,0,0" Style="{StaticResource ClashSectionGridStyle}">
-            <StackPanel Spacing="4">
-                <TextBlock x:Name="CurrentProfileTitleText" Text="{Binding CurrentProfileTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-                <TextBlock x:Name="ActiveProfileText" Text="{Binding ActiveProfileText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-            </StackPanel>
-        </Grid>
-
-        <ListView Grid.Row="5" Margin="0,16,0,0" x:Name="ProfilesList" Style="{StaticResource ClashDataListStyle}" ItemsSource="{Binding Profiles}" SelectedItem="{Binding SelectedProfile, Mode=TwoWay}" SelectionMode="Single">
+        <ListView Grid.Row="5" Margin="0,8,0,0" x:Name="ProfilesList" Style="{StaticResource ClashDataListStyle}" VerticalAlignment="Top" ItemsSource="{Binding Profiles}" SelectedItem="{Binding SelectedProfile, Mode=TwoWay}" SelectionMode="Single">
             <ListView.Header>
                 <Grid Padding="20,8" ColumnSpacing="12">
                     <Grid.ColumnDefinitions>
@@ -127,9 +144,17 @@
                         </Grid.ColumnDefinitions>
 
                         <StackPanel Spacing="2">
-                            <TextBlock Text="{Binding NameDisplay}" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding NameDisplay}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                            <Grid ColumnSpacing="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="{Binding NameDisplay}" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding NameDisplay}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                                <Border Grid.Column="1" HorizontalAlignment="Left" Style="{StaticResource ClashAccentBadgeStyle}" Visibility="{Binding IsActive, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                    <TextBlock Text="{Binding ActiveLabelDisplay}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
+                                </Border>
+                            </Grid>
                             <TextBlock Text="{Binding SourceNameDisplay}" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding SourceNameDisplay}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                            <TextBlock Text="{Binding ActiveLabelDisplay}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" Visibility="{Binding IsActive, Converter={StaticResource BooleanToVisibilityConverter}}" />
                         </StackPanel>
 
                         <TextBlock Grid.Column="1" Text="{Binding StatusDisplay}" TextWrapping="Wrap" ToolTipService.ToolTip="{Binding StatusDisplay}" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />

@@ -32,7 +32,7 @@
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" MaxWidth="1040" />
                 </Grid.ColumnDefinitions>
-                <StackPanel x:Name="SettingsContentPanel" Spacing="8" Style="{StaticResource ClashReadingPagePanelStyle}">
+                <StackPanel x:Name="SettingsContentPanel" Spacing="{StaticResource ClashSettingsCardSpacing}" Style="{StaticResource ClashReadingPagePanelStyle}">
                     <TextBlock x:Name="PageTitleText" Text="{Binding PageTitleText}"
                                Style="{ThemeResource TitleTextBlockStyle}" Margin="0,0,0,16" TextWrapping="Wrap" AutomationProperties.HeadingLevel="Level1" />
                     <StackPanel x:Name="ApplicationRecoveryPanel" Spacing="6"
@@ -96,20 +96,20 @@
                         </InfoBar.ActionButton>
                     </InfoBar>
 
-                    <TextBlock x:Name="LanguageSectionTitleText" Text="{Binding LanguageSectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-                    <components:SettingRow x:Name="LanguageRow" Title="{Binding LanguageTitleText}" Description="{Binding LanguageDescriptionText}">
+                    <TextBlock x:Name="LanguageSectionTitleText" Text="{Binding LanguageSectionTitleText}" Style="{StaticResource ClashSectionHeaderTextBlockStyle}" Margin="1,0,0,4" AutomationProperties.HeadingLevel="Level2" />
+                    <components:SettingRow x:Name="LanguageRow" Icon="&#xF2B7;" Title="{Binding LanguageTitleText}" Description="{Binding LanguageDescriptionText}">
                         <components:SettingRow.ActionContent>
                             <ComboBox x:Name="LanguageBox" Width="180" ItemsSource="{Binding DisplayLanguageOptions}" SelectedIndex="{Binding DisplayLanguageIndex, Mode=OneWay}" SelectionChanged="PreferenceCombo_SelectionChanged" />
                         </components:SettingRow.ActionContent>
                     </components:SettingRow>
 
-                    <components:SettingRow x:Name="AppThemeModeRow" Title="{Binding AppThemeModeTitleText}" Description="{Binding AppThemeModeDescriptionText}">
+                    <components:SettingRow x:Name="AppThemeModeRow" Icon="&#xE771;" Title="{Binding AppThemeModeTitleText}" Description="{Binding AppThemeModeDescriptionText}">
                         <components:SettingRow.ActionContent>
                             <ComboBox x:Name="AppThemeModeBox" Width="180" ItemsSource="{Binding AppThemeModeOptions}" SelectedIndex="{Binding AppThemeModeIndex, Mode=OneWay}" SelectionChanged="PreferenceCombo_SelectionChanged" />
                         </components:SettingRow.ActionContent>
                     </components:SettingRow>
 
-                    <components:SettingRow x:Name="AppAccentColorRow" Title="{Binding AppAccentColorTitleText}" Description="{Binding AppAccentColorDescriptionText}">
+                    <components:SettingRow x:Name="AppAccentColorRow" Icon="&#xE790;" Title="{Binding AppAccentColorTitleText}" Description="{Binding AppAccentColorDescriptionText}">
                         <components:SettingRow.ActionContent>
                             <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                                 <ComboBox x:Name="AppAccentColorModeBox" MinWidth="180" ItemsSource="{Binding AppAccentColorModeOptions}" SelectedIndex="{Binding AppAccentColorModeIndex, Mode=OneWay}" SelectionChanged="PreferenceCombo_SelectionChanged" />
@@ -135,13 +135,13 @@
                         </components:SettingRow.ActionContent>
                     </components:SettingRow>
 
-                    <components:SettingRow x:Name="CloseBehaviorModeRow" Title="{Binding CloseBehaviorModeTitleText}" Description="{Binding CloseBehaviorModeDescriptionText}">
+                    <components:SettingRow x:Name="CloseBehaviorModeRow" Icon="&#xE7C4;" Title="{Binding CloseBehaviorModeTitleText}" Description="{Binding CloseBehaviorModeDescriptionText}">
                         <components:SettingRow.ActionContent>
                             <ComboBox x:Name="CloseBehaviorModeBox" Width="220" ItemsSource="{Binding CloseBehaviorModeOptions}" SelectedIndex="{Binding CloseBehaviorModeIndex, Mode=OneWay}" SelectionChanged="PreferenceCombo_SelectionChanged" />
                         </components:SettingRow.ActionContent>
                     </components:SettingRow>
 
-                    <components:SettingRow x:Name="ApplicationLifecycleRow" Title="{Binding ApplicationLifecycleTitleText}" Description="{Binding ApplicationLifecycleDescriptionText}">
+                    <components:SettingRow x:Name="ApplicationLifecycleRow" Icon="&#xE7E8;" Title="{Binding ApplicationLifecycleTitleText}" Description="{Binding ApplicationLifecycleDescriptionText}">
                         <components:SettingRow.ActionContent>
                             <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                                 <Button x:Name="RestartApplicationButton" Command="{Binding RestartApplicationCommand}">
@@ -162,19 +162,18 @@
 
                     <HyperlinkButton x:Name="ResetBasicSettingsLink" Content="{Binding ResetGroupToDefaultsText}" HorizontalAlignment="Right" Margin="0,0,8,0" Padding="0" Click="ResetBasicSettingsButton_Click" />
 
-                    <TextBlock Text="{Binding UnitsSectionTitleText}" Margin="0,20,0,4"
-                               Style="{ThemeResource BodyStrongTextBlockStyle}" AutomationProperties.HeadingLevel="Level2" />
-                    <components:SettingRow Title="{Binding DataUnitStyleTitleText}" Description="{Binding DataUnitStyleDescriptionText}">
+                    <TextBlock Text="{Binding UnitsSectionTitleText}" Style="{StaticResource ClashSectionHeaderTextBlockStyle}" AutomationProperties.HeadingLevel="Level2" />
+                    <components:SettingRow Icon="&#xEDA2;" Title="{Binding DataUnitStyleTitleText}" Description="{Binding DataUnitStyleDescriptionText}">
                         <components:SettingRow.ActionContent>
                             <ComboBox x:Name="DataUnitStyleBox" Width="240" ItemsSource="{Binding DataUnitStyleOptions}" SelectedIndex="{Binding DataUnitStyleIndex, Mode=OneWay}" SelectionChanged="PreferenceCombo_SelectionChanged" />
                         </components:SettingRow.ActionContent>
                     </components:SettingRow>
-                    <components:SettingRow Title="{Binding RateUnitTitleText}" Description="{Binding RateUnitDescriptionText}">
+                    <components:SettingRow Icon="&#xEC4A;" Title="{Binding RateUnitTitleText}" Description="{Binding RateUnitDescriptionText}">
                         <components:SettingRow.ActionContent>
                             <ComboBox x:Name="RateUnitBox" Width="240" ItemsSource="{Binding RateUnitOptions}" SelectedIndex="{Binding RateUnitIndex, Mode=OneWay}" SelectionChanged="PreferenceCombo_SelectionChanged" />
                         </components:SettingRow.ActionContent>
                     </components:SettingRow>
-                    <components:SettingRow Title="{Binding ClockFormatTitleText}" Description="{Binding ClockFormatDescriptionText}">
+                    <components:SettingRow Icon="&#xE823;" Title="{Binding ClockFormatTitleText}" Description="{Binding ClockFormatDescriptionText}">
                         <components:SettingRow.ActionContent>
                             <ComboBox x:Name="ClockFormatBox" Width="240" ItemsSource="{Binding ClockFormatOptions}" SelectedIndex="{Binding ClockFormatIndex, Mode=OneWay}" SelectionChanged="PreferenceCombo_SelectionChanged" />
                         </components:SettingRow.ActionContent>
@@ -182,14 +181,14 @@
 
                     <HyperlinkButton x:Name="ResetUnitsSettingsLink" Content="{Binding ResetGroupToDefaultsText}" HorizontalAlignment="Right"
                                      Margin="0,0,8,0" Padding="0" Click="ResetUnitsSettingsButton_Click" />
-                    <TextBlock x:Name="StartupSectionTitleText" Text="{Binding StartupSectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" Margin="0,8,0,0" />
-                    <components:SettingRow x:Name="LaunchAtStartupRow" Title="{Binding LaunchAtStartupTitleText}" Description="{Binding LaunchAtStartupDescriptionText}">
+                    <TextBlock x:Name="StartupSectionTitleText" Text="{Binding StartupSectionTitleText}" Style="{StaticResource ClashSectionHeaderTextBlockStyle}" AutomationProperties.HeadingLevel="Level2" />
+                    <components:SettingRow x:Name="LaunchAtStartupRow" Icon="&#xE768;" Title="{Binding LaunchAtStartupTitleText}" Description="{Binding LaunchAtStartupDescriptionText}">
                         <components:SettingRow.ActionContent>
                             <ToggleSwitch x:Name="LaunchAtStartupToggle" MinWidth="0" IsOn="{Binding LaunchAtStartupEnabled, Mode=TwoWay}" OnContent="{x:Null}" OffContent="{x:Null}" />
                         </components:SettingRow.ActionContent>
                     </components:SettingRow>
 
-                    <components:SettingRow x:Name="StartupConflictCheckRow" Title="{Binding StartupConflictCheckTitleText}" Description="{Binding StartupConflictCheckDescriptionText}">
+                    <components:SettingRow x:Name="StartupConflictCheckRow" Icon="&#xE9D9;" Title="{Binding StartupConflictCheckTitleText}" Description="{Binding StartupConflictCheckDescriptionText}">
                         <components:SettingRow.ActionContent>
                             <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                                 <ToggleSwitch x:Name="StartupConflictCheckToggle" MinWidth="0" IsOn="{Binding StartupConflictCheckEnabled, Mode=OneWay}" Toggled="PreferenceToggle_Toggled" OnContent="{x:Null}" OffContent="{x:Null}" />
@@ -203,7 +202,7 @@
                         </components:SettingRow.ActionContent>
                     </components:SettingRow>
 
-                    <components:SettingRow x:Name="ShowStartupGuideRow" Title="{Binding StartupGuideTitleText}" Description="{Binding StartupGuideDescriptionText}">
+                    <components:SettingRow x:Name="ShowStartupGuideRow" Icon="&#xE7BE;" Title="{Binding StartupGuideTitleText}" Description="{Binding StartupGuideDescriptionText}">
                         <components:SettingRow.ActionContent>
                             <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                                 <ToggleSwitch x:Name="ShowStartupGuideToggle" MinWidth="0" IsOn="{Binding ShowStartupGuideOnStartup, Mode=OneWay}" Toggled="PreferenceToggle_Toggled" OnContent="{x:Null}" OffContent="{x:Null}" />
@@ -217,21 +216,21 @@
                         </components:SettingRow.ActionContent>
                     </components:SettingRow>
 
-                    <components:SettingRow x:Name="StartupBehaviorModeRow" Title="{Binding StartupBehaviorModeTitleText}" Description="{Binding StartupBehaviorModeDescriptionText}">
+                    <components:SettingRow x:Name="StartupBehaviorModeRow" Icon="&#xE945;" Title="{Binding StartupBehaviorModeTitleText}" Description="{Binding StartupBehaviorModeDescriptionText}">
                         <components:SettingRow.ActionContent>
                             <ComboBox x:Name="StartupBehaviorModeBox" Width="180" ItemsSource="{Binding StartupBehaviorModeOptions}" SelectedIndex="{Binding StartupBehaviorModeIndex, Mode=OneWay}" SelectionChanged="PreferenceCombo_SelectionChanged" />
                         </components:SettingRow.ActionContent>
                     </components:SettingRow>
                     <HyperlinkButton x:Name="ResetStartupSettingsLink" Content="{Binding ResetGroupToDefaultsText}" HorizontalAlignment="Right" Margin="0,0,8,0" Padding="0" Click="ResetStartupSettingsButton_Click" />
 
-                    <TextBlock x:Name="ProxySectionTitleText" Text="{Binding ProxySectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" Margin="0,8,0,0" />
-                    <components:SettingRow x:Name="TransparentProxyRow" Title="{Binding TransparentProxyTitleText}" Description="{Binding TransparentProxyDescriptionText}">
+                    <TextBlock x:Name="ProxySectionTitleText" Text="{Binding ProxySectionTitleText}" Style="{StaticResource ClashSectionHeaderTextBlockStyle}" AutomationProperties.HeadingLevel="Level2" />
+                    <components:SettingRow x:Name="TransparentProxyRow" Icon="&#xE839;" Title="{Binding TransparentProxyTitleText}" Description="{Binding TransparentProxyDescriptionText}">
                         <components:SettingRow.ActionContent>
                             <ToggleSwitch x:Name="TransparentProxyToggle" MinWidth="0" IsEnabled="{Binding CanToggleTransparentProxy}" IsOn="{Binding TransparentProxyEnabled, Mode=TwoWay}" OnContent="{x:Null}" OffContent="{x:Null}" />
                         </components:SettingRow.ActionContent>
                     </components:SettingRow>
 
-                    <components:SettingRow x:Name="TransparentProxyServiceRow" Title="{Binding TransparentProxyServiceTitleText}" Description="{Binding TransparentProxyServiceDescriptionText}">
+                    <components:SettingRow x:Name="TransparentProxyServiceRow" Icon="&#xE912;" Title="{Binding TransparentProxyServiceTitleText}" Description="{Binding TransparentProxyServiceDescriptionText}">
                         <components:SettingRow.ActionContent>
                             <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                                 <TextBlock x:Name="MihomoServiceStatusText" Text="{Binding MihomoServiceStatusText}" ToolTipService.ToolTip="{Binding MihomoServiceDiagnosticText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" MaxWidth="280" TextWrapping="WrapWholeWords" VerticalAlignment="Center" />
@@ -239,13 +238,13 @@
                         </components:SettingRow.ActionContent>
                     </components:SettingRow>
 
-                    <components:SettingRow x:Name="MixedPortRow" Title="{Binding MixedPortTitleText}" Description="{Binding MixedPortDescriptionText}">
+                    <components:SettingRow x:Name="MixedPortRow" Icon="&#xE968;" Title="{Binding MixedPortTitleText}" Description="{Binding MixedPortDescriptionText}">
                         <components:SettingRow.ActionContent>
                             <NumberBox x:Name="MixedPortBox" Width="140" Minimum="1" Maximum="65535" Value="{Binding MixedPortValue, Mode=TwoWay}" SpinButtonPlacementMode="Compact" />
                         </components:SettingRow.ActionContent>
                     </components:SettingRow>
 
-                    <components:SettingRow x:Name="ConnectionTestUrlRow" Title="{Binding ConnectionTestUrlTitleText}" Description="{Binding ConnectionTestUrlDescriptionText}">
+                    <components:SettingRow x:Name="ConnectionTestUrlRow" Icon="&#xE916;" Title="{Binding ConnectionTestUrlTitleText}" Description="{Binding ConnectionTestUrlDescriptionText}">
                         <components:SettingRow.ActionContent>
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <TextBlock Text="{Binding ConnectionTestUrlSummaryText}" Width="260" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
@@ -276,21 +275,21 @@
                         </components:SettingRow.DetailContent>
                     </components:SettingRow>
 
-                    <components:SettingRow x:Name="ConnectionSamplingRow" Title="{Binding ConnectionSamplingTitleText}" Description="{Binding ConnectionSamplingDescriptionText}">
+                    <components:SettingRow x:Name="ConnectionSamplingRow" Icon="&#xE9D2;" Title="{Binding ConnectionSamplingTitleText}" Description="{Binding ConnectionSamplingDescriptionText}">
                         <components:SettingRow.ActionContent>
                             <ToggleSwitch x:Name="ConnectionSamplingToggle" MinWidth="0" IsOn="{Binding ConnectionSamplingEnabled, Mode=TwoWay}" OnContent="{x:Null}" OffContent="{x:Null}" />
                         </components:SettingRow.ActionContent>
                     </components:SettingRow>
 
-                    <components:SettingRow x:Name="SamplingIntervalRow" Title="{Binding SamplingIntervalTitleText}" Description="{Binding SamplingIntervalDescriptionText}">
+                    <components:SettingRow x:Name="SamplingIntervalRow" Icon="&#xE121;" Title="{Binding SamplingIntervalTitleText}" Description="{Binding SamplingIntervalDescriptionText}">
                         <components:SettingRow.ActionContent>
                             <NumberBox x:Name="ConnectionSamplingIntervalBox" Width="140" Minimum="3" Maximum="300" Value="{Binding ConnectionSamplingIntervalSecondsValue, Mode=TwoWay}" SpinButtonPlacementMode="Compact" ValidationMode="InvalidInputOverwritten" />
                         </components:SettingRow.ActionContent>
                     </components:SettingRow>
                     <HyperlinkButton x:Name="ResetProxySettingsLink" Content="{Binding ResetGroupToDefaultsText}" HorizontalAlignment="Right" Margin="0,0,8,0" Padding="0" Click="ResetProxySettingsButton_Click" />
 
-                    <TextBlock x:Name="WindowsNativeSectionTitleText" Text="{Binding WindowsNativeSectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" Margin="0,8,0,0" />
-                    <components:SettingRow x:Name="StartupRestoreFallbackRow" Title="{Binding StartupRestoreFallbackTitleText}" Description="{Binding StartupRestoreFallbackDescriptionText}">
+                    <TextBlock x:Name="WindowsNativeSectionTitleText" Text="{Binding WindowsNativeSectionTitleText}" Style="{StaticResource ClashSectionHeaderTextBlockStyle}" AutomationProperties.HeadingLevel="Level2" />
+                    <components:SettingRow x:Name="StartupRestoreFallbackRow" Icon="&#xE777;" Title="{Binding StartupRestoreFallbackTitleText}" Description="{Binding StartupRestoreFallbackDescriptionText}">
                         <components:SettingRow.ActionContent>
                             <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                                 <TextBlock x:Name="StartupRestoreFallbackStatusText" Text="{Binding StartupRestoreFallbackStatusText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" MaxWidth="160" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
@@ -316,16 +315,18 @@
                         </components:SettingRow.ActionContent>
                     </components:SettingRow>
 
-                    <Grid x:Name="WindowsNativeRepairCard" Style="{StaticResource ClashCardGridStyle}" MinHeight="60">
+                    <Grid x:Name="WindowsNativeRepairCard" Style="{StaticResource ClashSettingsCardStyle}">
                         <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <StackPanel Spacing="6">
+                        <FontIcon Glyph="&#xE90F;" Style="{StaticResource ClashCardIconStyle}" Margin="2,0,18,0" AutomationProperties.AccessibilityView="Raw" />
+                        <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
                             <TextBlock x:Name="WindowsNativeTitleText" Text="{Binding WindowsNativeTitleText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
                             <TextBlock x:Name="WindowsNativeDescriptionText" Text="{Binding WindowsNativeDescriptionText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                         </StackPanel>
-                        <Button Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center" Click="OpenNetworkRepairButton_Click">
+                        <Button Grid.Column="2" Margin="16,0,0,0" VerticalAlignment="Center" Click="OpenNetworkRepairButton_Click">
                             <StackPanel Orientation="Horizontal" Spacing="6">
                                 <FontIcon Glyph="&#xE8A7;" FontSize="14" />
                                 <TextBlock x:Name="OpenNetworkRepairText" Text="{Binding OpenText}" />
@@ -333,13 +334,13 @@
                         </Button>
                     </Grid>
 
-                    <components:SettingRow x:Name="CheckStaleProxyRow" Title="{Binding CheckStaleProxyTitleText}" Description="{Binding CheckStaleProxyDescriptionText}">
+                    <components:SettingRow x:Name="CheckStaleProxyRow" Icon="&#xE721;" Title="{Binding CheckStaleProxyTitleText}" Description="{Binding CheckStaleProxyDescriptionText}">
                         <components:SettingRow.ActionContent>
                             <ToggleSwitch x:Name="CheckStaleProxyToggle" MinWidth="0" IsOn="{Binding CheckStaleProxyOnStartup, Mode=OneWay}" Toggled="PreferenceToggle_Toggled" OnContent="{x:Null}" OffContent="{x:Null}" />
                         </components:SettingRow.ActionContent>
                     </components:SettingRow>
 
-                    <components:SettingRow x:Name="RestoreProxyOnExitRow" Title="{Binding RestoreProxyOnExitTitleText}" Description="{Binding RestoreProxyOnExitDescriptionText}">
+                    <components:SettingRow x:Name="RestoreProxyOnExitRow" Icon="&#xE7A7;" Title="{Binding RestoreProxyOnExitTitleText}" Description="{Binding RestoreProxyOnExitDescriptionText}">
                         <components:SettingRow.ActionContent>
                             <ToggleSwitch x:Name="RestoreProxyOnExitToggle" MinWidth="0" IsOn="{Binding RestoreProxyOnExit, Mode=OneWay}" Toggled="PreferenceToggle_Toggled" OnContent="{x:Null}" OffContent="{x:Null}" />
                         </components:SettingRow.ActionContent>
@@ -347,42 +348,42 @@
 
                     <HyperlinkButton x:Name="ResetWindowsNativeSettingsLink" Content="{Binding ResetGroupToDefaultsText}" HorizontalAlignment="Right" Margin="0,0,8,0" Padding="0" Click="ResetWindowsNativeSettingsButton_Click" />
 
-                    <TextBlock x:Name="NotificationSectionTitleText" Text="{Binding NotificationSectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" Margin="0,8,0,0" />
-                    <components:SettingRow x:Name="NotificationEnabledRow" Title="{Binding NotificationEnabledTitleText}" Description="{Binding NotificationEnabledDescriptionText}">
+                    <TextBlock x:Name="NotificationSectionTitleText" Text="{Binding NotificationSectionTitleText}" Style="{StaticResource ClashSectionHeaderTextBlockStyle}" AutomationProperties.HeadingLevel="Level2" />
+                    <components:SettingRow x:Name="NotificationEnabledRow" Icon="&#xEA8F;" Title="{Binding NotificationEnabledTitleText}" Description="{Binding NotificationEnabledDescriptionText}">
                         <components:SettingRow.ActionContent>
                             <ToggleSwitch x:Name="NotificationEnabledToggle" MinWidth="0" IsOn="{Binding NotificationEnabled, Mode=OneWay}" Toggled="PreferenceToggle_Toggled" OnContent="{x:Null}" OffContent="{x:Null}" />
                         </components:SettingRow.ActionContent>
                     </components:SettingRow>
 
-                    <components:SettingRow x:Name="NotificationLevelRow" Title="{Binding NotificationTitleText}" Description="{Binding NotificationDescriptionText}">
+                    <components:SettingRow x:Name="NotificationLevelRow" Icon="&#xE8C9;" Title="{Binding NotificationTitleText}" Description="{Binding NotificationDescriptionText}">
                         <components:SettingRow.ActionContent>
                             <ComboBox x:Name="NotificationLevelBox" Width="180" ItemsSource="{Binding NotificationLevelOptions}" SelectedIndex="{Binding NotificationLevelIndex, Mode=OneWay}" SelectionChanged="PreferenceCombo_SelectionChanged" />
                         </components:SettingRow.ActionContent>
                     </components:SettingRow>
                     <HyperlinkButton x:Name="ResetNotificationSettingsLink" Content="{Binding ResetGroupToDefaultsText}" HorizontalAlignment="Right" Margin="0,0,8,0" Padding="0" Click="ResetNotificationSettingsButton_Click" />
 
-                    <TextBlock x:Name="TriggerSectionTitleText" Text="{Binding TriggerSectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" Margin="0,8,0,0" />
-                    <components:SettingRow x:Name="TriggersEnabledRow" Title="{Binding TriggersEnabledTitleText}" Description="{Binding TriggersEnabledDescriptionText}">
+                    <TextBlock x:Name="TriggerSectionTitleText" Text="{Binding TriggerSectionTitleText}" Style="{StaticResource ClashSectionHeaderTextBlockStyle}" AutomationProperties.HeadingLevel="Level2" />
+                    <components:SettingRow x:Name="TriggersEnabledRow" Icon="&#xE7C1;" Title="{Binding TriggersEnabledTitleText}" Description="{Binding TriggersEnabledDescriptionText}">
                         <components:SettingRow.ActionContent>
                             <ToggleSwitch x:Name="TriggersEnabledToggle" MinWidth="0" IsOn="{Binding TriggersEnabled, Mode=OneWay}" OnContent="{x:Null}" OffContent="{x:Null}" Toggled="PreferenceToggle_Toggled" />
                         </components:SettingRow.ActionContent>
                     </components:SettingRow>
 
-                    <components:SettingRow x:Name="TriggerNotificationsEnabledRow" Title="{Binding TriggerNotificationsEnabledTitleText}" Description="{Binding TriggerNotificationsEnabledDescriptionText}">
+                    <components:SettingRow x:Name="TriggerNotificationsEnabledRow" Icon="&#xEA8F;" Title="{Binding TriggerNotificationsEnabledTitleText}" Description="{Binding TriggerNotificationsEnabledDescriptionText}">
                         <components:SettingRow.ActionContent>
                             <ToggleSwitch x:Name="TriggerNotificationsEnabledToggle" MinWidth="0" IsOn="{Binding TriggerNotificationsEnabled, Mode=OneWay}" OnContent="{x:Null}" OffContent="{x:Null}" Toggled="PreferenceToggle_Toggled" />
                         </components:SettingRow.ActionContent>
                     </components:SettingRow>
                     <HyperlinkButton x:Name="ResetTriggerSettingsLink" Content="{Binding ResetGroupToDefaultsText}" HorizontalAlignment="Right" Margin="0,0,8,0" Padding="0" Click="ResetTriggerSettingsButton_Click" />
 
-                    <TextBlock x:Name="TraySectionTitleText" Text="{Binding TraySectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" Margin="0,8,0,0" />
-                    <components:SettingRow x:Name="TrayUseMonochromeInactiveIconRow" Title="{Binding TrayUseMonochromeInactiveIconTitleText}" Description="{Binding TrayUseMonochromeInactiveIconDescriptionText}">
+                    <TextBlock x:Name="TraySectionTitleText" Text="{Binding TraySectionTitleText}" Style="{StaticResource ClashSectionHeaderTextBlockStyle}" AutomationProperties.HeadingLevel="Level2" />
+                    <components:SettingRow x:Name="TrayUseMonochromeInactiveIconRow" Icon="&#xE7F4;" Title="{Binding TrayUseMonochromeInactiveIconTitleText}" Description="{Binding TrayUseMonochromeInactiveIconDescriptionText}">
                         <components:SettingRow.ActionContent>
                             <ToggleSwitch x:Name="TrayUseMonochromeInactiveIconToggle" MinWidth="0" IsOn="{Binding TrayUseMonochromeInactiveIcon, Mode=OneWay}" OnContent="{x:Null}" OffContent="{x:Null}" Toggled="PreferenceToggle_Toggled" />
                         </components:SettingRow.ActionContent>
                     </components:SettingRow>
 
-                    <components:SettingRow x:Name="TrayVisibleFeaturesRow" Title="{Binding TrayVisibleFeaturesTitleText}" Description="{Binding TrayVisibleFeaturesDescriptionText}">
+                    <components:SettingRow x:Name="TrayVisibleFeaturesRow" Icon="&#xE8FD;" Title="{Binding TrayVisibleFeaturesTitleText}" Description="{Binding TrayVisibleFeaturesDescriptionText}">
                         <components:SettingRow.ActionContent>
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <TextBlock Text="{Binding TrayVisibleFeatureSummaryText}" MinWidth="120" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
@@ -397,8 +398,8 @@
                     </components:SettingRow>
                     <HyperlinkButton x:Name="ResetTraySettingsLink" Content="{Binding ResetGroupToDefaultsText}" HorizontalAlignment="Right" Margin="0,0,8,0" Padding="0" Click="ResetTraySettingsButton_Click" />
 
-                    <TextBlock x:Name="MainlandChinaSectionTitleText" Text="{Binding MainlandChinaSectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" Margin="0,8,0,0" />
-                    <components:SettingRow x:Name="MainlandChinaDisplayRow" Title="{Binding MainlandChinaDisplayTitleText}" Description="{Binding MainlandChinaDisplayDescriptionText}">
+                    <TextBlock x:Name="MainlandChinaSectionTitleText" Text="{Binding MainlandChinaSectionTitleText}" Style="{StaticResource ClashSectionHeaderTextBlockStyle}" AutomationProperties.HeadingLevel="Level2" />
+                    <components:SettingRow x:Name="MainlandChinaDisplayRow" Icon="&#xE909;" Title="{Binding MainlandChinaDisplayTitleText}" Description="{Binding MainlandChinaDisplayDescriptionText}">
                         <components:SettingRow.ActionContent>
                             <ComboBox x:Name="MainlandChinaFeatureModeBox" Width="280" HorizontalContentAlignment="Stretch"
                                       ItemsSource="{Binding MainlandChinaFeatureModeOptions}"
@@ -412,7 +413,7 @@
                         </components:SettingRow.ActionContent>
                     </components:SettingRow>
 
-                    <components:SettingRow x:Name="MainlandChinaUrlBlockingRow" Title="{Binding MainlandChinaUrlBlockingTitleText}" Description="{Binding MainlandChinaUrlBlockingDescriptionText}">
+                    <components:SettingRow x:Name="MainlandChinaUrlBlockingRow" Icon="&#xEA18;" Title="{Binding MainlandChinaUrlBlockingTitleText}" Description="{Binding MainlandChinaUrlBlockingDescriptionText}">
                         <components:SettingRow.ActionContent>
                             <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                                 <ToggleSwitch x:Name="MainlandChinaUrlBlockingToggle" MinWidth="0" IsOn="{Binding MainlandChinaUrlBlockingEnabled, Mode=OneWay}" Toggled="PreferenceToggle_Toggled" OnContent="{x:Null}" OffContent="{x:Null}" />
@@ -421,30 +422,29 @@
                     </components:SettingRow>
                     <HyperlinkButton x:Name="ResetMainlandChinaSettingsLink" Content="{Binding ResetGroupToDefaultsText}" HorizontalAlignment="Right" Margin="0,0,8,0" Padding="0" Click="ResetMainlandChinaSettingsButton_Click" />
 
-                    <ContentControl x:Name="McpPanel" Margin="0,16,0,8" IsEnabled="{Binding IsInputEnabled}" HorizontalContentAlignment="Stretch">
-                        <StackPanel Spacing="8">
-                            <TextBlock Text="{Binding TitleText}" Style="{ThemeResource SubtitleTextBlockStyle}"
-                                       TextWrapping="Wrap" AutomationProperties.HeadingLevel="Level2" />
-                            <TextBlock Text="{Binding DescriptionText}" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Margin="0,0,0,8" />
-                            <components:SettingRow Title="{Binding EnabledText}" Description="{Binding EnabledDescriptionText}">
+                    <ContentControl x:Name="McpPanel" IsEnabled="{Binding IsInputEnabled}" HorizontalContentAlignment="Stretch">
+                        <StackPanel Spacing="{StaticResource ClashSettingsCardSpacing}">
+                            <TextBlock Text="{Binding TitleText}" Style="{StaticResource ClashSectionHeaderTextBlockStyle}" AutomationProperties.HeadingLevel="Level2" />
+                            <TextBlock Text="{Binding DescriptionText}" Style="{ThemeResource CaptionTextBlockStyle}" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Margin="1,0,0,8" />
+                            <components:SettingRow Icon="&#xE943;" Title="{Binding EnabledText}" Description="{Binding EnabledDescriptionText}">
                                 <components:SettingRow.ActionContent>
                                     <ToggleSwitch x:Name="McpEnabledToggle" IsOn="{Binding Enabled, Mode=TwoWay}" OnContent="{x:Null}" OffContent="{x:Null}"
                                                   MinWidth="0" AutomationProperties.Name="{Binding EnabledText}" />
                                 </components:SettingRow.ActionContent>
                             </components:SettingRow>
-                            <components:SettingRow Title="{Binding PortText}" Description="{Binding PortDescriptionText}">
+                            <components:SettingRow Icon="&#xE968;" Title="{Binding PortText}" Description="{Binding PortDescriptionText}">
                                 <components:SettingRow.ActionContent>
                                     <NumberBox x:Name="McpPortBox" Value="{Binding Port, Mode=TwoWay}" Minimum="1024" Maximum="65535"
                                                SmallChange="1" SpinButtonPlacementMode="Compact" Width="160"
                                                AutomationProperties.Name="{Binding PortText}" />
                                 </components:SettingRow.ActionContent>
                             </components:SettingRow>
-                            <components:SettingRow Title="{Binding StatusText}" Description="{Binding Status}">
+                            <components:SettingRow Icon="&#xE946;" Title="{Binding StatusText}" Description="{Binding Status}">
                                 <components:SettingRow.ActionContent>
                                     <Button Content="{Binding RefreshText}" Click="McpRefresh_Click" />
                                 </components:SettingRow.ActionContent>
                             </components:SettingRow>
-                            <TextBlock Text="{Binding Endpoint}" IsTextSelectionEnabled="True" TextWrapping="Wrap" Margin="12,0" />
+                            <TextBlock Text="{Binding Endpoint}" IsTextSelectionEnabled="True" TextWrapping="Wrap" Margin="16,4" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                             <Expander x:Name="McpPermissionsExpander" Header="{Binding PermissionsText}"
                                       HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
                                       AutomationProperties.Name="{Binding PermissionsText}">
@@ -471,12 +471,12 @@
                                 </StackPanel>
                             </Expander>
                             <Button Content="{Binding ApplyText}" Click="McpApply_Click" HorizontalAlignment="Right" Style="{StaticResource AccentButtonStyle}" />
-                            <components:SettingRow Title="{Binding ClientText}" Description="{Binding ClientDescriptionText}">
+                            <components:SettingRow Icon="&#xE8C8;" Title="{Binding ClientText}" Description="{Binding ClientDescriptionText}">
                                 <components:SettingRow.ActionContent>
                                     <Button Content="{Binding CopyText}" Click="McpCopy_Click" IsEnabled="{Binding CanCopy}" />
                                 </components:SettingRow.ActionContent>
                             </components:SettingRow>
-                            <components:SettingRow Title="{Binding CredentialText}" Description="{Binding CredentialDescriptionText}">
+                            <components:SettingRow Icon="&#xE8D7;" Title="{Binding CredentialText}" Description="{Binding CredentialDescriptionText}">
                                 <components:SettingRow.ActionContent>
                                     <Button Content="{Binding RotateText}" Click="McpRotate_Click" />
                                 </components:SettingRow.ActionContent>
@@ -485,8 +485,8 @@
                             </StackPanel>
                     </ContentControl>
 
-                    <TextBlock x:Name="DataSectionTitleText" Text="{Binding DataSectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" Margin="0,8,0,0" />
-                    <components:SettingRow x:Name="DataPackageRow" Title="{Binding BackupRestoreTitleText}" Description="{Binding BackupRestoreDescriptionText}">
+                    <TextBlock x:Name="DataSectionTitleText" Text="{Binding DataSectionTitleText}" Style="{StaticResource ClashSectionHeaderTextBlockStyle}" AutomationProperties.HeadingLevel="Level2" />
+                    <components:SettingRow x:Name="DataPackageRow" Icon="&#xE74E;" Title="{Binding BackupRestoreTitleText}" Description="{Binding BackupRestoreDescriptionText}">
                         <components:SettingRow.ActionContent>
                             <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                                 <Button x:Name="ExportDataPackageButton" Click="ExportDataPackageButton_Click">
@@ -505,13 +505,13 @@
                         </components:SettingRow.ActionContent>
                     </components:SettingRow>
 
-                    <components:SettingRow x:Name="ResetAllSettingsRow" Title="{Binding ResetAllSettingsTitleText}" Description="{Binding ResetAllSettingsDescriptionText}">
+                    <components:SettingRow x:Name="ResetAllSettingsRow" Icon="&#xE72C;" Title="{Binding ResetAllSettingsTitleText}" Description="{Binding ResetAllSettingsDescriptionText}">
                         <components:SettingRow.ActionContent>
                             <HyperlinkButton x:Name="ResetAllSettingsLink" Padding="0" HorizontalAlignment="Right" VerticalAlignment="Center" Content="{Binding ResetText}" Click="ResetAllSettingsButton_Click" />
                         </components:SettingRow.ActionContent>
                     </components:SettingRow>
 
-                    <components:SettingRow x:Name="ClearAllDataRow" Title="{Binding ClearAllDataTitleText}" Description="{Binding ClearAllDataDescriptionText}">
+                    <components:SettingRow x:Name="ClearAllDataRow" Icon="&#xE74D;" Title="{Binding ClearAllDataTitleText}" Description="{Binding ClearAllDataDescriptionText}">
                         <components:SettingRow.ActionContent>
                             <HyperlinkButton x:Name="ClearAllDataLink" Padding="0" HorizontalAlignment="Right" VerticalAlignment="Center" Content="{Binding CleanupText}" Click="ClearAllDataButton_Click" />
                         </components:SettingRow.ActionContent>

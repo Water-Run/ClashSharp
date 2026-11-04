@@ -3,9 +3,10 @@
     x:Class="ClashSharp.Components.SettingRow"
     x:Name="Root"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    CornerRadius="{ThemeResource ControlCornerRadius}">
 
-    <Grid x:Name="LayoutRoot" Style="{StaticResource ClashCardGridStyle}" CornerRadius="{Binding CornerRadius, ElementName=Root}" MinHeight="60" ColumnSpacing="16"
+    <Grid x:Name="LayoutRoot" Style="{StaticResource ClashSettingsCardStyle}" CornerRadius="{Binding CornerRadius, ElementName=Root}"
           SizeChanged="Layout_SizeChanged">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -13,13 +14,18 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" />
             <ColumnDefinition Width="*" />
             <ColumnDefinition Width="Auto" />
         </Grid.ColumnDefinitions>
 
-        <StackPanel x:Name="TextPanel" Spacing="4" VerticalAlignment="Center">
+        <FontIcon x:Name="HeaderIcon" Glyph="{Binding Icon, ElementName=Root}" Style="{StaticResource ClashCardIconStyle}"
+                  Margin="2,0,18,0" Visibility="Collapsed" AutomationProperties.AccessibilityView="Raw" />
+
+        <StackPanel x:Name="TextPanel" Grid.Column="1" Spacing="2" VerticalAlignment="Center">
             <TextBlock Text="{Binding Title, ElementName=Root}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" TextWrapping="Wrap" />
             <TextBlock
+                x:Name="DescriptionTextBlock"
                 Text="{Binding Description, ElementName=Root}"
                 Style="{ThemeResource CaptionTextBlockStyle}"
                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
@@ -28,12 +34,13 @@
 
         <ContentPresenter
             x:Name="ActionContentPresenter"
-            Grid.Column="1"
+            Grid.Column="2"
+            Margin="16,0,0,0"
             HorizontalAlignment="Right"
             VerticalAlignment="Center"
             SizeChanged="Layout_SizeChanged"
             Content="{Binding ActionContent, ElementName=Root}" />
-        <ContentPresenter Grid.Row="2" Grid.ColumnSpan="2"
+        <ContentPresenter Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2"
                           Content="{Binding DetailContent, ElementName=Root}"
                           HorizontalContentAlignment="Stretch" />
     </Grid>

@@ -34,26 +34,58 @@ public sealed partial class Statistics : Page
         DataContext = _viewModel;
     }
 
-    /// <summary>Reflows summary and breakdown cards when their content area is too narrow for three readable columns.</summary>
+    /// <summary>Reflows the ranked breakdown cards when their content area is too narrow for three readable columns.</summary>
     private void StatisticsCards_SizeChanged(object sender, SizeChangedEventArgs e)
     {
         if (sender is not Grid panel || e.NewSize.Width <= 0) { return; }
-        bool compact = e.NewSize.Width < 820;
-        if ((panel.ColumnDefinitions[1].Width.Value == 0) == compact) { return; }
-        panel.ColumnDefinitions[1].Width = compact ? new GridLength(0) : new GridLength(1, GridUnitType.Star);
-        panel.ColumnDefinitions[2].Width = panel.ColumnDefinitions[1].Width;
-        panel.ColumnSpacing = compact ? 0 : 12;
-        panel.RowSpacing = compact ? 12 : 0;
+        ReflowCards(panel, e.NewSize.Width < 820 ? 1 : 3);
+    }
+
+    /// <summary>Keeps the four headline stat tiles in one row, two rows of two, or one column as width allows.</summary>
+    private void SummaryCards_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (sender is not Grid panel || e.NewSize.Width <= 0) { return; }
+        int columns = e.NewSize.Width switch
+        {
+            >= 760 => 4,
+            >= 380 => 2,
+            _ => 1,
+        };
+        ReflowCards(panel, columns);
+    }
+
+    /// <summary>Places a grid's cards row by row in <paramref name="columns"/> equal star columns.</summary>
+    /// <param name="panel">Card grid to rebuild. Not null.</param>
+    /// <param name="columns">Visible column count; at least one.</param>
+    /// <remarks>Column definitions are rebuilt rather than collapsed because Grid spacing also applies to empty columns.</remarks>
+    private static void ReflowCards(Grid panel, int columns)
+    {
+        columns = Math.Max(1, columns);
+        int rows = (panel.Children.Count + columns - 1) / columns;
+        if (panel.ColumnDefinitions.Count == columns && panel.RowDefinitions.Count == rows)
+        {
+            return;
+        }
+
+        panel.ColumnDefinitions.Clear();
+        for (int column = 0; column < columns; column++)
+        {
+            panel.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        }
+
         panel.RowDefinitions.Clear();
-        for (int row = 0; row < (compact ? 3 : 1); row++)
+        for (int row = 0; row < rows; row++)
         {
             panel.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         }
+
+        panel.ColumnSpacing = columns > 1 ? 12 : 0;
+        panel.RowSpacing = rows > 1 ? 12 : 0;
         for (int index = 0; index < panel.Children.Count; index++)
         {
             FrameworkElement card = (FrameworkElement)panel.Children[index];
-            Grid.SetRow(card, compact ? index : 0);
-            Grid.SetColumn(card, compact ? 0 : index);
+            Grid.SetRow(card, index / columns);
+            Grid.SetColumn(card, index % columns);
         }
     }
 

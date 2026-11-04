@@ -50,6 +50,12 @@ internal sealed class AboutViewModel : ObservableObject, ILocalizedPresentation
         OnPropertyChanged(nameof(ProxyInformationDescriptionText));
         OnPropertyChanged(nameof(ProxyInformationButtonText));
         OnPropertyChanged(nameof(ProxyEntryText));
+        OnPropertyChanged(nameof(CoreTitleText));
+        OnPropertyChanged(nameof(LocalProxyValueText));
+        OnPropertyChanged(nameof(CopyText));
+        OnPropertyChanged(nameof(CopiedText));
+        OnPropertyChanged(nameof(CopyFailedText));
+        OnPropertyChanged(nameof(RelatedTitleText));
         RefreshCoreStatusText();
         RefreshUpdateStatusText();
     }
@@ -242,6 +248,39 @@ internal sealed class AboutViewModel : ObservableObject, ILocalizedPresentation
         ? string.Format(CultureInfo.CurrentCulture, _localization.GetString("Settings.ProxyInformation.LocalEntry.Format"), port)
         : string.Empty;
 
+    /// <summary>Gets the label for the bundled core row in the application information card.</summary>
+    public string CoreTitleText => _localization.GetString("About.Core.Title");
+
+    /// <summary>Gets the bundled core name and version, or its probe state while the version is unknown.</summary>
+    public string CoreValueText => !_coreProbeFinished
+        ? _localization.GetString("About.Mihomo.Loading")
+        : _coreVersion is null ? _localization.GetString("About.Mihomo.Unavailable") : "mihomo " + _coreVersion;
+
+    /// <summary>Gets the configured loopback endpoint as a copyable value, without implying that the core runs.</summary>
+    public string LocalProxyValueText => _mixedPort is int port
+        ? "127.0.0.1:" + port.ToString(CultureInfo.InvariantCulture)
+        : "—";
+
+    /// <summary>Gets the copy command label for the application information card.</summary>
+    public string CopyText => _localization.GetString("About.Copy");
+
+    /// <summary>Gets the transient confirmation shown after application information reaches the clipboard.</summary>
+    public string CopiedText => _localization.GetString("About.Copied");
+
+    /// <summary>Gets the transient message shown when another process holds the clipboard.</summary>
+    public string CopyFailedText => _localization.GetString("About.CopyFailed");
+
+    /// <summary>Gets the heading above update, local proxy and project rows.</summary>
+    public string RelatedTitleText => _localization.GetString("About.Related.Title");
+
+    /// <summary>Gets non-sensitive identity lines in Windows "label, tab, value" form for support requests.</summary>
+    public string CopyInformationText => string.Join(Environment.NewLine,
+        AppNameText,
+        VersionLabelText + "\t" + VersionText,
+        CoreTitleText + "\t" + CoreValueText,
+        RuntimeTitleText + "\t" + RuntimeValueText,
+        ProxyInformationTitleText + "\t" + LocalProxyValueText);
+
     /// <summary>Publishes the current configured port when the page enters its owned load session.</summary>
     /// <param name="port">Configured local proxy port, between 1 and 65535 inclusive.</param>
     public void SetProxyPort(int port)
@@ -251,6 +290,7 @@ internal sealed class AboutViewModel : ObservableObject, ILocalizedPresentation
         if (_mixedPort == port) { return; }
         _mixedPort = port;
         OnPropertyChanged(nameof(ProxyEntryText));
+        OnPropertyChanged(nameof(LocalProxyValueText));
     }
 
     /// <summary>Gets bundled mihomo status text.</summary>
@@ -341,10 +381,14 @@ internal sealed class AboutViewModel : ObservableObject, ILocalizedPresentation
         }
     }
 
-    private void RefreshCoreStatusText() => MihomoStatusText = !_coreProbeFinished
-        ? _localization.GetString("About.Mihomo.Loading") : _coreVersion is null
-            ? _localization.GetString("About.Mihomo.Unavailable")
-            : string.Format(CultureInfo.CurrentCulture, _localization.GetString("About.Mihomo.Available.Format"), _coreVersion);
+    private void RefreshCoreStatusText()
+    {
+        MihomoStatusText = !_coreProbeFinished
+            ? _localization.GetString("About.Mihomo.Loading") : _coreVersion is null
+                ? _localization.GetString("About.Mihomo.Unavailable")
+                : string.Format(CultureInfo.CurrentCulture, _localization.GetString("About.Mihomo.Available.Format"), _coreVersion);
+        OnPropertyChanged(nameof(CoreValueText));
+    }
 
     private void RefreshUpdateStatusText()
     {

@@ -41,6 +41,24 @@ internal sealed class ProfileSubscriptionLinkDisplay(
 
     public string ExpiryDisplay { get => _expiryDisplay; private set => SetProperty(ref _expiryDisplay, value); }
 
+    /// <summary>Gets whether the provider reported both used traffic and a positive quota.</summary>
+    public bool HasUsageQuota => Model.Usage is { UploadBytes: >= 0, DownloadBytes: >= 0, TotalBytes: > 0 };
+
+    /// <summary>Gets provider-reported used traffic as a 0 to 100 share of the quota; zero when no quota is known.</summary>
+    public double UsagePercent
+    {
+        get
+        {
+            if (!HasUsageQuota || Model.Usage is not { } usage)
+            {
+                return 0;
+            }
+
+            decimal used = (decimal)usage.UploadBytes!.Value + usage.DownloadBytes!.Value;
+            return (double)Math.Clamp(used / usage.TotalBytes!.Value * 100m, 0m, 100m);
+        }
+    }
+
     /// <summary>Adds localized labels without changing provider data or filtered display text.</summary>
     public ProfileSubscriptionLinkDisplay WithDetails(Func<string, string> getString)
     {
