@@ -333,6 +333,50 @@ public sealed class WindowsCurrentUserPackageStoreAdapterTests
         Assert.Same(cause, exception.InnerException);
         Assert.Equal(0, facade.RemoveCalls);
         Assert.DoesNotContain("sensitive", exception.Message, StringComparison.Ordinal);
+        Assert.Equal(2, facade.DeployCalls);
+        Assert.NotEmpty(facade.DeploymentRequests[0].DependencyPackageUris);
+        Assert.Empty(facade.DeploymentRequests[1].DependencyPackageUris);
+    }
+
+    [Fact]
+    public async Task SystemFrameworkUnderAnotherSignatureSatisfiesTheDependency()
+    {
+        WindowsPayloadFixture.AssertWindows11X64();
+        using var fixture = new WindowsPayloadFixture();
+        InstallerRequest request = fixture.Request();
+        await using WindowsInstallerReleaseLease lease = fixture.Lock(request);
+        var facade = new FakePackageManagerFacade
+        {
+            DeploymentResult = deployment => deployment.DependencyPackageUris.Count > 0
+                ? new IOException("re-signed framework already staged", unchecked((int)0x80073CFB))
+                : null,
+        };
+        int initialized = 0;
+        var adapter = new WindowsCurrentUserPackageStoreAdapter(facade, () => request.TargetSid, _ => initialized++);
+
+        await adapter.DeployAsync(request, lease, CancellationToken.None);
+
+        Assert.Equal(2, facade.DeployCalls);
+        Assert.Equal(facade.DeploymentRequests[0].PrimaryPackageUri, facade.DeploymentRequests[1].PrimaryPackageUri);
+        Assert.Empty(facade.DeploymentRequests[1].DependencyPackageUris);
+        Assert.Equal(1, initialized);
+    }
+
+    [Fact]
+    public async Task OtherDeploymentFailuresAreNotRetried()
+    {
+        WindowsPayloadFixture.AssertWindows11X64();
+        using var fixture = new WindowsPayloadFixture();
+        InstallerRequest request = fixture.Request();
+        await using WindowsInstallerReleaseLease lease = fixture.Lock(request);
+        var facade = new FakePackageManagerFacade { DeploymentException = new IOException("blocked", unchecked((int)0x80073CF3)) };
+        var adapter = Adapter(facade, request);
+
+        InstallerProtocolException exception = await Assert.ThrowsAsync<InstallerProtocolException>(
+            () => adapter.DeployAsync(request, lease, CancellationToken.None));
+
+        Assert.Equal("installer.package.deployment_failed", exception.DiagnosticCode);
+        Assert.Equal(1, facade.DeployCalls);
     }
 
     [Theory]
@@ -516,6 +560,10 @@ public sealed class WindowsCurrentUserPackageStoreAdapterTests
 
         internal Exception? DeploymentException { get; init; }
 
+        internal Func<WindowsPackageDeploymentRequest, Exception?>? DeploymentResult { get; init; }
+
+        internal List<WindowsPackageDeploymentRequest> DeploymentRequests { get; } = [];
+
         internal bool BlockDeployment { get; init; }
 
         internal bool BlockRemoval { get; init; }
@@ -540,10 +588,11 @@ public sealed class WindowsCurrentUserPackageStoreAdapterTests
         {
             DeployCalls++;
             DeploymentRequest = request;
+            DeploymentRequests.Add(request);
             DeploymentStarted.TrySetResult();
-            if (DeploymentException is not null)
+            if ((DeploymentException ?? DeploymentResult?.Invoke(request)) is { } failure)
             {
-                return Task.FromException(DeploymentException);
+                return Task.FromException(failure);
             }
 
             return BlockDeployment ? _deploymentCompletion.Task : Task.CompletedTask;

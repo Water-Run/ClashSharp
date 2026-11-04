@@ -107,6 +107,68 @@ public sealed class WindowsPackageFootprintReaderTests
         Assert.Equal("installer.package.installed_path_invalid", failure.DiagnosticCode);
     }
 
+    private const string BlockMapOrdered = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <BlockMap xmlns="http://schemas.microsoft.com/appx/2010/blockmap" HashMethod="http://www.w3.org/2001/04/xmlenc#sha256">
+          <File Name="a.dll" Size="70000" LfhSize="37"><Block Hash="AAA=" Size="1200"/><Block Hash="BBB="/></File>
+          <File Name="b.dll" Size="10" LfhSize="37"><Block Hash="CCC="/></File>
+        </BlockMap>
+        """;
+
+    private const string BlockMapReSigned = """
+        <BlockMap xmlns="http://schemas.microsoft.com/appx/2010/blockmap" HashMethod="http://www.w3.org/2001/04/xmlenc#sha256">
+          <File Name="b.dll" Size="10" LfhSize="41"><Block Hash="CCC=" Size="12"/></File>
+          <!-- archive layout and compression differ after re-signing -->
+          <File Name="a.dll" Size="70000" LfhSize="41"><Block Hash="AAA=" Size="1300"/><Block Hash="BBB=" Size="20"/></File>
+        </BlockMap>
+        """;
+
+    [Fact]
+    public void PayloadDigestIgnoresSignatureLayoutAndCompressedSizes()
+    {
+        string? ordered = WindowsPackageFootprintReader.DigestPayload(System.Text.Encoding.UTF8.GetBytes(BlockMapOrdered));
+        string? reSigned = WindowsPackageFootprintReader.DigestPayload(System.Text.Encoding.UTF8.GetBytes(BlockMapReSigned));
+
+        Assert.NotNull(ordered);
+        Assert.Equal(ordered, reSigned);
+        Assert.NotEqual(ordered, WindowsPackageFootprintReader.DigestPayload(
+            System.Text.Encoding.UTF8.GetBytes(BlockMapReSigned.Replace("CCC=", "DDD=", StringComparison.Ordinal))));
+        Assert.NotEqual(ordered, WindowsPackageFootprintReader.DigestPayload(
+            System.Text.Encoding.UTF8.GetBytes(BlockMapReSigned.Replace("Size=\"10\"", "Size=\"11\"", StringComparison.Ordinal))));
+    }
+
+    [Theory]
+    [InlineData("opaque-test-blockmap")]
+    [InlineData("<!DOCTYPE BlockMap [<!ENTITY x \"y\">]><BlockMap xmlns=\"http://schemas.microsoft.com/appx/2010/blockmap\" HashMethod=\"m\"><File Name=\"a\" Size=\"1\"><Block Hash=\"&x;\"/></File></BlockMap>")]
+    [InlineData("<BlockMap xmlns=\"http://schemas.microsoft.com/appx/2010/blockmap\"><File Name=\"a\" Size=\"1\"><Block Hash=\"A\"/></File></BlockMap>")]
+    [InlineData("<BlockMap xmlns=\"http://schemas.microsoft.com/appx/2010/blockmap\" HashMethod=\"m\"><File Name=\"a\" Size=\"1\"/><File Name=\"a\" Size=\"1\"/></BlockMap>")]
+    [InlineData("<BlockMap xmlns=\"http://schemas.microsoft.com/appx/2010/blockmap\" HashMethod=\"m\"><File Name=\"a\" Size=\"x\"/></BlockMap>")]
+    [InlineData("<BlockMap xmlns=\"urn:other\" HashMethod=\"m\"><File Name=\"a\" Size=\"1\"/></BlockMap>")]
+    [InlineData("<BlockMap xmlns=\"http://schemas.microsoft.com/appx/2010/blockmap\" HashMethod=\"m\"></BlockMap>")]
+    public void UnreadableOrMalformedBlockMapsHaveNoPayloadDigest(string blockMap)
+    {
+        Assert.Null(WindowsPackageFootprintReader.DigestPayload(System.Text.Encoding.UTF8.GetBytes(blockMap)));
+    }
+
+    [Fact]
+    public async Task CandidateAndInstalledPayloadDigestsAgreeAcrossSignatures()
+    {
+        using var fixture = Fixture();
+        byte[] candidateMap = System.Text.Encoding.UTF8.GetBytes(BlockMapOrdered);
+        await using WindowsInstallerReleaseLease lease = CreateCandidate(fixture,
+            [("AppxSignature.p7x", Signature), ("AppxBlockMap.xml", candidateMap)], out InstallerPayloadFileEntry entry);
+        string root = Path.Combine(fixture.RootDirectory, "installed-resigned");
+        Directory.CreateDirectory(root);
+        File.WriteAllBytes(Path.Combine(root, "AppxSignature.p7x"), "other-store-signature"u8.ToArray());
+        File.WriteAllBytes(Path.Combine(root, "AppxBlockMap.xml"), System.Text.Encoding.UTF8.GetBytes(BlockMapReSigned));
+        var reader = new WindowsPackageFootprintReader();
+
+        Assert.NotEqual(reader.ReadCandidate(lease, entry, CancellationToken.None), reader.ReadInstalled(root, CancellationToken.None));
+        string? candidate = reader.ReadCandidateContent(lease, entry, CancellationToken.None);
+        Assert.NotNull(candidate);
+        Assert.Equal(candidate, reader.ReadInstalledContent(root, CancellationToken.None));
+    }
+
     private static WindowsPayloadFixture Fixture() => new(createPayload: false, removeCurrentUserCertificateOnDispose: false);
 
     private static string CreateInstalled(WindowsPayloadFixture fixture)

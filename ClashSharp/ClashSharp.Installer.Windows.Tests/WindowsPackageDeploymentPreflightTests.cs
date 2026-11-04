@@ -64,6 +64,53 @@ public sealed class WindowsPackageDeploymentPreflightTests
         Assert.Equal(dependencyConflict ? InstallerPayloadFileRole.DependencyPackage : InstallerPayloadFileRole.PrimaryPackage, reader.Candidates[0]);
     }
 
+    [Fact]
+    public async Task DependencyReSignedWithTheSamePayloadIsNotAConflict()
+    {
+        using var fixture = Fixture();
+        await using var lease = new Lease(fixture.Manifest);
+        string dependency = fixture.Manifest.Dependencies[0].PackageFullName;
+        var catalog = new Catalog { Result = (_, name) => name == dependency ? [InstalledRoot] : [] };
+        var reader = new Reader
+        {
+            Installed = Exact with { SignatureSha256 = new string('c', 64), BlockMapSha256 = new string('d', 64) },
+            CandidateContent = "same-payload",
+            InstalledContent = "same-payload",
+        };
+
+        await new WindowsPackageDeploymentPreflight(catalog, reader)
+            .VerifyCanDeployAsync(fixture.Request(), lease, CancellationToken.None);
+
+        Assert.Equal(1, reader.ContentReads);
+    }
+
+    [Theory]
+    [InlineData("primary", "same-payload", "same-payload")]
+    [InlineData("dependency", "candidate-payload", "installed-payload")]
+    [InlineData("dependency", null, null)]
+    [InlineData("dependency", "same-payload", null)]
+    public async Task PrimaryOrChangedDependencyPayloadStillConflicts(string conflicting, string? candidateContent, string? installedContent)
+    {
+        using var fixture = Fixture();
+        await using var lease = new Lease(fixture.Manifest);
+        string name = conflicting == "primary" ? fixture.Manifest.PackageIdentity.PackageFullName
+            : fixture.Manifest.Dependencies[0].PackageFullName;
+        var catalog = new Catalog { Result = (_, fullName) => fullName == name ? [InstalledRoot] : [] };
+        var reader = new Reader
+        {
+            Installed = Exact with { SignatureSha256 = new string('c', 64) },
+            CandidateContent = candidateContent,
+            InstalledContent = installedContent,
+        };
+
+        InstallerProtocolException failure = await Assert.ThrowsAsync<InstallerProtocolException>(() =>
+            new WindowsPackageDeploymentPreflight(catalog, reader)
+                .VerifyCanDeployAsync(fixture.Request(), lease, CancellationToken.None));
+
+        Assert.Equal("installer.package.content_conflict", failure.DiagnosticCode);
+        Assert.Equal(conflicting == "primary" ? 0 : 1, reader.ContentReads);
+    }
+
     [Theory]
     [InlineData("ambiguous", "installer.package.registration_ambiguous")]
     [InlineData("relative", "installer.package.installed_path_invalid")]
@@ -158,6 +205,9 @@ public sealed class WindowsPackageDeploymentPreflightTests
         internal WindowsPackageFootprint Installed { get; init; } = Exact;
         internal Action? AfterCandidate { get; init; }
         internal Exception? Failure { get; init; }
+        internal string? CandidateContent { get; init; }
+        internal string? InstalledContent { get; init; }
+        internal int ContentReads { get; private set; }
 
         public WindowsPackageFootprint ReadCandidate(IInstallerReleaseLease release, InstallerPayloadFileEntry entry, CancellationToken cancellationToken)
         {
@@ -173,6 +223,19 @@ public sealed class WindowsPackageDeploymentPreflightTests
             cancellationToken.ThrowIfCancellationRequested();
             InstalledReads++;
             return Installed;
+        }
+
+        public string? ReadCandidateContent(IInstallerReleaseLease release, InstallerPayloadFileEntry entry, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            ContentReads++;
+            return CandidateContent;
+        }
+
+        public string? ReadInstalledContent(string installedRoot, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return InstalledContent;
         }
     }
 

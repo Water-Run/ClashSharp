@@ -16,6 +16,9 @@ public sealed class WindowsCurrentUserPackageStoreAdapter : IInstallerPackageSto
     private readonly Func<string?> _currentSid;
     private readonly Action<string> _initializeRegionalDefaults;
 
+    // ERROR_PACKAGE_ALREADY_EXISTS: the same package identity is on the system with different content.
+    private const int AlreadyInstalledWithDifferentContent = unchecked((int)0x80073CFB);
+
     /// <summary>Initializes the adapter over the Windows deployment service.</summary>
     public WindowsCurrentUserPackageStoreAdapter()
         : this(new WindowsPackageManagerFacade(), GetCurrentSid, WindowsRegionalDefaults.Initialize)
@@ -111,7 +114,20 @@ public sealed class WindowsCurrentUserPackageStoreAdapter : IInstallerPackageSto
         {
             // PackageManager cannot reliably cancel an operation already handed to AppXSVC.
             // Await its terminal state so the caller cannot release the file lease too early.
-            await _packageManager.DeployAsync(deployment).ConfigureAwait(false);
+            try
+            {
+                await _packageManager.DeployAsync(deployment).ConfigureAwait(false);
+            }
+            catch (Exception exception) when (IsRecoverable(exception)
+                && exception.HResult == AlreadyInstalledWithDifferentContent && dependencies.Length > 0)
+            {
+                // AppX refuses to re-add a framework already on the system under another signature
+                // (Store servicing re-signs frameworks). Preflight has proven any such copy carries the
+                // same payload files, so let Windows resolve the dependency from it. A primary-package
+                // conflict fails again here and is reported as a content conflict.
+                await _packageManager.DeployAsync(deployment with { DependencyPackageUris = [] }).ConfigureAwait(false);
+            }
+
             if (request.Operation == InstallerOperation.Install)
             {
                 _initializeRegionalDefaults(release.Manifest.PackageIdentity.PackageFamilyName);
@@ -120,7 +136,7 @@ public sealed class WindowsCurrentUserPackageStoreAdapter : IInstallerPackageSto
         catch (Exception exception) when (IsRecoverable(exception))
         {
             throw new InstallerProtocolException(
-                exception.HResult == unchecked((int)0x80073CFB)
+                exception.HResult == AlreadyInstalledWithDifferentContent
                     ? "installer.package.content_conflict"
                     : "installer.package.deployment_failed",
                 exception);

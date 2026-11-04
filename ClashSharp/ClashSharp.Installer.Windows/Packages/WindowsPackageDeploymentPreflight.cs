@@ -20,6 +20,15 @@ internal interface IWindowsPackageFootprintReader
     WindowsPackageFootprint ReadCandidate(IInstallerReleaseLease release, InstallerPayloadFileEntry entry, CancellationToken cancellationToken);
 
     WindowsPackageFootprint ReadInstalled(string installedRoot, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Digest of the candidate's payload files (block-map names, sizes and block hashes), independent of
+    /// the signature and archive layout; null when the block map cannot be read as one.
+    /// </summary>
+    string? ReadCandidateContent(IInstallerReleaseLease release, InstallerPayloadFileEntry entry, CancellationToken cancellationToken) => null;
+
+    /// <summary>Digest of an installed package's payload files, comparable with <see cref="ReadCandidateContent"/>.</summary>
+    string? ReadInstalledContent(string installedRoot, CancellationToken cancellationToken) => null;
 }
 
 internal sealed record WindowsPackageFootprint(long SignatureLength, string SignatureSha256, long BlockMapLength, string BlockMapSha256);
@@ -27,7 +36,9 @@ internal sealed record WindowsPackageFootprint(long SignatureLength, string Sign
 /// <summary>
 /// Rejects known primary or dependency same-identity conflicts before service maintenance.
 /// Matching signed footprints permit further validation; they do not replace AppXSVC deployment
-/// checks, registration postconditions, or the durable recovery protocol.
+/// checks, registration postconditions, or the durable recovery protocol. A dependency whose
+/// installed copy carries the same payload files under a different signature (a framework re-signed
+/// by Store servicing) is not a conflict: deployment lets Windows resolve it from that copy.
 /// </summary>
 internal sealed class WindowsPackageDeploymentPreflight(
     IWindowsInstalledPackageFootprintCatalog catalog,
@@ -57,12 +68,13 @@ internal sealed class WindowsPackageDeploymentPreflight(
         {
             InstallerReleaseManifest manifest = release.Manifest;
             VerifyOne(release, manifest.PackageIdentity.PackageFamilyName, manifest.PackageIdentity.PackageFullName,
-                manifest.Files.Single(static entry => entry.Role == InstallerPayloadFileRole.PrimaryPackage), cancellationToken);
+                manifest.Files.Single(static entry => entry.Role == InstallerPayloadFileRole.PrimaryPackage), dependency: false,
+                cancellationToken);
             foreach (InstallerDependencyPackageIdentity dependency in manifest.Dependencies)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 VerifyOne(release, dependency.PackageFamilyName, dependency.PackageFullName,
-                    manifest.Files.Single(entry => entry.Path == dependency.Path), cancellationToken);
+                    manifest.Files.Single(entry => entry.Path == dependency.Path), dependency: true, cancellationToken);
             }
         }
         catch (Exception exception) when (!ClashSharp.Installer.Contracts.InstallerExceptionPolicy.IsProcessFatal(exception)
@@ -74,7 +86,7 @@ internal sealed class WindowsPackageDeploymentPreflight(
     }
 
     private void VerifyOne(IInstallerReleaseLease release, string familyName, string fullName,
-        InstallerPayloadFileEntry entry, CancellationToken cancellationToken)
+        InstallerPayloadFileEntry entry, bool dependency, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         IReadOnlyList<string> roots = _catalog.FindInstalledRoots(familyName, fullName, cancellationToken)
@@ -96,9 +108,21 @@ internal sealed class WindowsPackageDeploymentPreflight(
         WindowsPackageFootprint candidate = _reader.ReadCandidate(release, entry, cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
         WindowsPackageFootprint installed = _reader.ReadInstalled(root, cancellationToken);
-        if (candidate != installed)
+        if (candidate != installed && !(dependency && HasSamePayload(release, entry, root, cancellationToken)))
         {
             throw new InstallerProtocolException("installer.package.content_conflict");
         }
+    }
+
+    // The full name already pins name, version, architecture and publisher. Store servicing re-signs
+    // framework packages, which changes the signature and archive layout but not one payload byte;
+    // only the primary package (this product) must match its signed footprint exactly.
+    private bool HasSamePayload(IInstallerReleaseLease release, InstallerPayloadFileEntry entry, string root,
+        CancellationToken cancellationToken)
+    {
+        string? candidate = _reader.ReadCandidateContent(release, entry, cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        string? installed = _reader.ReadInstalledContent(root, cancellationToken);
+        return candidate is not null && string.Equals(candidate, installed, StringComparison.Ordinal);
     }
 }
