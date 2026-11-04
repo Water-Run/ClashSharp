@@ -90,19 +90,22 @@
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
                         <TextBlock Text="{Binding VersionLabelText}" Style="{StaticResource AboutSpecLabelStyle}" />
-                        <TextBlock Grid.Column="1" Text="{Binding VersionText}" Style="{StaticResource AboutSpecValueStyle}" />
-                        <TextBlock Grid.Row="1" Text="{Binding CoreTitleText}" Style="{StaticResource AboutSpecLabelStyle}" />
-                        <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding CoreValueText}" Style="{StaticResource AboutSpecValueStyle}" />
-                        <TextBlock Grid.Row="2" Text="{Binding RuntimeTitleText}" Style="{StaticResource AboutSpecLabelStyle}" />
-                        <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding RuntimeValueText}" Style="{StaticResource AboutSpecValueStyle}" />
-                        <TextBlock Grid.Row="3" Text="{Binding ProxyInformationTitleText}" Style="{StaticResource AboutSpecLabelStyle}" />
-                        <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding LocalProxyValueText}" Style="{StaticResource AboutSpecValueStyle}" />
-                        <TextBlock x:Name="AuthorTitleText" Grid.Row="4" Text="{Binding AuthorTitleText}" Style="{StaticResource AboutSpecLabelStyle}" />
-                        <TextBlock x:Name="AuthorValueText" Grid.Row="4" Grid.Column="1" Text="{Binding AuthorValueText}" Style="{StaticResource AboutSpecValueStyle}" />
-                        <TextBlock x:Name="LicenseTitleText" Grid.Row="5" Text="{Binding LicenseTitleText}" Style="{StaticResource AboutSpecLabelStyle}" />
-                        <TextBlock x:Name="LicenseValueText" Grid.Row="5" Grid.Column="1" Text="{Binding LicenseValueText}" Style="{StaticResource AboutSpecValueStyle}" />
+                        <TextBlock Grid.Column="1" Text="{Binding VersionDetailText}" Style="{StaticResource AboutSpecValueStyle}" />
+                        <TextBlock Grid.Row="1" Text="{Binding BuildTimeTitleText}" Style="{StaticResource AboutSpecLabelStyle}" />
+                        <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding BuildTimeValueText}" Style="{StaticResource AboutSpecValueStyle}" />
+                        <TextBlock Grid.Row="2" Text="{Binding CoreTitleText}" Style="{StaticResource AboutSpecLabelStyle}" />
+                        <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding CoreValueText}" Style="{StaticResource AboutSpecValueStyle}" />
+                        <TextBlock Grid.Row="3" Text="{Binding RuntimeTitleText}" Style="{StaticResource AboutSpecLabelStyle}" />
+                        <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding RuntimeValueText}" Style="{StaticResource AboutSpecValueStyle}" />
+                        <TextBlock Grid.Row="4" Text="{Binding ProxyInformationTitleText}" Style="{StaticResource AboutSpecLabelStyle}" />
+                        <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding LocalProxyValueText}" Style="{StaticResource AboutSpecValueStyle}" />
+                        <TextBlock x:Name="AuthorTitleText" Grid.Row="5" Text="{Binding AuthorTitleText}" Style="{StaticResource AboutSpecLabelStyle}" />
+                        <TextBlock x:Name="AuthorValueText" Grid.Row="5" Grid.Column="1" Text="{Binding AuthorValueText}" Style="{StaticResource AboutSpecValueStyle}" />
+                        <TextBlock x:Name="LicenseTitleText" Grid.Row="6" Text="{Binding LicenseTitleText}" Style="{StaticResource AboutSpecLabelStyle}" />
+                        <TextBlock x:Name="LicenseValueText" Grid.Row="6" Grid.Column="1" Text="{Binding LicenseValueText}" Style="{StaticResource AboutSpecValueStyle}" />
                     </Grid>
                 </Grid>
 

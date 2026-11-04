@@ -22,7 +22,8 @@ internal static class AboutPageComposition
             new AboutCoreAdapter(context.MihomoCore),
             new GitHubReleaseUpdateChecker(ReleaseHttpClient, applicationVersion),
             new WindowsUriLauncher(),
-            context.ErrorSink, context.Notifications);
+            context.ErrorSink, context.Notifications,
+            ApplicationVersion.SourceRevision, ApplicationVersion.BuildTimestamp);
 
         return new Dependencies(
             viewModel,

@@ -110,6 +110,23 @@ public sealed class InstallerPreferencesPresentationTests
     }
 
     [Fact]
+    public async Task EnvironmentPresetListsTheInitialPreferencesItWrites()
+    {
+        using var model = new InstallerShellViewModel(new Runtime());
+        await model.InitializeAsync();
+        List<string> changes = [];
+        model.PropertyChanged += (_, args) => changes.Add(args.PropertyName!);
+
+        Assert.Contains(model.SystemDefaultsDetails, detail => detail.Label == "界面语言" && detail.Value.Contains("Windows", StringComparison.Ordinal));
+        model.FollowSystemDefaults = false;
+
+        Assert.Contains(nameof(model.SystemDefaultsDetails), changes);
+        Assert.Contains(model.SystemDefaultsDetails, detail => detail.Label == "界面语言" && detail.Value == "English");
+        Assert.Contains(model.SystemDefaultsDetails, detail => detail.Label == "中国大陆功能" && detail.Value == "关闭");
+        Assert.Equal(5, model.SystemDefaultsDetails.Count);
+    }
+
+    [Fact]
     public async Task RestoreRecommendedCannotChangeTheFrozenInstallationSnapshot()
     {
         var runtime = new Runtime();

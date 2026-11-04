@@ -370,6 +370,10 @@ public sealed class AppResourcePackagingTests
             (string?)element.Attribute("Text") == "{Binding CoreValueText}");
         Assert.Contains(specifications.Descendants(presentation + "Button"), element =>
             (string?)element.Attribute("Click") == "CopyInformationButton_Click");
+        Assert.Contains(specifications.Descendants(presentation + "TextBlock"), element =>
+            (string?)element.Attribute("Text") == "{Binding BuildTimeValueText}");
+        Assert.Contains(specifications.Descendants(presentation + "TextBlock"), element =>
+            (string?)element.Attribute("Text") == "{Binding VersionDetailText}");
         Assert.Empty(document.Descendants(presentation + "Expander"));
         Assert.DoesNotContain("x:Name=\"VersionLabelText\"", aboutXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("x:Name=\"RuntimeTitleText\"", aboutXaml, StringComparison.Ordinal);
@@ -390,7 +394,6 @@ public sealed class AppResourcePackagingTests
 
         Assert.Equal("{ThemeResource ControlCornerRadius}", Setter("ClashSettingsCardStyle", "CornerRadius"));
         Assert.Equal("{ThemeResource OverlayCornerRadius}", Setter("ClashSurfaceCardStyle", "CornerRadius"));
-        Assert.Equal("{ThemeResource OverlayCornerRadius}", Setter("ClashCardListItemStyle", "CornerRadius"));
         Assert.Equal("0", Setter("ClashCardGridStyle", "CornerRadius"));
         Assert.Contains(app.Descendants(xaml + "Double"), element =>
             (string?)element.Attribute(xaml + "Key") == "ClashSettingsCardSpacing" && element.Value == "4");
@@ -422,6 +425,12 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("x:Name=\"SettingsContentPanel\" Spacing=\"{StaticResource ClashSettingsCardSpacing}\"", settingsXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("SubtitleTextBlockStyle", settingsXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("ClashCardGridStyle", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"McpShowConfigurationButton\" Content=\"{Binding ShowText}\" Click=\"McpShow_Click\"", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"McpApplyButton\"", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"NotificationContentExpander\"", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("IsEnabled=\"{Binding CanRegisterStartupRestoreFallback}\"", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("IsEnabled=\"{Binding CanRemoveStartupRestoreFallbackRegistration}\"", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("{Binding HasStartupRestoreFallbackCheckResult", settingsXaml, StringComparison.Ordinal);
         Assert.Contains(XDocument.Parse(settingsXaml).Descendants(presentation + "TextBlock"), element =>
             (string?)element.Attribute("Style") == "{StaticResource ClashSectionHeaderTextBlockStyle}");
     }

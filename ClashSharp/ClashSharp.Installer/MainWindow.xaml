@@ -169,11 +169,77 @@
               <CheckBox x:Name="SystemDefaultsToggle" Content="跟随系统环境" IsChecked="{Binding FollowSystemDefaults}"
                         Style="{StaticResource InstallerToggleSwitchStyle}" />
           </HeaderedContentControl>
+          <Expander x:Name="SystemDefaultsDetailsExpander" Style="{StaticResource InstallerDetailExpanderStyle}"
+                    Header="将写入的初始偏好" AutomationProperties.Name="查看所选环境预设写入的初始偏好">
+            <ItemsControl ItemsSource="{Binding SystemDefaultsDetails}" Margin="0,4,0,0" Focusable="False">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                  <Grid>
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="112" />
+                      <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="{Binding Label}" Style="{StaticResource InstallerDetailLabelStyle}" />
+                    <TextBlock Grid.Column="1" Text="{Binding Value}" Style="{StaticResource InstallerDetailValueStyle}" />
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </Expander>
           <HeaderedContentControl Style="{StaticResource InstallerSettingRowStyle}" Header="系统通知级别" Tag="{Binding NotificationPresetDescription}">
               <ComboBox x:Name="NotificationPresetBox" ItemsSource="{Binding NotificationPresetOptions}"
                         SelectedIndex="{Binding NotificationPresetIndex}" MinWidth="132" MinHeight="32"
                         AutomationProperties.Name="系统通知级别" AutomationProperties.HelpText="{Binding NotificationPresetDescription}" />
           </HeaderedContentControl>
+          <Expander x:Name="NotificationPresetDetailsExpander" Style="{StaticResource InstallerDetailExpanderStyle}"
+                    Header="各级别通知内容" AutomationProperties.Name="查看各通知级别包含的通知">
+            <Grid Margin="0,4,0,0">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="64" />
+                <ColumnDefinition Width="64" />
+                <ColumnDefinition Width="64" />
+              </Grid.ColumnDefinitions>
+              <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+              </Grid.RowDefinitions>
+              <TextBlock Grid.Column="1" Text="仅重要" Style="{StaticResource MutedTextStyle}" FontSize="12" HorizontalAlignment="Center" />
+              <TextBlock Grid.Column="2" Text="默认" Style="{StaticResource MutedTextStyle}" FontSize="12" HorizontalAlignment="Center" />
+              <TextBlock Grid.Column="3" Text="详细" Style="{StaticResource MutedTextStyle}" FontSize="12" HorizontalAlignment="Center" />
+              <StackPanel Grid.Row="1" Margin="0,6,12,6">
+                <TextBlock Text="关键问题" FontSize="12" FontWeight="SemiBold" TextWrapping="Wrap" />
+                <TextBlock Text="内核意外退出、代理或服务不可用、启动检查需要处理。" Style="{StaticResource MutedTextStyle}" FontSize="12" />
+              </StackPanel>
+              <TextBlock Grid.Row="1" Grid.Column="1" Text="&#xE73E;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="12" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}" AutomationProperties.Name="包含" />
+              <TextBlock Grid.Row="1" Grid.Column="2" Text="&#xE73E;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="12" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}" AutomationProperties.Name="包含" />
+              <TextBlock Grid.Row="1" Grid.Column="3" Text="&#xE73E;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="12" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}" AutomationProperties.Name="包含" />
+              <StackPanel Grid.Row="2" Margin="0,6,12,6">
+                <TextBlock Text="重要结果" FontSize="12" FontWeight="SemiBold" TextWrapping="Wrap" />
+                <TextBlock Text="操作失败、代理模式变化、发现新版本和服务恢复；Clash# 在前台时由窗口显示。" Style="{StaticResource MutedTextStyle}" FontSize="12" />
+              </StackPanel>
+              <TextBlock Grid.Row="2" Grid.Column="1" Text="—" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorTertiaryBrush}" AutomationProperties.Name="不包含" />
+              <TextBlock Grid.Row="2" Grid.Column="2" Text="&#xE73E;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="12" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}" AutomationProperties.Name="包含" />
+              <TextBlock Grid.Row="2" Grid.Column="3" Text="&#xE73E;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="12" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}" AutomationProperties.Name="包含" />
+              <StackPanel Grid.Row="3" Margin="0,6,12,6">
+                <TextBlock Text="常规反馈" FontSize="12" FontWeight="SemiBold" TextWrapping="Wrap" />
+                <TextBlock Text="导入、保存、测速和检查更新等结果，以及前台时的全部结果。" Style="{StaticResource MutedTextStyle}" FontSize="12" />
+              </StackPanel>
+              <TextBlock Grid.Row="3" Grid.Column="1" Text="—" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorTertiaryBrush}" AutomationProperties.Name="不包含" />
+              <TextBlock Grid.Row="3" Grid.Column="2" Text="—" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorTertiaryBrush}" AutomationProperties.Name="不包含" />
+              <TextBlock Grid.Row="3" Grid.Column="3" Text="&#xE73E;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="12" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}" AutomationProperties.Name="包含" />
+              <StackPanel Grid.Row="4" Margin="0,6,12,6">
+                <TextBlock Text="触发器通知" FontSize="12" FontWeight="SemiBold" TextWrapping="Wrap" />
+                <TextBlock Text="触发器“发送通知”动作产生的通知。" Style="{StaticResource MutedTextStyle}" FontSize="12" />
+              </StackPanel>
+              <TextBlock Grid.Row="4" Grid.Column="1" Text="—" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorTertiaryBrush}" AutomationProperties.Name="不包含" />
+              <TextBlock Grid.Row="4" Grid.Column="2" Text="&#xE73E;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="12" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}" AutomationProperties.Name="包含" />
+              <TextBlock Grid.Row="4" Grid.Column="3" Text="&#xE73E;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="12" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}" AutomationProperties.Name="包含" />
+            </Grid>
+          </Expander>
           <HeaderedContentControl Style="{StaticResource InstallerSettingRowStyle}" Header="MCP 服务器" Tag="{Binding McpServerDescription}">
               <CheckBox x:Name="McpServerToggle" Content="启用 MCP 服务器" IsChecked="{Binding EnableMcpServer}"
                         Style="{StaticResource InstallerToggleSwitchStyle}" AutomationProperties.HelpText="{Binding McpServerDescription}" />
@@ -405,11 +471,22 @@
                   Command="{Binding CompletePreferencesCommand}"
                   Visibility="{Binding IsCompletePreferencesVisible, Converter={StaticResource BooleanToVisibilityConverter}}"
                   AutomationProperties.Name="完成当前账户的安装选项" />
-          <Button Margin="0,0,8,0" Content="启动 Clash#(_L)"
+          <!-- One accent action per page: launch is primary only when no maintenance operation is offered.
+               AccessText keeps the mnemonic hidden because the accent template does not recognize access keys. -->
+          <Button x:Name="LaunchApplicationButton" Margin="0,0,8,0"
                   Command="{Binding LaunchApplicationCommand}" IsDefault="True"
-                  Visibility="{Binding IsLaunchApplicationVisible, Converter={StaticResource BooleanToVisibilityConverter}}"
+                  Visibility="{Binding IsLaunchApplicationEmphasized, Converter={StaticResource BooleanToVisibilityConverter}}"
                   Style="{StaticResource InstallerPrimaryButtonStyle}"
-                  AutomationProperties.Name="启动 Clash#" />
+                  AutomationProperties.Name="启动 Clash#">
+            <AccessText Text="启动 Clash#(_L)" />
+          </Button>
+          <Button x:Name="LaunchApplicationSecondaryButton" Margin="0,0,8,0"
+                  Command="{Binding LaunchApplicationCommand}"
+                  Visibility="{Binding IsLaunchApplicationSecondary, Converter={StaticResource BooleanToVisibilityConverter}}"
+                  Style="{StaticResource InstallerSecondaryButtonStyle}"
+                  AutomationProperties.Name="启动 Clash#">
+            <AccessText Text="启动 Clash#(_L)" />
+          </Button>
           <Button
             Margin="0,0,8,0"
             Content="保留原安装(_K)"

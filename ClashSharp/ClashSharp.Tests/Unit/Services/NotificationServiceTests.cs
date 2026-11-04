@@ -654,6 +654,66 @@ public sealed class NotificationServiceTests
         Assert.True(recoveredReceipts.Contains("execution:3:0"));
     }
 
+    [Theory]
+    [InlineData(NotificationLevel.CriticalOnly, 0)]
+    [InlineData(NotificationLevel.Default, 0)]
+    [InlineData(NotificationLevel.More, 4)]
+    public void ForegroundWindowSkipsStandardResultsItAlreadyShows(NotificationLevel level, int expected)
+    {
+        FakeWin11NotificationPlatform platform = new();
+        NotificationService service = CreateService(true, level, platform, new(), new());
+        service.SetForegroundProbe(static () => true);
+
+        service.ReportOperation("Title", "Failed", true);
+        service.NotifyProxyModeChanged(ClashSharp.Model.ClashSharpMode.Standby);
+        service.NotifyConnectionTestTimeout("First target");
+        service.ReportAvailability("Title", "Recovered", false);
+
+        Assert.Equal(expected, platform.Requests.Count);
+    }
+
+    [Theory]
+    [InlineData(NotificationLevel.CriticalOnly)]
+    [InlineData(NotificationLevel.Default)]
+    [InlineData(NotificationLevel.More)]
+    public void ForegroundWindowNeverSkipsCriticalEvents(NotificationLevel level)
+    {
+        FakeWin11NotificationPlatform platform = new();
+        NotificationService service = CreateService(true, level, platform, new(), new());
+        service.SetForegroundProbe(static () => true);
+
+        service.ReportAvailability("Title", "Unavailable", true);
+        service.NotifyRuntimeFailure();
+        service.ReportOperation("Title", "Notification.Startup.Attention", true);
+
+        Assert.Equal(3, platform.Requests.Count);
+    }
+
+    [Fact]
+    public void BackgroundOrFailedForegroundProbeKeepsStandardResults()
+    {
+        FakeWin11NotificationPlatform platform = new();
+        NotificationService service = CreateService(true, NotificationLevel.Default, platform, new(), new());
+        service.SetForegroundProbe(static () => false);
+        service.ReportOperation("Title", "Failed", true);
+        service.SetForegroundProbe(static () => throw new InvalidOperationException("Window closing."));
+        service.ReportOperation("Title", "Failed again", true);
+
+        Assert.Equal(2, platform.Requests.Count);
+    }
+
+    [Theory]
+    [InlineData("About.Update.Unavailable")]
+    [InlineData("About.Update.Current")]
+    [InlineData("Master.Diagnostics.Failed")]
+    [InlineData("Master.Diagnostics.Timeout")]
+    [InlineData("Notification.Diagnostic.Completed")]
+    public void PassiveProbeOutcomesAreDetailedFeedbackEvenWhenTheyFail(string messageResourceKey)
+    {
+        Assert.Equal(NotificationLevel.More, NotificationService.GetOperationLevel(messageResourceKey, failed: true));
+        Assert.Equal(NotificationLevel.More, NotificationService.GetOperationLevel(messageResourceKey, failed: false));
+    }
+
     private static NotificationService CreateService(
         bool enabled,
         NotificationLevel configuredLevel,

@@ -17,6 +17,8 @@ public sealed class InstallerLaunchPresentationTests
         await model.PrimaryActionCommand.ExecuteAsync();
 
         Assert.True(model.IsLaunchApplicationVisible);
+        Assert.True(model.IsLaunchApplicationEmphasized);
+        Assert.False(model.IsLaunchApplicationSecondary);
         Assert.Contains("Setup.exe", model.StatusDetail, StringComparison.Ordinal);
         Assert.Contains("启动 Clash#", model.StatusDetail, StringComparison.Ordinal);
         Assert.Equal(0, runtime.Launches);
@@ -32,6 +34,10 @@ public sealed class InstallerLaunchPresentationTests
         using var model = new InstallerShellViewModel(runtime);
         await model.InitializeAsync();
         Assert.True(model.IsLaunchApplicationVisible);
+        // Maintenance keeps its operation as the single accent action; launch is offered beside it.
+        Assert.True(model.IsPrimaryActionVisible);
+        Assert.True(model.IsLaunchApplicationSecondary);
+        Assert.False(model.IsLaunchApplicationEmphasized);
 
         await model.SecondaryActionCommand.ExecuteAsync();
 

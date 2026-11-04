@@ -35,6 +35,9 @@ namespace ClashSharp;
 /// </remarks>
 public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
 {
+    /// <summary>Whether this window is the active foreground window; read by notification filtering on any thread.</summary>
+    private bool _isForegroundActive;
+
     /// <summary>Command-line argument used by automated UI validation to skip startup modal dialogs.</summary>
     internal const string SkipStartupDialogsArgument = "--skip-startup-dialogs";
 
@@ -146,6 +149,7 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
             ?? (ContentFrame.Content as FrameworkElement)?.DataContext as ILocalizedPresentation);
         Closed += OnWindowClosed;
         Activated += OnInstallationWindowActivated;
+        Activated += OnWindowActivationChanged;
         StartupShellSetupPolicy.TryRun(InitializeStartupStatus);
         InitializeWindowNativeCapabilities();
         _nativeCapabilities.TryRunWindowHandleFeature(InitializeTitleBar);
@@ -172,6 +176,7 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
         _trayCommandService = trayCommandService ?? throw new ArgumentNullException(nameof(trayCommandService));
         _startupConflicts = startupConflicts ?? throw new ArgumentNullException(nameof(startupConflicts));
         _runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
+        notifications?.SetForegroundProbe(() => Volatile.Read(ref _isForegroundActive));
         _notificationRegistration = notifications?.Register(() =>
             DispatcherQueue.TryEnqueue(() => PrimaryWindowActivation.BringToFront(this)));
         if (_windowPlacementView is not null)
@@ -532,6 +537,8 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
     private async void OnWindowClosed(object sender, WindowEventArgs args)
     {
         Activated -= OnInstallationWindowActivated;
+        Activated -= OnWindowActivationChanged;
+        Volatile.Write(ref _isForegroundActive, false);
         _ = StartupShellSetupPolicy.TryRun(() => _notificationRegistration?.Dispose());
         _notificationRegistration = null;
         WindowDialogCoordinator.MarkWindowClosing(_dialogXamlRoot);
@@ -739,6 +746,13 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
         if (!_runtimeReady || !_startupDialogsComplete || _windowLifetime.IsCancellationRequested) { return Task.CompletedTask; }
         if (_installationPinsTask is { IsCompleted: false } active) { return active; }
         return _installationPinsTask = Runtime.CompleteInstallationPinsAsync(this, _windowLifetime.Token);
+    }
+
+    /// <summary>Tracks whether the user is looking at Clash#; hidden, minimized and background windows are inactive.</summary>
+    private void OnWindowActivationChanged(object sender, Microsoft.UI.Xaml.WindowActivatedEventArgs args)
+    {
+        Volatile.Write(ref _isForegroundActive,
+            args.WindowActivationState != Microsoft.UI.Xaml.WindowActivationState.Deactivated);
     }
 
     private async void OnInstallationWindowActivated(object sender, Microsoft.UI.Xaml.WindowActivatedEventArgs args)

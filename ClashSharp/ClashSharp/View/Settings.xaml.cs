@@ -953,7 +953,7 @@ public sealed partial class Settings : Page, ILocalizedPresentation
     /// <summary>Refreshes startup restore fallback registration status.</summary>
     private async void DetectStartupRestoreFallbackButton_Click(object sender, RoutedEventArgs e)
     {
-        await RunPageOperationAsync(_viewModel.RefreshStartupRestoreFallbackStatusAsync);
+        await RunPageOperationAsync(_viewModel.DetectStartupRestoreFallbackAsync);
     }
 
     /// <summary>Removes the startup restore fallback registration.</summary>
@@ -1220,6 +1220,100 @@ public sealed partial class Settings : Page, ILocalizedPresentation
     private async void McpCopy_Click(object sender, RoutedEventArgs args) => await RunPageOperationAsync(token =>
         _mcp.CopyAsync((configuration, cancellationToken) =>
             McpClientClipboard.TryCopyAsync(configuration, DispatcherQueue, cancellationToken), token));
+    private async void McpShow_Click(object sender, RoutedEventArgs args) => await RunPageOperationAsync(token =>
+        _mcp.ShowConfigurationAsync(ShowMcpConfigurationAsync, token));
+
+    /// <summary>Shows the private client configuration for manual selection, with a verified copy action.</summary>
+    /// <param name="configuration">Private configuration text; released from the visual tree when the dialog closes.</param>
+    /// <param name="cancellationToken">Page operation lifetime; leaving the page closes the dialog.</param>
+    private async Task ShowMcpConfigurationAsync(string configuration, CancellationToken cancellationToken)
+    {
+        TextBox configurationText = new()
+        {
+            Text = configuration,
+            IsReadOnly = true,
+            AcceptsReturn = true,
+            TextWrapping = TextWrapping.Wrap,
+            FontFamily = new FontFamily("Cascadia Mono, Consolas"),
+            MinHeight = 160,
+            MaxHeight = 320,
+            MinWidth = 400,
+            IsSpellCheckEnabled = false,
+        };
+        ScrollViewer.SetVerticalScrollBarVisibility(configurationText, ScrollBarVisibility.Auto);
+        AutomationProperties.SetName(configurationText, _mcp.ManualCopyTitleText);
+        TextBlock warning = new()
+        {
+            Text = _mcp.ManualCopyDescriptionText,
+            TextWrapping = TextWrapping.Wrap,
+            Style = (Style)Microsoft.UI.Xaml.Application.Current.Resources["ClashSecondaryCaptionTextBlockStyle"],
+        };
+        InfoBar copyFailure = new()
+        {
+            Severity = InfoBarSeverity.Error,
+            IsClosable = false,
+            IsOpen = false,
+            Message = _mcp.ManualCopyFailedText,
+        };
+        StackPanel content = new() { Spacing = 12, MaxWidth = 560 };
+        content.Children.Add(warning);
+        content.Children.Add(configurationText);
+        content.Children.Add(copyFailure);
+        ThemedContentDialog dialog = new()
+        {
+            Title = _mcp.ManualCopyTitleText,
+            Content = content,
+            PrimaryButtonText = _mcp.ManualCopyButtonText,
+            CloseButtonText = _getString("Command.Close"),
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = GetDialogXamlRoot(),
+        };
+        dialog.Localize(() =>
+        {
+            dialog.Title = _mcp.ManualCopyTitleText;
+            dialog.PrimaryButtonText = _mcp.ManualCopyButtonText;
+            dialog.CloseButtonText = _getString("Command.Close");
+            warning.Text = _mcp.ManualCopyDescriptionText;
+            copyFailure.Message = _mcp.ManualCopyFailedText;
+        });
+        dialog.Opened += (_, _) =>
+        {
+            configurationText.Focus(FocusState.Programmatic);
+            configurationText.SelectAll();
+        };
+        dialog.PrimaryButtonClick += async (_, e) =>
+        {
+            ContentDialogButtonClickDeferral deferral = e.GetDeferral();
+            try
+            {
+                if (!await McpClientClipboard.TryCopyAsync(configuration, DispatcherQueue, cancellationToken))
+                {
+                    // Keep the dialog open so the selected text can still be copied with Ctrl+C.
+                    e.Cancel = true;
+                    copyFailure.IsOpen = true;
+                    configurationText.Focus(FocusState.Programmatic);
+                    configurationText.SelectAll();
+                }
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                e.Cancel = false;
+            }
+            finally
+            {
+                deferral.Complete();
+            }
+        };
+
+        try
+        {
+            await dialog.ShowManagedAsync(cancellationToken);
+        }
+        finally
+        {
+            configurationText.Text = string.Empty;
+        }
+    }
 
     /// <summary>Shows a destructive-action confirmation dialog.</summary>
     private async Task<bool> ConfirmAsync(string title, string content, string primaryButtonText, CancellationToken cancellationToken)

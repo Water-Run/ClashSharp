@@ -150,11 +150,21 @@ public sealed class InstallerExecutableContractTests
             static element => (string?)element.Attribute("AutomationProperties.Name") == "安装操作");
         Assert.DoesNotContain(actions.Ancestors(), element => element.Name == presentation + "ScrollViewer");
         XElement[] buttons = actions.Descendants(presentation + "Button").ToArray();
-        Assert.Equal(6, buttons.Length);
-        XElement launch = Assert.Single(buttons,
-            static button => (string?)button.Attribute("Command") == "{Binding LaunchApplicationCommand}");
-        Assert.Equal("{Binding IsLaunchApplicationVisible, Converter={StaticResource BooleanToVisibilityConverter}}",
+        Assert.Equal(7, buttons.Length);
+        XElement[] launches = buttons
+            .Where(static button => (string?)button.Attribute("Command") == "{Binding LaunchApplicationCommand}")
+            .ToArray();
+        Assert.Equal(2, launches.Length);
+        XElement launch = Assert.Single(launches, static button =>
+            (string?)button.Attribute("Style") == "{StaticResource InstallerPrimaryButtonStyle}");
+        Assert.Equal("{Binding IsLaunchApplicationEmphasized, Converter={StaticResource BooleanToVisibilityConverter}}",
             (string?)launch.Attribute("Visibility"));
+        Assert.Equal("True", (string?)launch.Attribute("IsDefault"));
+        XElement secondaryLaunch = Assert.Single(launches, static button =>
+            (string?)button.Attribute("Style") == "{StaticResource InstallerSecondaryButtonStyle}");
+        Assert.Equal("{Binding IsLaunchApplicationSecondary, Converter={StaticResource BooleanToVisibilityConverter}}",
+            (string?)secondaryLaunch.Attribute("Visibility"));
+        Assert.NotEqual("True", (string?)secondaryLaunch.Attribute("IsDefault"));
         XElement userSetup = Assert.Single(buttons,
             static button => (string?)button.Attribute("Command") == "{Binding CompletePreferencesCommand}");
         Assert.Equal("{Binding IsCompletePreferencesVisible, Converter={StaticResource BooleanToVisibilityConverter}}",

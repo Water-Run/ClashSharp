@@ -157,17 +157,6 @@
                 <Setter Property="Padding" Value="8,1,8,2" />
                 <Setter Property="VerticalAlignment" Value="Center" />
             </Style>
-
-            <Style x:Key="ClashCardListItemStyle" TargetType="ListViewItem">
-                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-                <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
-                <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
-                <Setter Property="BorderThickness" Value="1" />
-                <Setter Property="CornerRadius" Value="{ThemeResource OverlayCornerRadius}" />
-                <Setter Property="Margin" Value="0,0,0,4" />
-                <Setter Property="Padding" Value="16,0" />
-                <Setter Property="MinHeight" Value="68" />
-            </Style>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

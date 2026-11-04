@@ -238,6 +238,18 @@ internal sealed partial class ProfilesViewModel : ObservableObject, ILocalizedPr
         : string.Format(CultureInfo.CurrentCulture, _getString("Profiles.History.UnavailableEntry"),
             _displayMapper.Formatter.Timestamp(preview.Entry.CreatedAt, includeSeconds: false), preview.Entry.SourceName);
 
+    /// <summary>Gets the localized creation time of one retained version.</summary>
+    public string GetHistoryTimestampText(ProfileHistoryPreview preview) =>
+        _displayMapper.Formatter.Timestamp(preview.Entry.CreatedAt, includeSeconds: false);
+
+    /// <summary>Gets the node and rule counts of a restorable version, or why it cannot be restored.</summary>
+    public string GetHistoryDetailText(ProfileHistoryPreview preview) => preview.CanRestore
+        ? string.Format(CultureInfo.CurrentCulture, _getString("Profiles.History.Counts.Format"), preview.NodeCount, preview.RuleCount)
+        : _getString("Profiles.History.Unavailable");
+
+    /// <summary>Gets the instruction shown above the retained version list.</summary>
+    public string HistoryDescriptionText => _getString("Profiles.Dialog.HistoryDescription");
+
     /// <summary>Gets the current-profile label.</summary>
     /// <value>Localized label text.</value>
     public string CurrentProfileTitleText => _getString("Label.CurrentProfile");

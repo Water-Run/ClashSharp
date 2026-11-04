@@ -38,6 +38,11 @@ internal sealed class McpSettingsViewModel(IMcpServerManagement management, Func
     public string ClientText => Text("Client");
     public string ClientDescriptionText => Text("ClientDescription");
     public string CopyText => Text("Copy");
+    public string ShowText => Text("Show");
+    public string ManualCopyTitleText => Text("ManualCopyTitle");
+    public string ManualCopyDescriptionText => Text("ManualCopyDescription");
+    public string ManualCopyButtonText => Text("ManualCopyButton");
+    public string ManualCopyFailedText => Text("ManualCopyFailed");
     public string CredentialText => Text("Credential");
     public string CredentialDescriptionText => Text("CredentialDescription");
     public string RotateText => Text("Rotate");
@@ -63,6 +68,7 @@ internal sealed class McpSettingsViewModel(IMcpServerManagement management, Func
     public string Status => Text(_runtime is null ? "Unknown" : _runtime.IsSuspended ? "Paused"
         : _runtime.BoundEndpoint is not null ? "Running" : _runtime.ErrorCode is not null || _runtime.Configuration.Access.Enabled ? "Unavailable" : "Disabled");
     public string Endpoint => _runtime?.BoundEndpoint?.AbsoluteUri ?? string.Empty;
+    public bool HasEndpoint => Endpoint.Length > 0;
 
     public Task RefreshAsync(CancellationToken cancellationToken) => RunActionAsync(async () =>
         Load(await management.ReadAsync(cancellationToken), loadDraft: true), cancellationToken);
@@ -125,6 +131,22 @@ internal sealed class McpSettingsViewModel(IMcpServerManagement management, Func
         SetMessage(copied ? "Copied" : "CopyFailed", !copied);
     }, loadDraftOnFailure: false, cancellationToken);
 
+    /// <summary>Reads the private client configuration only for an explicit, on-screen manual copy.</summary>
+    /// <param name="present">Shows the configuration to the user; it must not log or persist the text.</param>
+    /// <param name="cancellationToken">Cancels the explicit user operation.</param>
+    public Task ShowConfigurationAsync(Func<string, CancellationToken, Task> present, CancellationToken cancellationToken) => RunActionAsync(async () =>
+    {
+        ArgumentNullException.ThrowIfNull(present);
+        string configuration = await management.GetClientConfigurationAsync(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (string.IsNullOrWhiteSpace(configuration))
+        {
+            SetMessage("CopyFailed", true);
+            return;
+        }
+        await present(configuration, cancellationToken);
+    }, loadDraftOnFailure: false, cancellationToken);
+
     /// <summary>Dismisses feedback without modifying the permission draft or observed runtime.</summary>
     public void DismissMessage() => SetMessage(string.Empty, false);
 
@@ -177,7 +199,7 @@ internal sealed class McpSettingsViewModel(IMcpServerManagement management, Func
     {
         foreach (string property in new[] { nameof(TitleText), nameof(DescriptionText), nameof(EnabledText), nameof(EnabledDescriptionText),
             nameof(PortText), nameof(PortDescriptionText), nameof(StatusText), nameof(RefreshText), nameof(PermissionsText), nameof(PermissionsDescriptionText),
-            nameof(ApplyText), nameof(ClientText), nameof(ClientDescriptionText), nameof(CopyText), nameof(CredentialText), nameof(CredentialDescriptionText),
+            nameof(ApplyText), nameof(ClientText), nameof(ClientDescriptionText), nameof(CopyText), nameof(ShowText), nameof(ManualCopyTitleText), nameof(ManualCopyDescriptionText), nameof(ManualCopyButtonText), nameof(ManualCopyFailedText), nameof(CredentialText), nameof(CredentialDescriptionText),
             nameof(RotateText), nameof(ResetText), nameof(Message) }) { OnPropertyChanged(property); }
         foreach (McpScopeChoice choice in Scopes) { choice.RefreshLabels(); }
         NotifyRuntime();
@@ -185,7 +207,7 @@ internal sealed class McpSettingsViewModel(IMcpServerManagement management, Func
 
     private void NotifyRuntime()
     {
-        OnPropertyChanged(nameof(Status)); OnPropertyChanged(nameof(Endpoint)); OnPropertyChanged(nameof(CanCopy));
+        OnPropertyChanged(nameof(Status)); OnPropertyChanged(nameof(Endpoint)); OnPropertyChanged(nameof(HasEndpoint)); OnPropertyChanged(nameof(CanCopy));
     }
 
     private void SetBusy(bool busy)

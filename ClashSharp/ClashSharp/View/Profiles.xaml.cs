@@ -9,6 +9,7 @@ using ClashSharp.Presentation.Dialogs;
 using ClashSharp.Presentation.Lifecycle;
 using ClashSharp.ViewModel;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
@@ -260,37 +261,51 @@ public sealed partial class Profiles : Page
                 await _viewModel.GetProfileHistoryPreviewsAsync(selectedProfile.Model.Id, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             if (historyEntries is null) { return; }
-            ComboBox versionBox = new()
+            ListView versionList = new()
             {
-                Header = _getString("Profiles.Dialog.HistoryVersion"),
-                MinWidth = 260,
-                MaxWidth = 420,
-                HorizontalAlignment = HorizontalAlignment.Stretch,
+                SelectionMode = ListViewSelectionMode.Single,
+                MaxHeight = 360,
+                Padding = new Thickness(0, 4, 0, 4),
             };
-            List<RetainedComboBoxOption> versions = [];
+            AutomationProperties.SetName(versionList, _getString("Profiles.Dialog.HistoryVersion"));
+            List<Action> refreshItems = [];
             foreach (ProfileHistoryPreview preview in historyEntries)
             {
-                RetainedComboBoxOption option = new(_viewModel.GetHistoryEntryText(preview), preview,
-                    TextWrapping.Wrap, maxWidth: 390);
-                versions.Add(option);
-                versionBox.Items.Add(option.Item);
+                versionList.Items.Add(CreateHistoryItem(preview, refreshItems));
             }
 
-            if (versionBox.Items.Count > 0)
+            if (versionList.Items.Count > 0)
             {
-                versionBox.SelectedIndex = 0;
+                versionList.SelectedIndex = 0;
             }
 
-            FrameworkElement content = versionBox.Items.Count > 0
-                ? versionBox
-                : new TextBlock { Text = _getString("Profiles.Dialog.HistoryEmpty") };
+            TextBlock description = new()
+            {
+                Text = _viewModel.HistoryDescriptionText,
+                TextWrapping = TextWrapping.Wrap,
+                Style = (Style)Microsoft.UI.Xaml.Application.Current.Resources["ClashSecondaryBodyTextBlockStyle"],
+            };
+            Border listSurface = new()
+            {
+                Child = versionList,
+                Background = (Brush)Microsoft.UI.Xaml.Application.Current.Resources["CardBackgroundFillColorDefaultBrush"],
+                BorderBrush = (Brush)Microsoft.UI.Xaml.Application.Current.Resources["CardStrokeColorDefaultBrush"],
+                BorderThickness = new Thickness(1),
+                CornerRadius = (CornerRadius)Microsoft.UI.Xaml.Application.Current.Resources["OverlayCornerRadius"],
+            };
+            StackPanel versions = new() { Spacing = 12, MinWidth = 380, MaxWidth = 520 };
+            versions.Children.Add(description);
+            versions.Children.Add(listSurface);
+            FrameworkElement content = versionList.Items.Count > 0
+                ? versions
+                : new TextBlock { Text = _getString("Profiles.Dialog.HistoryEmpty"), TextWrapping = TextWrapping.Wrap };
             ThemedContentDialog dialog = new()
             {
                 Title = _getString("Profiles.Dialog.HistoryTitle"),
                 Content = content,
                 PrimaryButtonText = _getString("Command.Rollback"),
                 CloseButtonText = _getString("Command.Close"),
-                IsPrimaryButtonEnabled = versionBox.SelectedItem is ComboBoxItem { Tag: ProfileHistoryPreview { CanRestore: true } },
+                IsPrimaryButtonEnabled = SelectedRestorableHistory(versionList) is not null,
                 DefaultButton = ContentDialogButton.Close,
                 XamlRoot = XamlRoot,
             };
@@ -299,26 +314,105 @@ public sealed partial class Profiles : Page
                 dialog.Title = _getString("Profiles.Dialog.HistoryTitle");
                 dialog.PrimaryButtonText = _getString("Command.Rollback");
                 dialog.CloseButtonText = _getString("Command.Close");
-                versionBox.Header = _getString("Profiles.Dialog.HistoryVersion");
+                description.Text = _viewModel.HistoryDescriptionText;
+                AutomationProperties.SetName(versionList, _getString("Profiles.Dialog.HistoryVersion"));
                 if (content is TextBlock empty) { empty.Text = _getString("Profiles.Dialog.HistoryEmpty"); }
-                foreach (RetainedComboBoxOption option in versions)
-                {
-                    if (option.Item.Tag is ProfileHistoryPreview preview)
-                    { option.Text = _viewModel.GetHistoryEntryText(preview); }
-                }
+                foreach (Action refresh in refreshItems) { refresh(); }
             });
-            versionBox.SelectionChanged += (_, _) => dialog.IsPrimaryButtonEnabled =
-                versionBox.SelectedItem is ComboBoxItem { Tag: ProfileHistoryPreview { CanRestore: true } };
+            versionList.SelectionChanged += (_, _) => dialog.IsPrimaryButtonEnabled = SelectedRestorableHistory(versionList) is not null;
             ContentDialogResult result = await dialog.ShowManagedAsync(cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             if (result == ContentDialogResult.Primary
-                && versionBox.SelectedItem is ComboBoxItem { Tag: ProfileHistoryPreview { CanRestore: true } selectedPreview })
+                && SelectedRestorableHistory(versionList) is ProfileHistoryPreview selectedPreview)
             {
                 await _viewModel.RollbackProfileCommand.ExecuteObservedAsync(
                     selectedPreview.Entry,
                     cancellationToken);
             }
         });
+    }
+
+    /// <summary>Builds one native list row for a retained version: time, source and counts or the restore blocker.</summary>
+    /// <param name="preview">Retained version shown by the row.</param>
+    /// <param name="refreshItems">Receives the row's localization refresh.</param>
+    private ListViewItem CreateHistoryItem(ProfileHistoryPreview preview, List<Action> refreshItems)
+    {
+        TextBlock timestamp = new() { Style = (Style)Microsoft.UI.Xaml.Application.Current.Resources["BodyStrongTextBlockStyle"] };
+        TextBlock source = new()
+        {
+            Text = preview.Entry.SourceName,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            Style = (Style)Microsoft.UI.Xaml.Application.Current.Resources["ClashSecondaryCaptionTextBlockStyle"],
+        };
+        TextBlock detail = new()
+        {
+            TextWrapping = TextWrapping.Wrap,
+            Style = (Style)Microsoft.UI.Xaml.Application.Current.Resources["CaptionTextBlockStyle"],
+            Foreground = (Brush)Microsoft.UI.Xaml.Application.Current.Resources[preview.CanRestore
+                ? "TextFillColorSecondaryBrush" : "SystemFillColorCautionBrush"],
+        };
+        StackPanel detailLine = new() { Orientation = Orientation.Horizontal, Spacing = 6 };
+        if (!preview.CanRestore)
+        {
+            FontIcon caution = new()
+            {
+                Glyph = "\uE7BA",
+                FontSize = 12,
+                Foreground = (Brush)Microsoft.UI.Xaml.Application.Current.Resources["SystemFillColorCautionBrush"],
+            };
+            AutomationProperties.SetAccessibilityView(caution, Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw);
+            detailLine.Children.Add(caution);
+        }
+
+        detailLine.Children.Add(detail);
+        StackPanel row = new() { Spacing = 2, Padding = new Thickness(0, 10, 0, 10) };
+        row.Children.Add(timestamp);
+        row.Children.Add(source);
+        row.Children.Add(detailLine);
+        ListViewItem item = new() { Content = row, Tag = preview, HorizontalContentAlignment = HorizontalAlignment.Stretch };
+        void Refresh()
+        {
+            timestamp.Text = _viewModel.GetHistoryTimestampText(preview);
+            detail.Text = _viewModel.GetHistoryDetailText(preview);
+            AutomationProperties.SetName(item, _viewModel.GetHistoryEntryText(preview).ReplaceLineEndings(" "));
+        }
+
+        Refresh();
+        refreshItems.Add(Refresh);
+        return item;
+    }
+
+    private static ProfileHistoryPreview? SelectedRestorableHistory(ListView versionList) =>
+        versionList.SelectedItem is ListViewItem { Tag: ProfileHistoryPreview { CanRestore: true } preview } ? preview : null;
+
+    /// <summary>Makes the double-clicked profile current, the same as the Set as current command.</summary>
+    private void ProfilesList_DoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
+    {
+        if ((e.OriginalSource as FrameworkElement)?.DataContext is not ConfigurationProfileDisplay profile)
+        {
+            return;
+        }
+
+        ProfilesList.SelectedItem = profile;
+        if (!_viewModel.CanActivateSelectedProfile)
+        {
+            return;
+        }
+
+        e.Handled = true;
+        SetActiveProfileButton_Click(sender, e);
+    }
+
+    /// <summary>Gives keyboard users the same activation as double-click with Enter on the focused row.</summary>
+    private void ProfilesList_KeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (e.Key != Windows.System.VirtualKey.Enter || !_viewModel.CanActivateSelectedProfile)
+        {
+            return;
+        }
+
+        e.Handled = true;
+        SetActiveProfileButton_Click(sender, e);
     }
 
     /// <summary>Creates a native WinUI file picker initialized for the current top-level window.</summary>

@@ -3,8 +3,6 @@ using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.UI.Dispatching;
-using Windows.ApplicationModel.DataTransfer;
-using SystemClipboard = Windows.ApplicationModel.DataTransfer.Clipboard;
 
 namespace ClashSharp.Presentation.Adapters;
 
@@ -21,7 +19,7 @@ internal static class McpClientClipboard
         ArgumentException.ThrowIfNullOrWhiteSpace(configuration);
         ArgumentNullException.ThrowIfNull(dispatcher);
         using CancellationTokenSource deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        deadline.CancelAfter(TimeSpan.FromSeconds(3));
+        deadline.CancelAfter(TimeSpan.FromSeconds(6));
         CancellationToken token = deadline.Token;
         try
         {
@@ -42,19 +40,6 @@ internal static class McpClientClipboard
         catch (COMException) { return false; }
     }
 
-    private static async Task<bool> WriteAndVerifyAsync(string configuration, CancellationToken cancellationToken)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        DataPackage package = new() { RequestedOperation = DataPackageOperation.Copy };
-        package.SetText(configuration);
-        ClipboardContentOptions options = new() { IsAllowedInHistory = false, IsRoamable = false };
-        if (!SystemClipboard.SetContentWithOptions(package, options)) { return false; }
-        // Materialize delayed text for other processes, including RDP clients.
-        SystemClipboard.Flush();
-        cancellationToken.ThrowIfCancellationRequested();
-        DataPackageView view = SystemClipboard.GetContent();
-        if (!view.Contains(StandardDataFormats.Text)) { return false; }
-        string copied = await view.GetTextAsync().AsTask(cancellationToken);
-        return copied.Length > 0 && string.Equals(configuration.ReplaceLineEndings("\n"), copied.ReplaceLineEndings("\n"), StringComparison.Ordinal);
-    }
+    private static Task<bool> WriteAndVerifyAsync(string configuration, CancellationToken cancellationToken) =>
+        ClipboardTextWriter.WriteAndVerifyAsync(configuration, isPrivate: true, cancellationToken);
 }

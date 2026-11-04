@@ -292,8 +292,12 @@
                     <components:SettingRow x:Name="StartupRestoreFallbackRow" Icon="&#xE777;" Title="{Binding StartupRestoreFallbackTitleText}" Description="{Binding StartupRestoreFallbackDescriptionText}">
                         <components:SettingRow.ActionContent>
                             <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                                <TextBlock x:Name="StartupRestoreFallbackStatusText" Text="{Binding StartupRestoreFallbackStatusText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" MaxWidth="160" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
-                                <Button x:Name="RegisterStartupRestoreFallbackButton" Click="RegisterStartupRestoreFallbackButton_Click">
+                                <ProgressRing Width="16" Height="16" MinWidth="0" MinHeight="0" IsActive="{Binding IsCheckingStartupRestoreFallback}"
+                                              Visibility="{Binding IsCheckingStartupRestoreFallback, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                              AutomationProperties.AccessibilityView="Raw" />
+                                <TextBlock x:Name="StartupRestoreFallbackStatusText" Text="{Binding StartupRestoreFallbackStatusText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" MaxWidth="160" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
+                                           AutomationProperties.LiveSetting="Polite" />
+                                <Button x:Name="RegisterStartupRestoreFallbackButton" Click="RegisterStartupRestoreFallbackButton_Click" IsEnabled="{Binding CanRegisterStartupRestoreFallback}">
                                     <StackPanel Orientation="Horizontal" Spacing="6">
                                         <FontIcon Glyph="&#xE8FB;" FontSize="14" />
                                         <TextBlock Text="{Binding RegisterText}" />
@@ -305,7 +309,7 @@
                                         <TextBlock Text="{Binding DetectText}" />
                                     </StackPanel>
                                 </Button>
-                                <Button x:Name="RemoveStartupRestoreFallbackRegistrationButton" Click="RemoveStartupRestoreFallbackRegistrationButton_Click">
+                                <Button x:Name="RemoveStartupRestoreFallbackRegistrationButton" Click="RemoveStartupRestoreFallbackRegistrationButton_Click" IsEnabled="{Binding CanRemoveStartupRestoreFallbackRegistration}">
                                     <StackPanel Orientation="Horizontal" Spacing="6">
                                         <FontIcon Glyph="&#xE74D;" FontSize="14" />
                                         <TextBlock Text="{Binding RemoveRegistrationText}" />
@@ -313,6 +317,17 @@
                                 </Button>
                             </StackPanel>
                         </components:SettingRow.ActionContent>
+                        <components:SettingRow.DetailContent>
+                            <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,8,0,0"
+                                        Visibility="{Binding HasStartupRestoreFallbackCheckResult, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                <FontIcon Glyph="&#xE73E;" FontSize="14" Foreground="{ThemeResource SystemFillColorSuccessBrush}" AutomationProperties.AccessibilityView="Raw"
+                                          Visibility="{Binding IsStartupRestoreFallbackRegistered, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                <FontIcon Glyph="&#xE7BA;" FontSize="14" Foreground="{ThemeResource SystemFillColorCautionBrush}" AutomationProperties.AccessibilityView="Raw"
+                                          Visibility="{Binding IsStartupRestoreFallbackNotRegistered, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                <TextBlock Text="{Binding StartupRestoreFallbackCheckResultText}" Style="{ThemeResource CaptionTextBlockStyle}" VerticalAlignment="Center"
+                                           Foreground="{ThemeResource TextFillColorPrimaryBrush}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
+                            </StackPanel>
+                        </components:SettingRow.DetailContent>
                     </components:SettingRow>
 
                     <Grid x:Name="WindowsNativeRepairCard" Style="{StaticResource ClashSettingsCardStyle}">
@@ -360,6 +375,92 @@
                             <ComboBox x:Name="NotificationLevelBox" Width="180" ItemsSource="{Binding NotificationLevelOptions}" SelectedIndex="{Binding NotificationLevelIndex, Mode=OneWay}" SelectionChanged="PreferenceCombo_SelectionChanged" />
                         </components:SettingRow.ActionContent>
                     </components:SettingRow>
+                    <!-- What each notification level delivers, so the preset is a transparent configuration. -->
+                    <Expander x:Name="NotificationContentExpander"
+                              HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Padding="58,8,16,12"
+                              AutomationProperties.Name="{Binding NotificationMatrixTitleText}">
+                        <Expander.Header>
+                            <Grid Padding="0,12" ColumnSpacing="18">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <FontIcon Glyph="&#xE8FD;" Style="{StaticResource ClashCardIconStyle}" Margin="1,0,0,0" AutomationProperties.AccessibilityView="Raw" />
+                                <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding NotificationMatrixTitleText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" TextWrapping="Wrap" />
+                                    <TextBlock Text="{Binding NotificationMatrixDescriptionText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Grid>
+                        </Expander.Header>
+                        <Grid x:Name="NotificationContentMatrix" ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" MinWidth="72" />
+                                <ColumnDefinition Width="Auto" MinWidth="72" />
+                                <ColumnDefinition Width="Auto" MinWidth="72" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <TextBlock Grid.Column="1" Text="{Binding NotificationCriticalOnlyText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" HorizontalAlignment="Center" />
+                            <TextBlock Grid.Column="2" Text="{Binding NotificationDefaultText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" HorizontalAlignment="Center" />
+                            <TextBlock Grid.Column="3" Text="{Binding NotificationMoreText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" HorizontalAlignment="Center" />
+                            <StackPanel Grid.Row="1" Spacing="2" Margin="0,8,0,8">
+                                <TextBlock Text="{Binding NotificationMatrixCriticalTitleText}" Style="{ThemeResource BodyTextBlockStyle}" TextWrapping="Wrap" />
+                                <TextBlock Text="{Binding NotificationMatrixCriticalDescriptionText}" Style="{ThemeResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                            </StackPanel>
+                            <FontIcon Grid.Row="1" Grid.Column="1" Glyph="&#xE73E;" FontSize="14" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                      Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" AutomationProperties.AccessibilityView="Raw" />
+                            <FontIcon Grid.Row="1" Grid.Column="2" Glyph="&#xE73E;" FontSize="14" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                      Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" AutomationProperties.AccessibilityView="Raw" />
+                            <FontIcon Grid.Row="1" Grid.Column="3" Glyph="&#xE73E;" FontSize="14" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                      Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" AutomationProperties.AccessibilityView="Raw" />
+                            <Border Grid.Row="1" Grid.ColumnSpan="4" Height="1" VerticalAlignment="Bottom"
+                                    Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                            <StackPanel Grid.Row="2" Spacing="2" Margin="0,8,0,8">
+                                <TextBlock Text="{Binding NotificationMatrixImportantTitleText}" Style="{ThemeResource BodyTextBlockStyle}" TextWrapping="Wrap" />
+                                <TextBlock Text="{Binding NotificationMatrixImportantDescriptionText}" Style="{ThemeResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                            </StackPanel>
+                            <TextBlock Grid.Row="2" Grid.Column="1" Text="—" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       Foreground="{ThemeResource TextFillColorTertiaryBrush}" AutomationProperties.AccessibilityView="Raw" />
+                            <FontIcon Grid.Row="2" Grid.Column="2" Glyph="&#xE73E;" FontSize="14" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                      Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" AutomationProperties.AccessibilityView="Raw" />
+                            <FontIcon Grid.Row="2" Grid.Column="3" Glyph="&#xE73E;" FontSize="14" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                      Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" AutomationProperties.AccessibilityView="Raw" />
+                            <Border Grid.Row="2" Grid.ColumnSpan="4" Height="1" VerticalAlignment="Bottom"
+                                    Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                            <StackPanel Grid.Row="3" Spacing="2" Margin="0,8,0,8">
+                                <TextBlock Text="{Binding NotificationMatrixRoutineTitleText}" Style="{ThemeResource BodyTextBlockStyle}" TextWrapping="Wrap" />
+                                <TextBlock Text="{Binding NotificationMatrixRoutineDescriptionText}" Style="{ThemeResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                            </StackPanel>
+                            <TextBlock Grid.Row="3" Grid.Column="1" Text="—" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       Foreground="{ThemeResource TextFillColorTertiaryBrush}" AutomationProperties.AccessibilityView="Raw" />
+                            <TextBlock Grid.Row="3" Grid.Column="2" Text="—" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       Foreground="{ThemeResource TextFillColorTertiaryBrush}" AutomationProperties.AccessibilityView="Raw" />
+                            <FontIcon Grid.Row="3" Grid.Column="3" Glyph="&#xE73E;" FontSize="14" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                      Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" AutomationProperties.AccessibilityView="Raw" />
+                            <Border Grid.Row="3" Grid.ColumnSpan="4" Height="1" VerticalAlignment="Bottom"
+                                    Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                            <StackPanel Grid.Row="4" Spacing="2" Margin="0,8,0,8">
+                                <TextBlock Text="{Binding NotificationMatrixTriggerTitleText}" Style="{ThemeResource BodyTextBlockStyle}" TextWrapping="Wrap" />
+                                <TextBlock Text="{Binding NotificationMatrixTriggerDescriptionText}" Style="{ThemeResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                            </StackPanel>
+                            <TextBlock Grid.Row="4" Grid.Column="1" Text="—" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       Foreground="{ThemeResource TextFillColorTertiaryBrush}" AutomationProperties.AccessibilityView="Raw" />
+                            <FontIcon Grid.Row="4" Grid.Column="2" Glyph="&#xE73E;" FontSize="14" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                      Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" AutomationProperties.AccessibilityView="Raw" />
+                            <FontIcon Grid.Row="4" Grid.Column="3" Glyph="&#xE73E;" FontSize="14" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                      Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" AutomationProperties.AccessibilityView="Raw" />
+                        </Grid>
+                    </Expander>
                     <HyperlinkButton x:Name="ResetNotificationSettingsLink" Content="{Binding ResetGroupToDefaultsText}" HorizontalAlignment="Right" Margin="0,0,8,0" Padding="0" Click="ResetNotificationSettingsButton_Click" />
 
                     <TextBlock x:Name="TriggerSectionTitleText" Text="{Binding TriggerSectionTitleText}" Style="{StaticResource ClashSectionHeaderTextBlockStyle}" AutomationProperties.HeadingLevel="Level2" />
@@ -439,41 +540,62 @@
                                                AutomationProperties.Name="{Binding PortText}" />
                                 </components:SettingRow.ActionContent>
                             </components:SettingRow>
+                            <!-- Permissions use the settings-card header geometry so the group reads as one list. -->
+                            <Expander x:Name="McpPermissionsExpander"
+                                      HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Padding="58,12,16,8"
+                                      AutomationProperties.Name="{Binding PermissionsText}">
+                                <Expander.Header>
+                                    <Grid Padding="0,12" ColumnSpacing="18">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <FontIcon Glyph="&#xEA18;" Style="{StaticResource ClashCardIconStyle}" Margin="1,0,0,0" AutomationProperties.AccessibilityView="Raw" />
+                                        <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding PermissionsText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" TextWrapping="Wrap" />
+                                            <TextBlock Text="{Binding PermissionsDescriptionText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                                        </StackPanel>
+                                    </Grid>
+                                </Expander.Header>
+                                <ItemsControl ItemsSource="{Binding Scopes}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <CheckBox x:Name="McpScopeCheckBox" IsChecked="{Binding IsGranted, Mode=TwoWay}"
+                                                      HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                                                      AutomationProperties.Name="{Binding Title}" AutomationProperties.HelpText="{Binding Description}"
+                                                      Margin="0,0,0,10">
+                                                <StackPanel Spacing="2">
+                                                    <TextBlock Text="{Binding Title}" TextWrapping="Wrap" />
+                                                    <TextBlock Text="{Binding Description}" TextWrapping="Wrap"
+                                                               Style="{ThemeResource CaptionTextBlockStyle}"
+                                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                                </StackPanel>
+                                            </CheckBox>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </Expander>
+                            <!-- Apply sits with the observed state it changes; the endpoint stays inside that card. -->
                             <components:SettingRow Icon="&#xE946;" Title="{Binding StatusText}" Description="{Binding Status}">
                                 <components:SettingRow.ActionContent>
-                                    <Button Content="{Binding RefreshText}" Click="McpRefresh_Click" />
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <Button Content="{Binding RefreshText}" Click="McpRefresh_Click" />
+                                        <Button x:Name="McpApplyButton" Content="{Binding ApplyText}" Click="McpApply_Click" Style="{StaticResource AccentButtonStyle}" />
+                                    </StackPanel>
                                 </components:SettingRow.ActionContent>
+                                <components:SettingRow.DetailContent>
+                                    <TextBlock Text="{Binding Endpoint}" IsTextSelectionEnabled="True" TextWrapping="Wrap" Margin="0,6,0,0"
+                                               Style="{ThemeResource CaptionTextBlockStyle}" FontFamily="Cascadia Mono, Consolas"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                               Visibility="{Binding HasEndpoint, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                </components:SettingRow.DetailContent>
                             </components:SettingRow>
-                            <TextBlock Text="{Binding Endpoint}" IsTextSelectionEnabled="True" TextWrapping="Wrap" Margin="16,4" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                            <Expander x:Name="McpPermissionsExpander" Header="{Binding PermissionsText}"
-                                      HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
-                                      AutomationProperties.Name="{Binding PermissionsText}">
-                                <StackPanel Spacing="12">
-                                    <TextBlock Text="{Binding PermissionsDescriptionText}" TextWrapping="Wrap"
-                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                    <ItemsControl ItemsSource="{Binding Scopes}">
-                                        <ItemsControl.ItemTemplate>
-                                            <DataTemplate>
-                                                <CheckBox x:Name="McpScopeCheckBox" IsChecked="{Binding IsGranted, Mode=TwoWay}"
-                                                          HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
-                                                          AutomationProperties.Name="{Binding Title}" AutomationProperties.HelpText="{Binding Description}"
-                                                          Margin="0,0,0,10">
-                                                    <StackPanel Spacing="3">
-                                                        <TextBlock Text="{Binding Title}" TextWrapping="Wrap" />
-                                                        <TextBlock Text="{Binding Description}" TextWrapping="Wrap"
-                                                                   Style="{ThemeResource CaptionTextBlockStyle}"
-                                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                                    </StackPanel>
-                                                </CheckBox>
-                                            </DataTemplate>
-                                        </ItemsControl.ItemTemplate>
-                                    </ItemsControl>
-                                </StackPanel>
-                            </Expander>
-                            <Button Content="{Binding ApplyText}" Click="McpApply_Click" HorizontalAlignment="Right" Style="{StaticResource AccentButtonStyle}" />
                             <components:SettingRow Icon="&#xE8C8;" Title="{Binding ClientText}" Description="{Binding ClientDescriptionText}">
                                 <components:SettingRow.ActionContent>
-                                    <Button Content="{Binding CopyText}" Click="McpCopy_Click" IsEnabled="{Binding CanCopy}" />
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <Button x:Name="McpShowConfigurationButton" Content="{Binding ShowText}" Click="McpShow_Click" IsEnabled="{Binding CanCopy}" />
+                                        <Button x:Name="McpCopyButton" Content="{Binding CopyText}" Click="McpCopy_Click" IsEnabled="{Binding CanCopy}" />
+                                    </StackPanel>
                                 </components:SettingRow.ActionContent>
                             </components:SettingRow>
                             <components:SettingRow Icon="&#xE8D7;" Title="{Binding CredentialText}" Description="{Binding CredentialDescriptionText}">

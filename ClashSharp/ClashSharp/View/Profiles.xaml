@@ -115,7 +115,8 @@
                 <Button Content="{Binding SetActiveProfileText}" Click="SetActiveProfileButton_Click" Visibility="{Binding CanUseImportedProfile, Converter={StaticResource BooleanToVisibilityConverter}}" />
             </InfoBar.ActionButton>
         </InfoBar>
-        <ListView Grid.Row="5" Margin="0,8,0,0" x:Name="ProfilesList" Style="{StaticResource ClashDataListStyle}" VerticalAlignment="Top" ItemsSource="{Binding Profiles}" SelectedItem="{Binding SelectedProfile, Mode=TwoWay}" SelectionMode="Single">
+        <ListView Grid.Row="5" Margin="0,8,0,0" x:Name="ProfilesList" Style="{StaticResource ClashDataListStyle}" VerticalAlignment="Top"
+                  IsDoubleTapEnabled="True" DoubleTapped="ProfilesList_DoubleTapped" KeyDown="ProfilesList_KeyDown" ItemsSource="{Binding Profiles}" SelectedItem="{Binding SelectedProfile, Mode=TwoWay}" SelectionMode="Single">
             <ListView.Header>
                 <Grid Padding="20,8" ColumnSpacing="12">
                     <Grid.ColumnDefinitions>

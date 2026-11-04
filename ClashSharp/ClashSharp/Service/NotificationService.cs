@@ -335,6 +335,9 @@ internal sealed class NotificationService :
     private readonly ITriggerNotificationReceiptStore _triggerReceipts;
     private NotificationPolicySnapshot? _lastPolicy;
 
+    /// <summary>Reports whether Clash# is the active foreground window; replaced once by the main window.</summary>
+    private Func<bool> _isApplicationInForeground = static () => false;
+
     private sealed record NotificationPolicySnapshot(bool Enabled, NotificationLevel Level);
 
     internal NotificationService(
@@ -355,19 +358,27 @@ internal sealed class NotificationService :
         _triggerReceipts = triggerReceipts ?? new LocalTriggerNotificationReceiptStore();
     }
 
+    /// <summary>Supplies whether Clash# is the active foreground window, so results the window already shows are not repeated.</summary>
+    /// <param name="isApplicationInForeground">Thread-safe, non-throwing probe owned by the main window.</param>
+    internal void SetForegroundProbe(Func<bool> isApplicationInForeground)
+    {
+        ArgumentNullException.ThrowIfNull(isApplicationInForeground);
+        Volatile.Write(ref _isApplicationInForeground, isApplicationInForeground);
+    }
+
     public void NotifyProxyModeChanged(ClashSharpMode mode)
     {
-        Show(
+        ShowUnlessVisibleInWindow(
             NotificationLevel.Default,
             GetString("Notification.ProxyMode.Title"),
             string.Format(CultureInfo.CurrentCulture, GetString("Notification.ProxyMode.Message.Format"), GetModeLabel(mode)));
     }
 
-    public void NotifyTransparentProxyChanged(bool enabled, bool effective) => Show(NotificationLevel.Default,
+    public void NotifyTransparentProxyChanged(bool enabled, bool effective) => ShowUnlessVisibleInWindow(NotificationLevel.Default,
         GetString("Notification.TransparentProxy.Title"), GetString(!enabled ? "Notification.TransparentProxy.Disabled"
             : effective ? "Notification.TransparentProxy.Enabled" : "Notification.TransparentProxy.Pending"));
 
-    public void NotifyNetworkSettingsChanged() => Show(NotificationLevel.Default,
+    public void NotifyNetworkSettingsChanged() => ShowUnlessVisibleInWindow(NotificationLevel.Default,
         GetString("Notification.ProxyMode.Title"), GetString("Notification.NetworkSettings.Applied"));
 
     /// <summary>Uses detailed verbosity for success and the standard policy for actionable failures.</summary>
@@ -376,7 +387,7 @@ internal sealed class NotificationService :
         try
         {
             ArgumentNullException.ThrowIfNull(arguments);
-            Show(GetOperationLevel(messageResourceKey, failed),
+            ShowUnlessVisibleInWindow(GetOperationLevel(messageResourceKey, failed),
                 GetString(titleResourceKey), arguments.Length == 0 ? GetString(messageResourceKey)
                     : string.Format(CultureInfo.CurrentCulture, GetString(messageResourceKey), arguments));
         }
@@ -388,17 +399,22 @@ internal sealed class NotificationService :
 
     // Availability loss/recovery uses ReportAvailability. These are verified changes
     // to the user's active routing; routine successful management remains detailed.
+    // Passive probes run on page visits and dashboard refreshes; their outcome is already shown where it was
+    // requested, so even a failed probe is detailed feedback rather than a standard notification.
     internal static NotificationLevel GetOperationLevel(string messageResourceKey, bool failed) =>
         messageResourceKey switch
         {
             "Notification.Startup.Attention" => NotificationLevel.CriticalOnly,
+            "About.Update.Unavailable" or "About.Update.Current" or "Notification.Diagnostic.Completed"
+                or "Master.Diagnostics.Failed" or "Master.Diagnostics.Timeout" => NotificationLevel.More,
             _ when failed => NotificationLevel.Default,
             "Profiles.Status.Activated" or "ProxyNodes.Status.SelectionApplied" => NotificationLevel.Default,
             _ => NotificationLevel.More,
         };
 
     public void ReportAvailability(string titleResourceKey, string messageResourceKey, bool failed) =>
-        Show(failed ? NotificationLevel.CriticalOnly : NotificationLevel.Default, GetString(titleResourceKey), GetString(messageResourceKey));
+        ShowUnlessVisibleInWindow(failed ? NotificationLevel.CriticalOnly : NotificationLevel.Default,
+            GetString(titleResourceKey), GetString(messageResourceKey));
 
     internal IDisposable Register(Action activated)
     {
@@ -427,7 +443,7 @@ internal sealed class NotificationService :
 
     public void NotifyConnectionTestTimeout(string target)
     {
-        Show(
+        ShowUnlessVisibleInWindow(
             NotificationLevel.Default,
             GetString("Notification.ConnectionTestTimeout.Title"),
             string.Format(CultureInfo.CurrentCulture, GetString("Notification.ConnectionTestTimeout.Message.Format"), target));
@@ -566,6 +582,49 @@ internal sealed class NotificationService :
                 title,
                 message,
                 exception.Message);
+        }
+    }
+
+    /// <summary>
+    /// Shows a result that the open window also presents. Under the standard level it is skipped while Clash# is the
+    /// foreground window, because the user is already looking at the result; critical events and the detailed level
+    /// are never filtered here.
+    /// </summary>
+    private void ShowUnlessVisibleInWindow(NotificationLevel minimumLevel, string title, string message)
+    {
+        if (minimumLevel == NotificationLevel.Default && IsVisibleInForegroundWindow())
+        {
+            TryAppendNotificationLog("Info", GetString("Notification.Log.Suppressed"), title, message);
+            return;
+        }
+
+        Show(minimumLevel, title, message);
+    }
+
+    private bool IsVisibleInForegroundWindow()
+    {
+        NotificationLevel configured;
+        try
+        {
+            configured = _getLevel();
+        }
+        catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
+        {
+            configured = Volatile.Read(ref _lastPolicy)?.Level ?? NotificationLevel.Default;
+        }
+
+        if (configured == NotificationLevel.More)
+        {
+            return false;
+        }
+
+        try
+        {
+            return Volatile.Read(ref _isApplicationInForeground)();
+        }
+        catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
+        {
+            return false;
         }
     }
 

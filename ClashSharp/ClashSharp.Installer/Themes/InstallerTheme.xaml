@@ -93,15 +93,41 @@
     <Setter Property="Padding" Value="16,6" />
   </Style>
 
+  <!-- Same footprint as the primary button for actions that sit beside the page's single accent action. -->
+  <Style x:Key="InstallerSecondaryButtonStyle" TargetType="Button"
+         BasedOn="{StaticResource {x:Type Button}}">
+    <Setter Property="MinWidth" Value="100" />
+    <Setter Property="MinHeight" Value="32" />
+    <Setter Property="Padding" Value="16,6" />
+  </Style>
+
+  <!-- Expandable detail attached directly below a setting row, in the same card geometry. -->
+  <Style x:Key="InstallerDetailExpanderStyle" TargetType="Expander" BasedOn="{StaticResource {x:Type Expander}}">
+    <Setter Property="Margin" Value="0,0,0,4" />
+    <Setter Property="HorizontalAlignment" Value="Stretch" />
+    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+  </Style>
+
+  <Style x:Key="InstallerDetailLabelStyle" TargetType="TextBlock" BasedOn="{StaticResource MutedTextStyle}">
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="Margin" Value="0,0,24,8" />
+  </Style>
+
+  <Style x:Key="InstallerDetailValueStyle" TargetType="TextBlock">
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="TextWrapping" Value="Wrap" />
+    <Setter Property="Margin" Value="0,0,0,8" />
+  </Style>
+
   <Style x:Key="MutedTextStyle" TargetType="TextBlock">
     <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
     <Setter Property="TextWrapping" Value="Wrap" />
   </Style>
 
   <Style x:Key="InstallerSectionTitleStyle" TargetType="TextBlock">
-    <Setter Property="FontSize" Value="16" />
+    <Setter Property="FontSize" Value="14" />
     <Setter Property="FontWeight" Value="SemiBold" />
-    <Setter Property="Margin" Value="0,20,0,8" />
+    <Setter Property="Margin" Value="1,20,0,6" />
     <Setter Property="TextWrapping" Value="Wrap" />
   </Style>
 
@@ -110,10 +136,10 @@
     <Setter Property="Background" Value="{DynamicResource ButtonBackground}" />
     <Setter Property="BorderBrush" Value="{DynamicResource ControlElevationBorderBrush}" />
     <Setter Property="BorderThickness" Value="1" />
-    <Setter Property="CornerRadius" Value="0" />
+    <Setter Property="CornerRadius" Value="4" />
     <Setter Property="Padding" Value="16,12" />
     <Setter Property="MinHeight" Value="64" />
-    <Setter Property="Margin" Value="0,0,0,6" />
+    <Setter Property="Margin" Value="0,0,0,4" />
   </Style>
 
   <!-- Header is the title, Tag is the explanatory text, and Content remains the

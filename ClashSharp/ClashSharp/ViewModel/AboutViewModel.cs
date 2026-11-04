@@ -51,6 +51,8 @@ internal sealed class AboutViewModel : ObservableObject, ILocalizedPresentation
         OnPropertyChanged(nameof(ProxyInformationButtonText));
         OnPropertyChanged(nameof(ProxyEntryText));
         OnPropertyChanged(nameof(CoreTitleText));
+        OnPropertyChanged(nameof(BuildTimeTitleText));
+        OnPropertyChanged(nameof(BuildTimeValueText));
         OnPropertyChanged(nameof(LocalProxyValueText));
         OnPropertyChanged(nameof(CopyText));
         OnPropertyChanged(nameof(CopiedText));
@@ -88,6 +90,8 @@ internal sealed class AboutViewModel : ObservableObject, ILocalizedPresentation
     private bool _coreProbeFinished;
     private ApplicationUpdateCheckResult? _updateResult;
     private int? _mixedPort;
+    private readonly string? _sourceRevision;
+    private readonly DateTimeOffset? _buildTimestamp;
 
     /// <summary>Initializes an about view model.</summary>
     /// <param name="localization">Localization provider. Must not be null.</param>
@@ -96,6 +100,8 @@ internal sealed class AboutViewModel : ObservableObject, ILocalizedPresentation
     /// <param name="launcher">URI launcher. Must not be null.</param>
     /// <param name="errorSink">Boundary sink for unexpected command failures. Must not be null.</param>
     /// <param name="notifications">User-policy update notifications.</param>
+    /// <param name="sourceRevision">Abbreviated source commit stamped into the build, when known.</param>
+    /// <param name="buildTimestamp">UTC build instant stamped into the build, when known.</param>
     /// <exception cref="ArgumentNullException">A required dependency is null.</exception>
     public AboutViewModel(
         IDisplayPageLocalization localization,
@@ -103,13 +109,17 @@ internal sealed class AboutViewModel : ObservableObject, ILocalizedPresentation
         IApplicationUpdateChecker updateChecker,
         IUriLauncher launcher,
         IApplicationErrorSink errorSink,
-        IUserOperationNotifications? notifications = null)
+        IUserOperationNotifications? notifications = null,
+        string? sourceRevision = null,
+        DateTimeOffset? buildTimestamp = null)
     {
         _localization = localization ?? throw new ArgumentNullException(nameof(localization));
         _core = core ?? throw new ArgumentNullException(nameof(core));
         _updateChecker = updateChecker ?? throw new ArgumentNullException(nameof(updateChecker));
         _launcher = launcher ?? throw new ArgumentNullException(nameof(launcher));
         _notifications = notifications;
+        _sourceRevision = string.IsNullOrWhiteSpace(sourceRevision) ? null : sourceRevision;
+        _buildTimestamp = buildTimestamp;
         ArgumentNullException.ThrowIfNull(errorSink);
         RefreshCoreStatusText();
         RefreshUpdateStatusText();
@@ -248,6 +258,17 @@ internal sealed class AboutViewModel : ObservableObject, ILocalizedPresentation
         ? string.Format(CultureInfo.CurrentCulture, _localization.GetString("Settings.ProxyInformation.LocalEntry.Format"), port)
         : string.Empty;
 
+    /// <summary>Gets the version with its abbreviated source commit, for example <c>1.0.0 (abf589f)</c>.</summary>
+    public string VersionDetailText => _sourceRevision is null ? VersionText : VersionText + " (" + _sourceRevision + ")";
+
+    /// <summary>Gets the label for the build-time row.</summary>
+    public string BuildTimeTitleText => _localization.GetString("About.BuildTime.Title");
+
+    /// <summary>Gets the local build time in the user's selected time format, or a dash when the build carried no stamp.</summary>
+    public string BuildTimeValueText => _buildTimestamp is DateTimeOffset timestamp
+        ? _localization.Formatter.Timestamp(timestamp)
+        : "—";
+
     /// <summary>Gets the label for the bundled core row in the application information card.</summary>
     public string CoreTitleText => _localization.GetString("About.Core.Title");
 
@@ -276,7 +297,8 @@ internal sealed class AboutViewModel : ObservableObject, ILocalizedPresentation
     /// <summary>Gets non-sensitive identity lines in Windows "label, tab, value" form for support requests.</summary>
     public string CopyInformationText => string.Join(Environment.NewLine,
         AppNameText,
-        VersionLabelText + "\t" + VersionText,
+        VersionLabelText + "\t" + VersionDetailText,
+        BuildTimeTitleText + "\t" + BuildTimeValueText,
         CoreTitleText + "\t" + CoreValueText,
         RuntimeTitleText + "\t" + RuntimeValueText,
         ProxyInformationTitleText + "\t" + LocalProxyValueText);

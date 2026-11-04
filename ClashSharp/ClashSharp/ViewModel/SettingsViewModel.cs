@@ -699,11 +699,36 @@ internal sealed partial class SettingsViewModel : ObservableObject
 
     public string StartupRestoreFallbackDescriptionText => _getString("Settings.StartupRestoreFallback.Description");
 
-    public string StartupRestoreFallbackStatusText => _startupRestoreFallbackRegistered is bool registered
-        ? _getString(registered
-            ? "Settings.StartupRestoreFallback.Status.Registered"
-            : "Settings.StartupRestoreFallback.Status.NotRegistered")
-        : string.Empty;
+    public string StartupRestoreFallbackStatusText => _isCheckingStartupRestoreFallback
+        ? _getString("Settings.StartupRestoreFallback.Checking")
+        : _startupRestoreFallbackRegistered is bool registered
+            ? _getString(registered
+                ? "Settings.StartupRestoreFallback.Status.Registered"
+                : "Settings.StartupRestoreFallback.Status.NotRegistered")
+            : string.Empty;
+
+    /// <summary>Gets whether an explicit registration check is running.</summary>
+    public bool IsCheckingStartupRestoreFallback => _isCheckingStartupRestoreFallback;
+
+    /// <summary>Gets whether the last explicit check result should be shown below the row.</summary>
+    public bool HasStartupRestoreFallbackCheckResult => _hasStartupRestoreFallbackCheckResult && !_isCheckingStartupRestoreFallback
+        && _startupRestoreFallbackRegistered is not null;
+
+    /// <summary>Gets whether the last observed state is registered, for the success glyph of the check result.</summary>
+    public bool IsStartupRestoreFallbackRegistered => _startupRestoreFallbackRegistered is true;
+
+    /// <summary>Gets whether the last observed state is not registered, for the caution glyph of the check result.</summary>
+    public bool IsStartupRestoreFallbackNotRegistered => _startupRestoreFallbackRegistered is false;
+
+    /// <summary>Gets the explicit check result, for example "Check complete: registered".</summary>
+    public string StartupRestoreFallbackCheckResultText => string.Format(CultureInfo.CurrentCulture,
+        _getString("Settings.StartupRestoreFallback.CheckResult.Format"), StartupRestoreFallbackStatusText);
+
+    /// <summary>Gets whether registering would change the observed state.</summary>
+    public bool CanRegisterStartupRestoreFallback => !_isCheckingStartupRestoreFallback && _startupRestoreFallbackRegistered is not true;
+
+    /// <summary>Gets whether removing the registration would change the observed state.</summary>
+    public bool CanRemoveStartupRestoreFallbackRegistration => !_isCheckingStartupRestoreFallback && _startupRestoreFallbackRegistered is true;
 
     public string RegisterText => _getString("Command.Register");
 
@@ -1030,6 +1055,15 @@ internal sealed partial class SettingsViewModel : ObservableObject
 
     /// <summary>Backing field for <see cref="StartupRestoreFallbackStatusText"/>.</summary>
     private bool? _startupRestoreFallbackRegistered;
+
+    /// <summary>Backing field for <see cref="IsCheckingStartupRestoreFallback"/>.</summary>
+    private bool _isCheckingStartupRestoreFallback;
+
+    /// <summary>Whether an explicit check completed since the last registration change.</summary>
+    private bool _hasStartupRestoreFallbackCheckResult;
+
+    /// <summary>Minimum visible duration of an explicit check, so a fast local probe still reads as a completed action.</summary>
+    internal static readonly TimeSpan MinimumStartupRestoreFallbackCheckFeedback = TimeSpan.FromMilliseconds(450);
 
     /// <summary>Backing field for <see cref="MihomoServiceStatusText"/>.</summary>
     private string _mihomoServiceStatusText = string.Empty;
@@ -1762,6 +1796,7 @@ internal sealed partial class SettingsViewModel : ObservableObject
             nameof(StartupRestoreFallbackTitleText),
             nameof(StartupRestoreFallbackDescriptionText),
             nameof(StartupRestoreFallbackStatusText),
+            nameof(StartupRestoreFallbackCheckResultText),
             nameof(RegisterText),
             nameof(DetectText),
             nameof(ProxySectionTitleText),
@@ -1865,6 +1900,16 @@ internal sealed partial class SettingsViewModel : ObservableObject
             nameof(NotificationCriticalOnlyText),
             nameof(NotificationMoreText),
             nameof(NotificationLevelOptions),
+            nameof(NotificationMatrixTitleText),
+            nameof(NotificationMatrixDescriptionText),
+            nameof(NotificationMatrixCriticalTitleText),
+            nameof(NotificationMatrixCriticalDescriptionText),
+            nameof(NotificationMatrixImportantTitleText),
+            nameof(NotificationMatrixImportantDescriptionText),
+            nameof(NotificationMatrixRoutineTitleText),
+            nameof(NotificationMatrixRoutineDescriptionText),
+            nameof(NotificationMatrixTriggerTitleText),
+            nameof(NotificationMatrixTriggerDescriptionText),
             nameof(DataSectionTitleText),
             nameof(DataPackageTitleText),
             nameof(DataPackageDescriptionText),
@@ -2416,13 +2461,47 @@ internal sealed partial class SettingsViewModel : ObservableObject
         bool registered = await _isStartupRestoreFallbackRegistered(cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
         _startupRestoreFallbackRegistered = registered;
+        NotifyStartupRestoreFallbackState();
+    }
+
+    /// <summary>Runs an explicit, visible registration check and keeps its result below the row.</summary>
+    /// <param name="cancellationToken">Page operation lifetime.</param>
+    public async Task DetectStartupRestoreFallbackAsync(CancellationToken cancellationToken)
+    {
+        _isCheckingStartupRestoreFallback = true;
+        _hasStartupRestoreFallbackCheckResult = false;
+        NotifyStartupRestoreFallbackState();
+        try
+        {
+            await Task.WhenAll(
+                RefreshStartupRestoreFallbackStatusAsync(cancellationToken),
+                Task.Delay(MinimumStartupRestoreFallbackCheckFeedback, cancellationToken));
+            _hasStartupRestoreFallbackCheckResult = true;
+        }
+        finally
+        {
+            _isCheckingStartupRestoreFallback = false;
+            NotifyStartupRestoreFallbackState();
+        }
+    }
+
+    private void NotifyStartupRestoreFallbackState()
+    {
         OnPropertyChanged(nameof(StartupRestoreFallbackStatusText));
+        OnPropertyChanged(nameof(IsCheckingStartupRestoreFallback));
+        OnPropertyChanged(nameof(HasStartupRestoreFallbackCheckResult));
+        OnPropertyChanged(nameof(IsStartupRestoreFallbackRegistered));
+        OnPropertyChanged(nameof(IsStartupRestoreFallbackNotRegistered));
+        OnPropertyChanged(nameof(StartupRestoreFallbackCheckResultText));
+        OnPropertyChanged(nameof(CanRegisterStartupRestoreFallback));
+        OnPropertyChanged(nameof(CanRemoveStartupRestoreFallbackRegistration));
     }
 
     /// <summary>Registers the startup restore fallback helper and refreshes status.</summary>
     public async Task RegisterStartupRestoreFallbackAsync(CancellationToken cancellationToken)
     {
         await _registerStartupRestoreFallback(cancellationToken);
+        _hasStartupRestoreFallbackCheckResult = false;
         await RefreshStartupRestoreFallbackStatusAsync(cancellationToken);
     }
 
@@ -2430,6 +2509,7 @@ internal sealed partial class SettingsViewModel : ObservableObject
     public async Task RemoveStartupRestoreFallbackRegistrationAsync(CancellationToken cancellationToken)
     {
         await _removeStartupRestoreFallbackRegistration(cancellationToken);
+        _hasStartupRestoreFallbackCheckResult = false;
         await RefreshStartupRestoreFallbackStatusAsync(cancellationToken);
     }
 

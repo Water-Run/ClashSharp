@@ -54,10 +54,10 @@ public sealed partial class InstallerShellViewModel
     /// <summary>Explains the selected notification policy using the application's terminology.</summary>
     public string NotificationPresetDescription => _installPreferences.Notifications switch
     {
-        InstallerNotificationPreset.CriticalOnly => "只提示内核、服务和数据恢复等关键问题。",
-        InstallerNotificationPreset.All => "在默认级别上，增加导入、保存、测速等成功反馈。",
+        InstallerNotificationPreset.CriticalOnly => "只提示内核、服务不可用和启动检查等关键问题。",
+        InstallerNotificationPreset.All => "在默认级别上，增加导入、保存、测速等成功反馈，前台时也发送通知。",
         InstallerNotificationPreset.Disabled => "不发送系统通知，应用内仍保留操作结果。",
-        _ => "提示操作失败、测试超时和必要的状态变化。",
+        _ => "提示关键问题，以及在后台发生的操作失败、测试超时和代理模式变化；前台时由窗口显示。",
     };
 
     /// <summary>Explains whether the selected installation includes transparent-proxy support.</summary>
@@ -69,6 +69,25 @@ public sealed partial class InstallerShellViewModel
     public string McpServerDescription => EnableMcpServer
         ? "应用运行时提供只读接入；代理控制仍需在应用中单独授权。"
         : "供 Agent 读取运行状态，默认关闭，可稍后在应用中开启。";
+
+    /// <summary>Lists the concrete initial preferences the selected environment preset writes for new settings.</summary>
+    public IReadOnlyList<InstallerPreferenceDetail> SystemDefaultsDetails => FollowSystemDefaults
+        ?
+        [
+            new("界面语言", "跟随 Windows 显示语言"),
+            new("时间格式", "跟随 Windows 区域设置"),
+            new("容量单位", "KB · 1024 进制"),
+            new("速率单位", "字节/秒（B/s）"),
+            new("中国大陆功能", "按 Windows 国家或地区自动选择"),
+        ]
+        :
+        [
+            new("界面语言", "English"),
+            new("时间格式", "跟随 Windows 区域设置"),
+            new("容量单位", "KB · 1024 进制"),
+            new("速率单位", "字节/秒（B/s）"),
+            new("中国大陆功能", "关闭"),
+        ];
 
     /// <summary>Explains which initial environment preset is selected.</summary>
     public string SystemDefaultsDescription => FollowSystemDefaults
@@ -122,6 +141,7 @@ public sealed partial class InstallerShellViewModel
         OnPropertyChanged(nameof(TransparentProxyServiceDescription));
         OnPropertyChanged(nameof(McpServerDescription));
         OnPropertyChanged(nameof(SystemDefaultsDescription));
+        OnPropertyChanged(nameof(SystemDefaultsDetails));
         ResetInstallPreferencesCommand.NotifyCanExecuteChanged();
     }
 

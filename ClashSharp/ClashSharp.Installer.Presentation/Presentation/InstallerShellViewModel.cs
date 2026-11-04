@@ -959,6 +959,8 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
     private void NotifyActionVisibility()
     {
         OnPropertyChanged(nameof(IsLaunchApplicationVisible));
+        OnPropertyChanged(nameof(IsLaunchApplicationEmphasized));
+        OnPropertyChanged(nameof(IsLaunchApplicationSecondary));
         OnPropertyChanged(nameof(IsPrimaryActionVisible));
         OnPropertyChanged(nameof(IsSecondaryActionVisible));
         OnPropertyChanged(nameof(IsOriginalRestoreActionVisible));

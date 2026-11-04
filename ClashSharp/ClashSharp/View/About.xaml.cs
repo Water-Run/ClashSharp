@@ -1,6 +1,8 @@
 using System;
 using System.Globalization;
 using System.Runtime.InteropServices;
+using System.Threading;
+using ClashSharp.Presentation.Adapters;
 using ClashSharp.Presentation.Composition;
 using ClashSharp.Presentation.Dialogs;
 using ClashSharp.Presentation.Lifecycle;
@@ -8,8 +10,6 @@ using ClashSharp.ViewModel;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Windows.ApplicationModel.DataTransfer;
-using SystemClipboard = Windows.ApplicationModel.DataTransfer.Clipboard;
 
 namespace ClashSharp.View;
 
@@ -32,6 +32,9 @@ public sealed partial class About : Page
 
     /// <summary>Restores the copy button label after its transient confirmation; owned and stopped by this page.</summary>
     private DispatcherQueueTimer? _copyFeedbackTimer;
+
+    /// <summary>Owns the in-flight copy so leaving the page cancels its clipboard retries.</summary>
+    private CancellationTokenSource? _copyOperation;
 
     /// <summary>Initializes the page from an explicit composition contract.</summary>
     internal About(AboutPageComposition.Dependencies dependencies)
@@ -62,27 +65,39 @@ public sealed partial class About : Page
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
         _loadSession.Cancel();
+        _copyOperation?.Cancel();
+        _copyOperation?.Dispose();
+        _copyOperation = null;
+        CopyInformationButton.IsEnabled = true;
         _copyFeedbackTimer?.Stop();
         ShowCopyIdleState();
     }
 
     /// <summary>Copies non-sensitive application identity lines, then confirms the result on the button itself.</summary>
-    private void CopyInformationButton_Click(object sender, RoutedEventArgs e)
+    private async void CopyInformationButton_Click(object sender, RoutedEventArgs e)
     {
-        DataPackage package = new() { RequestedOperation = DataPackageOperation.Copy };
-        package.SetText(_viewModel.CopyInformationText);
+        _copyOperation?.Cancel();
+        _copyOperation?.Dispose();
+        CancellationTokenSource operation = new();
+        _copyOperation = operation;
+        CopyInformationButton.IsEnabled = false;
         bool copied;
         try
         {
-            SystemClipboard.SetContent(package);
-            // Materialize the text now so other processes, including RDP clients, can read it immediately.
-            SystemClipboard.Flush();
-            copied = true;
+            copied = await ClipboardTextWriter.WriteAndVerifyAsync(_viewModel.CopyInformationText, isPrivate: false, operation.Token);
+        }
+        catch (OperationCanceledException) when (operation.IsCancellationRequested)
+        {
+            return;
         }
         catch (COMException)
         {
-            // Another process owns the clipboard; the visible failure label is the complete user-facing result.
+            // The clipboard stayed unavailable for every bounded retry; the failure label is the complete result.
             copied = false;
+        }
+        finally
+        {
+            if (ReferenceEquals(_copyOperation, operation)) { CopyInformationButton.IsEnabled = true; }
         }
 
         CopyFeedbackGlyph.Glyph = copied ? "\uE73E" : "\uE783";

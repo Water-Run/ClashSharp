@@ -5,5 +5,11 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <WarningsAsErrors>$(WarningsAsErrors);CS1591</WarningsAsErrors>
+    <!-- UTC build instant shown on About; a caller may pin it for a rebuilt artifact. -->
+    <ClashSharpBuildTimestamp Condition="'$(ClashSharpBuildTimestamp)' == ''">$([System.DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ"))</ClashSharpBuildTimestamp>
   </PropertyGroup>
+
+  <ItemGroup>
+    <AssemblyMetadata Include="ClashSharp.BuildTimestamp" Value="$(ClashSharpBuildTimestamp)" />
+  </ItemGroup>
 </Project>

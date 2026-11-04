@@ -15,6 +15,12 @@ public sealed partial class InstallerShellViewModel
     public bool IsLaunchApplicationVisible => _canLaunchApplication && CanStartOperation
         && _runtime is IInstallerApplicationLaunchRuntime { SupportsApplicationLaunch: true };
 
+    /// <summary>Gets whether launching is the page's only main action, so it carries the single accent style.</summary>
+    public bool IsLaunchApplicationEmphasized => IsLaunchApplicationVisible && !IsPrimaryActionVisible;
+
+    /// <summary>Gets whether launching sits beside a maintenance operation, which keeps the accent style.</summary>
+    public bool IsLaunchApplicationSecondary => IsLaunchApplicationVisible && IsPrimaryActionVisible;
+
     private void OfferInstalledApplication(InstallerExecutionResult result, bool installedResult)
     {
         _canLaunchApplication = installedResult && result.Outcome == InstallerExecutionOutcome.Succeeded
