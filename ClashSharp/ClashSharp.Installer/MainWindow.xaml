@@ -456,13 +456,29 @@
           <ColumnDefinition
             Width="Auto" />
         </Grid.ColumnDefinitions>
+        <!-- The elevation hint only applies while an operation is offered or running; an unsupported
+             system, a blocked check or a finished operation has nothing left to elevate. -->
         <TextBlock
+          x:Name="ElevationHint"
           Grid.ColumnSpan="2"
           Margin="0,0,0,10"
           VerticalAlignment="Center"
-          Style="{StaticResource MutedTextStyle}"
           Text="系统将按需请求管理员权限。"
-          FontSize="12" />
+          FontSize="12">
+          <TextBlock.Style>
+            <Style TargetType="TextBlock" BasedOn="{StaticResource MutedTextStyle}">
+              <Style.Triggers>
+                <MultiDataTrigger>
+                  <MultiDataTrigger.Conditions>
+                    <Condition Binding="{Binding CanExecuteMutations}" Value="False" />
+                    <Condition Binding="{Binding IsBusy}" Value="False" />
+                  </MultiDataTrigger.Conditions>
+                  <Setter Property="Visibility" Value="Collapsed" />
+                </MultiDataTrigger>
+              </Style.Triggers>
+            </Style>
+          </TextBlock.Style>
+        </TextBlock>
         <WrapPanel
           HorizontalAlignment="Right"
           AutomationProperties.Name="安装操作"

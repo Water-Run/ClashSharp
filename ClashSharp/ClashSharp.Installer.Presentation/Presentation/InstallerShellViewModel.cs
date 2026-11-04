@@ -879,6 +879,12 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
             StatusDetail = "请确认没有其他安装器正在执行操作；如有，请等待其完成，再使用原安装器重新检查。"
                 + "如果仍然失败，请保留诊断代码以便排查。";
         }
+        else if (diagnosticCode == "installer.package.downgrade_rejected")
+        {
+            StatusTitle = "已安装更新的版本";
+            StatusDetail = "此电脑上的 Clash# 比此安装包更新，安装器不会降级，系统未被更改。"
+                + "如需修复，请使用相同或更新版本的安装包；也可以重新检查后在此卸载。";
+        }
     }
 
     private void ApplyDirectoryCleanupReport(InstallerDirectoryCleanupReport cleanup)

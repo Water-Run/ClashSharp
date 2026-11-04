@@ -255,16 +255,16 @@ public sealed class ProductionInstallerRuntime : IInstallerRuntime, IInstallerOw
 
         if (!canExecute)
         {
-            return (
-                "当前系统不支持此操作",
-                "安装与修复需要 Windows 11+ 或 Windows Server 2025+ 桌面体验，且系统与进程均为 x64；不支持 Server Core。");
+            InstallerPlatformGuidance guidance = InstallerPlatformGuidance.For(inspection.Environment.BlockingDiagnosticCode);
+            return (guidance.Title, guidance.Detail);
         }
 
         if (!inspection.Environment.IsSupported && removalPathAvailable)
         {
             return (
                 "仅安全卸载可用",
-                "此电脑不满足安装要求，仍可移除已安装的 Clash#。");
+                InstallerPlatformGuidance.For(inspection.Environment.BlockingDiagnosticCode).Requirement
+                    + "仍可在此卸载已安装的 Clash#。");
         }
         if (inspection.PendingUserPreferences && product.ProductState == InstallerProductState.Installed)
         {
@@ -279,6 +279,10 @@ public sealed class ProductionInstallerRuntime : IInstallerRuntime, IInstallerOw
             InstallerProductState.Installed when IsNewerRelease(inspection) => (
                 "可以更新",
                 $"将 Clash# 从 {inspection.Environment.InstalledPackageVersion} 更新到 {inspection.ReleaseVersion}。现有设置和数据将保留。"),
+            InstallerProductState.Installed when IsOlderRelease(inspection) => (
+                "已安装更新的版本",
+                $"此电脑已安装 Clash# {inspection.Environment.InstalledPackageVersion}，比此安装包的 {inspection.ReleaseVersion} 更新。"
+                    + $"安装器不会降级；如需修复，请使用 {inspection.Environment.InstalledPackageVersion} 或更新版本的安装包。也可以在此卸载。"),
             InstallerProductState.Installed => (
                 "已安装",
                 "可修复当前安装，或从此电脑移除 Clash#。"),
@@ -296,6 +300,12 @@ public sealed class ProductionInstallerRuntime : IInstallerRuntime, IInstallerOw
         Version.TryParse(inspection.Environment.InstalledPackageVersion, out Version? installed)
         && Version.TryParse(inspection.ReleaseVersion, out Version? release) && release > installed;
 
+    // The coordinator rejects every non-removal operation over a newer installed package, so the
+    // presentation must not offer one; removal stays available for recovery.
+    private static bool IsOlderRelease(InstallerRuntimeInspection inspection) =>
+        Version.TryParse(inspection.Environment.InstalledPackageVersion, out Version? installed)
+        && Version.TryParse(inspection.ReleaseVersion, out Version? release) && release < installed;
+
     private static IReadOnlyList<InstallerCapabilityStatus> BuildCapabilities(
         InstallerRuntimeInspection inspection,
         bool platformAllowsVisibleAction,
@@ -307,7 +317,7 @@ public sealed class ProductionInstallerRuntime : IInstallerRuntime, IInstallerOw
                 ? "当前 Windows 桌面环境和 x64 系统符合安装要求。"
                 : removalPathAvailable
                     ? "当前系统不符合安装要求，仍可卸载已安装的 Clash#。"
-                    : "安装与修复需要 Windows 11+ 或 Windows Server 2025+ 桌面体验，且系统与进程均为 x64。",
+                    : InstallerPlatformGuidance.For(inspection.Environment.BlockingDiagnosticCode).Requirement,
             platformAllowsVisibleAction),
         new(
             "安装器签名",
@@ -319,7 +329,9 @@ public sealed class ProductionInstallerRuntime : IInstallerRuntime, IInstallerOw
                 ? "当前账户尚未安装 Clash#。"
                 : inspection.Environment.IsApplicationRunning
                     ? "Clash# 正在运行，请关闭应用后继续。"
-                    : "当前账户已安装 Clash#，应用已关闭。",
+                    : IsOlderRelease(inspection)
+                        ? $"当前账户已安装更新的 Clash# {inspection.Environment.InstalledPackageVersion}，此安装包不能降级。"
+                        : "当前账户已安装 Clash#，应用已关闭。",
             !inspection.Environment.IsApplicationRunning),
         new(
             "未完成的操作",
@@ -346,7 +358,7 @@ public sealed class ProductionInstallerRuntime : IInstallerRuntime, IInstallerOw
         {
             InstallerProductState.Available when inspection.Environment.IsSupported =>
                 [InstallerOperation.Install],
-            InstallerProductState.Installed when inspection.Environment.IsSupported =>
+            InstallerProductState.Installed when inspection.Environment.IsSupported && !IsOlderRelease(inspection) =>
                 [InstallerOperation.Repair, InstallerOperation.Uninstall],
             InstallerProductState.Installed =>
                 [InstallerOperation.Uninstall],

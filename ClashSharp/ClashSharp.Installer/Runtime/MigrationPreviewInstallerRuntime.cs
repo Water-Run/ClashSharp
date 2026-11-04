@@ -57,19 +57,20 @@ public sealed class MigrationPreviewInstallerRuntime : IInstallerRuntime
     private static InstallerRuntimeReadiness CreateReadiness(
         InstallerPlatformAssessment platform)
     {
+        InstallerPlatformGuidance guidance = InstallerPlatformGuidance.For(platform.DiagnosticCode);
         string platformDetail = platform.IsSupported
             ? "已确认 Windows 桌面环境、原生 x64 系统与 x64 安装器进程。"
-            : "需要 Windows 11+ 或 Windows Server 2025+ 桌面体验，且系统与进程均为 x64。";
+            : guidance.Requirement;
 
         return new InstallerRuntimeReadiness(
             CanExecute: false,
             DiagnosticCode: platform.IsSupported
                 ? "installer.runtime.production_gate_closed"
                 : platform.DiagnosticCode,
-            StatusTitle: platform.IsSupported ? "此构建暂不提供安装" : "当前系统不受支持",
+            StatusTitle: platform.IsSupported ? "此构建暂不提供安装" : guidance.Title,
             StatusDetail: platform.IsSupported
                 ? "这是开发验证版本。完成发布验证后，正式安装包将提供安装与维护操作。"
-                : "请使用 Windows 11+ 或 Windows Server 2025+ 桌面体验的 x64 电脑；不支持 Server Core。",
+                : guidance.Detail,
             DisplayVersion: typeof(MigrationPreviewInstallerRuntime).Assembly.GetName().Version?.ToString(3) ?? "—",
             ProductState: InstallerProductState.Available,
             RecoveryOperation: null,
