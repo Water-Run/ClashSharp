@@ -274,6 +274,9 @@ public sealed class InstallerBuildScriptTests
         Assert.Contains("-ExpectedThumbprint $expectedDependencyThumbprint", script, StringComparison.Ordinal);
         Assert.Contains("-RequireTrusted", script, StringComparison.Ordinal);
         Assert.Contains("-RequireTimestamp", script, StringComparison.Ordinal);
+        Assert.Contains("$requireMsixTimestamp = -not $Development -and -not $InternalCandidate", script, StringComparison.Ordinal);
+        Assert.Contains("-p:AppxPackageSigningTimestampDigestAlgorithm=SHA256", script, StringComparison.Ordinal);
+        Assert.Contains("$mainSignatureParameters.RequireTimestamp = $true", script, StringComparison.Ordinal);
         Assert.Contains("payload-provenance.json", script, StringComparison.Ordinal);
         Assert.Contains("dotnet publish $installerProject", script, StringComparison.Ordinal);
         Assert.Contains("$stagedInstallerExecutable = $installerEntries[0].FullName", script, StringComparison.Ordinal);

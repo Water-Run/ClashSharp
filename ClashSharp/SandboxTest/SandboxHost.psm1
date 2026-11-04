@@ -28,11 +28,15 @@ function New-SandboxCandidatePlan {
     if ($provenance.schemaVersion -ne 1 -or @($provenance.dependencies).Count -ne 1) {
         throw 'sandbox.provenance.unsupported'
     }
+    $runtime = $provenance.dependencies[0]
+    if ($runtime.name -cnotin @('Microsoft.WindowsAppRuntime.1.8', 'Microsoft.WindowsAppRuntime.2')) {
+        throw 'sandbox.dependency.identity'
+    }
     $files = [Collections.Generic.List[object]]::new()
     $entries = @(
         @{ Role = 'package'; Value = $provenance.primary; Path = 'ClashSharp_1.0.0.0_x64.msix' },
         @{ Role = 'certificate'; Value = $provenance.certificate; Path = 'ClashSharp_TemporaryKey.cer' },
-        @{ Role = 'dependency'; Value = $provenance.dependencies[0]; Path = 'Dependencies/x64/Microsoft.WindowsAppRuntime.1.8.msix' })
+        @{ Role = 'dependency'; Value = $runtime; Path = "Dependencies/x64/$($runtime.name).msix" })
     foreach ($entry in $entries) {
         $metadata = $entry.Value
         if ($metadata.path -cne $entry.Path -or $metadata.sha256 -cnotmatch '^[0-9a-f]{64}$') {
@@ -76,7 +80,7 @@ function New-SandboxCandidatePlan {
     foreach ($name in @('name', 'publisher', 'version', 'architecture')) {
         if ($dependencyIdentity.$name -cne $provenance.dependencies[0].$name) { throw 'sandbox.provenance.dependency' }
     }
-    if (-not $dependencyIdentity.IsFramework -or $dependencyIdentity.Name -cne 'Microsoft.WindowsAppRuntime.1.8') {
+    if (-not $dependencyIdentity.IsFramework) {
         throw 'sandbox.dependency.identity'
     }
     $null = Get-ClashSharpPackageSignature -LiteralPath $dependencyPath -ExpectedSubject $dependencyIdentity.Publisher -ExpectedThumbprint $provenance.dependencies[0].signerThumbprint -RequireTrusted -RequireTimestamp

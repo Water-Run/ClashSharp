@@ -1,18 +1,31 @@
 using System.Diagnostics;
 using System.Text;
+using System.Text.Json;
 using ClashSharp.Installer.Payloads;
 
 namespace ClashSharp.Installer.Windows.Tests;
 
 public sealed class InstallerReleaseManifestGenerationTests
 {
-    [Fact]
-    public async Task PowerShellGeneratorAndProductionCodecAgreeOnTheExactPayloadContract()
+    [Theory]
+    [InlineData(null)]
+    [InlineData("binaries/mihomo.exe")]
+    [InlineData("binaries/geodata/country.mmdb")]
+    [InlineData("binaries/service/clashsharp.mihomoservice.exe")]
+    public async Task PowerShellGeneratorBindsExactMachineInputsBeforeWritingTheManifest(string? changedPin)
     {
         WindowsPayloadFixture.AssertWindows11X64();
         using var fixture = new WindowsPayloadFixture();
         string modulePath = SourcePath("Installer", "PackagingContract.psm1");
         string outputPath = Path.Combine(fixture.RootDirectory, "installer-release-manifest.json");
+        string expectedMachineFiles = JsonSerializer.Serialize(fixture.Manifest.MachineFiles
+            .OrderBy(file => file.Path, StringComparer.Ordinal)
+            .Select(file => new
+            {
+                RelativePath = file.Path,
+                file.Length,
+                Sha256 = file.Path == changedPin ? new string('0', 64) : file.Sha256,
+            }));
         string command = $$"""
             $ErrorActionPreference = 'Stop'
             Import-Module -Name {{Quote(modulePath)}} -Force
@@ -28,6 +41,7 @@ public sealed class InstallerReleaseManifestGenerationTests
                 -PrimaryIdentity $primary `
                 -PrimaryRelativePath 'clashsharp_1.2.3.4_x64.msix' `
                 -DependencyContracts @($dependencyContract) `
+                -ExpectedMachineFiles (ConvertFrom-Json -InputObject {{Quote(expectedMachineFiles)}} -NoEnumerate) `
                 -CertificateRelativePath 'clashsharp_temporarykey.cer' `
                 -AuthenticodeCertificateThumbprint '{{fixture.Manifest.AuthenticodeCertificateThumbprint}}' `
                 -CertificateThumbprint '{{fixture.Manifest.PackageCertificateThumbprint}}' `
@@ -36,6 +50,14 @@ public sealed class InstallerReleaseManifestGenerationTests
             """;
 
         ProcessResult result = await RunPowerShellAsync(command, TimeSpan.FromSeconds(20));
+
+        if (changedPin is not null)
+        {
+            Assert.NotEqual(0, result.ExitCode);
+            Assert.Contains(changedPin, result.StandardError, StringComparison.Ordinal);
+            Assert.False(File.Exists(outputPath));
+            return;
+        }
 
         Assert.True(
             result.ExitCode == 0,

@@ -1,13 +1,16 @@
 {
   "schemaVersion": 1,
   "productVersion": "1.0.0",
-  "dotnetSdkVersion": "10.0.201",
+  "dotnetSdkVersion": "10.0.403",
+  "dotnetRuntimeVersion": "10.0.14",
   "windowsAppRuntime": {
-    "packageVersion": "1.8.260317003",
+    "packageVersion": "2.6.5",
+    "name": "Microsoft.WindowsAppRuntime.2",
+    "version": "2.6.5.0",
     "architecture": "x64",
-    "length": 42672814,
-    "sha256": "5be1c722ef3d04c120edb9f41544de53de9c1d998cfd09aae18cb50fdc2cd625",
-    "signerThumbprint": "240A2A20935F07AF88F38149C36A312315057F70"
+    "length": 50210887,
+    "sha256": "a0b8a226c0c993843f5bb6936037d4970e6e5b8e31c0e6f98497d8dd421a4709",
+    "signerThumbprint": "4E8CD765A654D0991D27D0C6BE7A79E829D1FBEC"
   },
   "geoData": {
     "repository": "MetaCubeX/meta-rules-dat",
@@ -19,13 +22,21 @@
         "name": "Country.mmdb",
         "sourceName": "country.mmdb",
         "length": 7832239,
-        "sha256": "031bd6e8dfd62d70b81d2d65ce54a92ed7f21f060add17c66e16a2a0e55d3a41"
+        "sha256": "031bd6e8dfd62d70b81d2d65ce54a92ed7f21f060add17c66e16a2a0e55d3a41",
+        "directSource": {
+          "blobUrl": "https://api.github.com/repos/Loyalsoldier/geoip/git/blobs/884d0266ce764142c089f6bc96725b0a5e418449",
+          "releaseAssetUrl": "https://api.github.com/repos/Loyalsoldier/geoip/releases/assets/543929552"
+        }
       },
       {
         "name": "GeoIP.dat",
         "sourceName": "geoip.dat",
         "length": 17120329,
-        "sha256": "4149e607530f91da697bad4696f8c59f0a475af38e69405e4124438c9886c721"
+        "sha256": "4149e607530f91da697bad4696f8c59f0a475af38e69405e4124438c9886c721",
+        "directSource": {
+          "blobUrl": "https://api.github.com/repos/Loyalsoldier/geoip/git/blobs/c9581b65e2b6210f54c8d20c248d49c3e86b355f",
+          "releaseAssetUrl": "https://api.github.com/repos/Loyalsoldier/geoip/releases/assets/543929572"
+        }
       },
       {
         "name": "GeoSite.dat",
@@ -37,7 +48,10 @@
         "name": "ASN.mmdb",
         "sourceName": "GeoLite2-ASN.mmdb",
         "length": 12106294,
-        "sha256": "37279508b91bb26fe6043897490fe2ba02d95a7521a8263e70e566239355b479"
+        "sha256": "37279508b91bb26fe6043897490fe2ba02d95a7521a8263e70e566239355b479",
+        "directSource": {
+          "blobUrl": "https://api.github.com/repos/xishang0128/geoip/git/blobs/de3d9bd8bd98c877d330f4d9437fe466a88ec5b2"
+        }
       }
     ]
   }

@@ -128,14 +128,15 @@ function Assert-SandboxPlan {
         package = 'ClashSharp_1.0.0.0_x64.msix'
         certificate = 'ClashSharp_TemporaryKey.cer'
         provenance = 'payload-provenance.json'
-        dependency = 'Dependencies/x64/Microsoft.WindowsAppRuntime.1.8.msix'
+        dependency = @('Dependencies/x64/Microsoft.WindowsAppRuntime.1.8.msix',
+            'Dependencies/x64/Microsoft.WindowsAppRuntime.2.msix')
     }
     $seen = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     foreach ($file in $candidate.files) {
         Assert-SandboxObject $file @('role', 'path', 'length', 'sha256')
         Assert-SandboxStringFields $file @('role', 'path', 'sha256')
         if ($file.role -isnot [string] -or @($paths.Keys) -cnotcontains $file.role -or
-            -not $seen.Add($file.role) -or $file.path -cne $paths[$file.role] -or
+            -not $seen.Add($file.role) -or $file.path -cnotin $paths[$file.role] -or
             ($file.length -isnot [int] -and $file.length -isnot [long]) -or
             $file.length -lt 1 -or $file.length -gt 1073741824 -or
             $file.sha256 -isnot [string] -or $file.sha256 -cnotmatch '^[0-9a-f]{64}$') {

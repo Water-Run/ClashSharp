@@ -205,9 +205,12 @@ function Get-ClashSharpProductCiArtifactEvidence {
                     } else {
                         $names = @('ClashSharp-Installer-Development-Unsigned.exe','LICENSE','README.md','metadata/ClashSharp-Installer-Development-Unsigned.exe.sha256',
                             'metadata/DEVELOPMENT-UNSIGNED.txt','licenses/MIHOMO-SOURCE-MATERIALS.zip','licenses/THIRD-PARTY-NOTICES.zip',
-                            'payload/ClashSharp_1.0.0.0_x64.msix','payload/ClashSharp_TemporaryKey.cer','payload/payload-provenance.json',
-                            'payload/Dependencies/x64/Microsoft.WindowsAppRuntime.1.8.msix')
-                        if ($entries.Count -ne $names.Count -or @($entries | Where-Object { $_.FullName -cnotin $names -or $_.Length -le 0 }).Count) {
+                            'payload/ClashSharp_1.0.0.0_x64.msix','payload/ClashSharp_TemporaryKey.cer','payload/payload-provenance.json')
+                        $runtime = @($entries | Where-Object { $_.FullName -cin @(
+                            'payload/Dependencies/x64/Microsoft.WindowsAppRuntime.1.8.msix',
+                            'payload/Dependencies/x64/Microsoft.WindowsAppRuntime.2.msix') })
+                        if ($runtime.Count -ne 1 -or $entries.Count -ne ($names.Count + 1) -or
+                            @($entries | Where-Object { ($_.FullName -cnotin $names -and $_ -ne $runtime[0]) -or $_.Length -le 0 }).Count) {
                             throw 'ci-artifacts.development-inventory'
                         }
                     }

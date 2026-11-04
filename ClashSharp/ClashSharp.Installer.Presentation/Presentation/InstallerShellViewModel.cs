@@ -784,12 +784,10 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
             if (result.DiagnosticCode is "installer.machine_certificate.ownership_conflict"
                 or "installer.certificate.ownership_conflict")
             {
-                StatusTitle = "安装证书归属冲突";
-                StatusDetail = "此安装包的证书与现有归属记录不匹配，直接重试无法解决。"
-                    + "请保留诊断代码和原安装包；更换签名证书需要单独的迁移方案。"
-                    + (result.RecoveryPending
-                        ? "现有操作尚未完成，请使用本次操作的安装器重新检查并恢复。"
-                        : "检查已在维护开始前停止，现有应用和服务保留。可关闭安装器后继续使用应用。");
+                StatusTitle = "需要使用原安装包";
+                StatusDetail = result.RecoveryPending
+                    ? "现有操作尚未完成。请用启动该操作的 Setup.exe 继续恢复。"
+                    : "检查已在维护开始前停止。若要换用此版本，请先备份应用数据，再用原版本的 Setup.exe 卸载，随后安装此版本。";
                 ProgressStatus = result.RecoveryPending ? "需要恢复或诊断。" : "操作未开始。";
             }
         }

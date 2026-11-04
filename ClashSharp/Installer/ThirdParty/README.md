@@ -29,9 +29,17 @@ The generated archive intentionally includes production build dependencies as we
 dependencies. It is an attribution/input inventory, not a claim that every package asset is
 distributed. Test-only project dependencies are not included.
 
-GeoData evidence currently covers the pinned generator README, license, workflow, and released
-data hashes. Its moving upstream input revisions have not been reconstructed. The inventory
-states this explicitly; the generator license does not replace individual upstream terms.
+GeoData evidence includes the pinned generator README, license, workflow, and released data
+hashes. `release-inputs.json` records byte-matched upstream Git blobs for Country.mmdb,
+GeoIP.dat, and ASN.mmdb. The first two also match the Loyalsoldier release tagged `202609040655`.
+The notices include the GeoIP repositories' license files and MaxMind attribution. Complete
+historical inputs and redistribution terms remain unverified, including the moving GeoSite
+inputs and the terms applicable to the frozen GeoLite snapshots.
+The bundled MMDB metadata identifies GeoLite2-Country built on 2026-09-04 and GeoLite2-ASN
+built on 2026-09-02. The [MaxMind GeoLite EULA](https://www.maxmind.com/en/geolite/eula)
+sets attribution and stale-data requirements. Public release of the frozen data needs a
+documented basis that covers those snapshots. The `biliintl.list` and `sharepoint.list`
+inputs from `xishang0128/rules` also lack a confirmed redistribution license.
 The build additionally emits MIHOMO-SOURCE-MATERIALS.zip from the fixed source-materials.json
 contract. It preserves the exact mihomo source commit, vendor and toolchain archives, observed
 public CA input, original GPL text and offline compilation script. The package is independently

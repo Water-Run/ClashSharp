@@ -16,7 +16,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 Import-Module (Join-Path $PSScriptRoot 'PackagingContract.psm1') -Force
 $project = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\ClashSharp.Installer\ClashSharp.Installer.csproj'))
-$dotnet = (Get-Command dotnet -CommandType Application).Source
+$dotnet = (Get-Command dotnet -CommandType Application | Select-Object -First 1).Source
 
 $validTimestampUris = @(
     'http://timestamp.digicert.com',

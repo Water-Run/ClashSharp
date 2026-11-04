@@ -45,6 +45,18 @@
       "sha256": "37813dea8ae503e580582698fc3fe31ff40695882e9699b8b285b770c2a9dbe8"
     },
     {
+      "file": "geodata-loyalsoldier-geoip-license.txt",
+      "sourceUrl": "https://raw.githubusercontent.com/Loyalsoldier/geoip/1503074d8aee4c623791210e90c04d586c86c8f7/LICENSE",
+      "length": 20137,
+      "sha256": "5e436ff8ffbb77d8607220e9bce20c8915d860010feeb6c1ebef5a85688e9b39"
+    },
+    {
+      "file": "geodata-xishang-geoip-license.txt",
+      "sourceUrl": "https://raw.githubusercontent.com/xishang0128/geoip/3ff39f1128a3fe93b34d8981d6921990951e63a8/LICENSE",
+      "length": 20137,
+      "sha256": "5e436ff8ffbb77d8607220e9bce20c8915d860010feeb6c1ebef5a85688e9b39"
+    },
+    {
       "file": "mcp-sdk-license.txt",
       "sourceUrl": "https://raw.githubusercontent.com/modelcontextprotocol/csharp-sdk/6fa3825973949a9c4f0cd8af344e15a8db09dc35/LICENSE",
       "length": 12227,
@@ -90,7 +102,7 @@
   "packageLicenseSupplements": [
     {
       "id": "Microsoft.AspNetCore.App.Runtime.win-x64",
-      "version": "10.0.5",
+      "version": "10.0.14",
       "licenseType": "expression",
       "licenseValue": "MIT",
       "document": "dotnet-license.txt"
@@ -380,21 +392,21 @@
     },
     {
       "id": "Microsoft.NET.ILLink.Tasks",
-      "version": "10.0.5",
+      "version": "10.0.14",
       "licenseType": "expression",
       "licenseValue": "MIT",
       "document": "dotnet-license.txt"
     },
     {
       "id": "Microsoft.NETCore.App.Crossgen2.win-x64",
-      "version": "10.0.5",
+      "version": "10.0.14",
       "licenseType": "expression",
       "licenseValue": "MIT",
       "document": "dotnet-license.txt"
     },
     {
       "id": "Microsoft.NETCore.App.Runtime.win-x64",
-      "version": "10.0.5",
+      "version": "10.0.14",
       "licenseType": "expression",
       "licenseValue": "MIT",
       "document": "dotnet-license.txt"
@@ -422,7 +434,7 @@
     },
     {
       "id": "Microsoft.WindowsDesktop.App.Runtime.win-x64",
-      "version": "10.0.5",
+      "version": "10.0.14",
       "licenseType": "expression",
       "licenseValue": "MIT",
       "document": "dotnet-license.txt"
@@ -459,28 +471,28 @@
     },
     {
       "id": "SQLitePCLRaw.bundle_e_sqlite3",
-      "version": "3.0.3",
+      "version": "3.0.5",
       "licenseType": "expression",
       "licenseValue": "Apache-2.0",
       "document": "sqlitepclraw-license.txt"
     },
     {
       "id": "SQLitePCLRaw.config.e_sqlite3",
-      "version": "3.0.3",
+      "version": "3.0.5",
       "licenseType": "expression",
       "licenseValue": "Apache-2.0",
       "document": "sqlitepclraw-license.txt"
     },
     {
       "id": "SQLitePCLRaw.core",
-      "version": "3.0.3",
+      "version": "3.0.5",
       "licenseType": "expression",
       "licenseValue": "Apache-2.0",
       "document": "sqlitepclraw-license.txt"
     },
     {
       "id": "SQLitePCLRaw.provider.e_sqlite3",
-      "version": "3.0.3",
+      "version": "3.0.5",
       "licenseType": "expression",
       "licenseValue": "Apache-2.0",
       "document": "sqlitepclraw-license.txt"
@@ -538,18 +550,18 @@
   "downloadDependencies": [
     {
       "id": "Microsoft.AspNetCore.App.Runtime.win-x64",
-      "version": "10.0.5",
-      "sha512": "0LJB/7Q1a2wKzEMXMhqU9y36ocq62NDRd+EmfA2zm8+hTE99fz8ew5AA9TInxGOoom0QOYqy5e4f8UW0txoGiw=="
+      "version": "10.0.14",
+      "sha512": "aybWX2VpYNS3XMl8PgZjIpzzbsWyrs+ugjKnK/bMwSGqqlpZbWALF6f+keKqp5wsg3SoNunaFi2hH9Ql91mePA=="
     },
     {
       "id": "Microsoft.NETCore.App.Crossgen2.win-x64",
-      "version": "10.0.5",
-      "sha512": "yUHwnJPp3FUx0nIRRgTPvooQLZ59uTSpk4uCfFwfziWiynUNj6phXArJ20RmINm0IkU3c0wvTJOZniptdDFeFg=="
+      "version": "10.0.14",
+      "sha512": "nx0UKUFe95xsxrFxgNKQrGuKtHAOdV9MxgObS1EwIy+kzAOjrhtHg/JjsLLSED/rZrFuYcb6OntglUxTVS8t5w=="
     },
     {
       "id": "Microsoft.NETCore.App.Runtime.win-x64",
-      "version": "10.0.5",
-      "sha512": "ry8l2wGKCI72avPu1COSFxpPUYaggizPiJgq1o3KYhcDxu+kHY2mUENMOkJmSEs30oSabTI7V8V7bmaFYTQqcQ=="
+      "version": "10.0.14",
+      "sha512": "Py+9fO4oGQwPrM2SDTOCZP1CburyfXradGLj49WFXFA1/awcgTOtY9Ao01P2mYTyEMY32W2WmQyftR3KlwJFfA=="
     },
     {
       "id": "Microsoft.Windows.SDK.NET.Ref",
@@ -558,8 +570,8 @@
     },
     {
       "id": "Microsoft.WindowsDesktop.App.Runtime.win-x64",
-      "version": "10.0.5",
-      "sha512": "V4oMcmoYea9I8TnMurNJuBTFpL1v9H/Qf2Utti7sN6CpoB5jQzJh9MDnOfDESsh3AT83c3NJK+WDaAAp6NBOuA=="
+      "version": "10.0.14",
+      "sha512": "Uzc3Ys2TYdzc7hd2Qkfdqmle8ErLJiyrmX4/iTQvva/Z9kijE+5jRE8O63iJRsie9s0KVj490XhIzf6zAFuWlA=="
     }
   ],
   "geoDataEvidence": {
@@ -568,7 +580,9 @@
     "documents": [
       "geodata-license.txt",
       "geodata-readme.md",
-      "geodata-generation.yml.txt"
+      "geodata-generation.yml.txt",
+      "geodata-loyalsoldier-geoip-license.txt",
+      "geodata-xishang-geoip-license.txt"
     ],
     "upstreamInputRevisionsRecorded": false
   }

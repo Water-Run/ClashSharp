@@ -32,7 +32,7 @@ function New-Fixture(){
  $scope=[ordered]@{schemaVersion=1;product=$true;reason='product-or-other-path';complete=$true;changedPaths=@('ClashSharp/App.xaml');productTestsExecuted=$false;baseCommit=('a'*40);headCommit=('b'*40)}
  $scopeText=$scope|ConvertTo-Json -Depth 4
  $reports=@('tests.trx','installer-core-tests.trx','installer-presentation-tests.trx','installer-windows-tests.trx')
- $dev=@('ClashSharp-Installer-Development-Unsigned.exe','LICENSE','README.md','metadata/ClashSharp-Installer-Development-Unsigned.exe.sha256','metadata/DEVELOPMENT-UNSIGNED.txt','licenses/MIHOMO-SOURCE-MATERIALS.zip','licenses/THIRD-PARTY-NOTICES.zip','payload/ClashSharp_1.0.0.0_x64.msix','payload/ClashSharp_TemporaryKey.cer','payload/payload-provenance.json','payload/Dependencies/x64/Microsoft.WindowsAppRuntime.1.8.msix')
+ $dev=@('ClashSharp-Installer-Development-Unsigned.exe','LICENSE','README.md','metadata/ClashSharp-Installer-Development-Unsigned.exe.sha256','metadata/DEVELOPMENT-UNSIGNED.txt','licenses/MIHOMO-SOURCE-MATERIALS.zip','licenses/THIRD-PARTY-NOTICES.zip','payload/ClashSharp_1.0.0.0_x64.msix','payload/ClashSharp_TemporaryKey.cer','payload/payload-provenance.json','payload/Dependencies/x64/Microsoft.WindowsAppRuntime.2.msix')
  $roles=@('ci-scope-dotnet','ci-scope-installer','dotnet-test-results','ClashSharp-1.0.0-development-package')
  $contents=@();for($role=0;$role -lt 4;$role++){$contents+=,([Collections.Generic.Dictionary[string,string]]::new([StringComparer]::Ordinal))};$contents[0].Add('ci-scope.json',$scopeText);$contents[1].Add('ci-scope.json',$scopeText)
  foreach($name in $reports){$contents[2][$name]=New-Trx};foreach($name in $dev){$contents[3][$name]='SYNTHETIC-NOT-EXECUTABLE'}

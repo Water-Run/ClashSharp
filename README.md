@@ -65,7 +65,7 @@ Once an official version is released, packages are published on the [Releases](h
 
 1. Download and extract the release package. `Setup.exe` must stay next to its `payload` folder.
 2. Run `Setup.exe` in the current user session. The application is installed for the user who runs the installer; running as administrator is not required, and .NET does not need to be preinstalled.
-3. The installer requests administrator approval when deploying the Mihomo service and any required certificate trust. The displayed publisher should be verified before approval.
+3. Confirm the Windows administrator prompt. Setup deploys the Mihomo service and manages the Clash# package certificate automatically.
 
 Repair, upgrade, and removal are all done by running the same installer again.
 

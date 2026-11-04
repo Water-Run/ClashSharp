@@ -10,11 +10,13 @@ function Get-ClashSharpCandidateArchiveEntries {
     .DESCRIPTION
         Keeps Setup.exe and its sibling payload directly at the ZIP root. Only the identity
         and ten formal candidate files can cross this transport boundary.
+    .PARAMETER ObservedPaths
+        Candidate or archive paths from which the exact supported runtime package is selected.
     #>
     [CmdletBinding()]
-    param()
+    param([string[]] $ObservedPaths)
     'metadata/candidate-identity.json'
-    Get-ClashSharpCandidatePaths
+    Get-ClashSharpCandidatePaths -ObservedPaths $ObservedPaths
 }
 
 function Get-ClashSharpNewTransportPath {
@@ -109,7 +111,7 @@ function New-ClashSharpCandidateArchive {
             $transportState.stream = [IO.File]::Open($partial,[IO.FileMode]::CreateNew,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None)
             $zip = [IO.Compression.ZipArchive]::new($transportState.stream,[IO.Compression.ZipArchiveMode]::Create,$true)
             try {
-                foreach ($name in Get-ClashSharpCandidateArchiveEntries) {
+                foreach ($name in Get-ClashSharpCandidateArchiveEntries -ObservedPaths $identity.files.path) {
                     $path = if ($name -ceq 'metadata/candidate-identity.json') { $identityPath } else { Join-Path $release $name }
                     $inputLease = [IO.File]::Open($path,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read)
                     try {
@@ -179,8 +181,13 @@ function Expand-ClashSharpCandidateArchive {
         $lease.Position = 0
         $zip = [IO.Compression.ZipArchive]::new($lease,[IO.Compression.ZipArchiveMode]::Read,$true)
         try {
-            $expected = @(Get-ClashSharpCandidateArchiveEntries)
-            if ($zip.Entries.Count -ne $expected.Count) { throw 'transport.entry-inventory' }
+            if ($zip.Entries.Count -ne 11) { throw 'transport.entry-inventory' }
+            try {
+                $expected = @(Get-ClashSharpCandidateArchiveEntries -ObservedPaths @($zip.Entries | ForEach-Object FullName))
+            } catch {
+                if ($_.Exception.Message -cne 'candidate.file-inventory') { throw }
+                throw 'transport.entry-identity'
+            }
             $total = 0L
             for ($index=0; $index -lt $expected.Count; $index++) {
                 $entry = $zip.Entries[$index]

@@ -1,5 +1,5 @@
 name: Release protection preflight
-run-name: Read existing release protection
+run-name: Check release protection and Mihomo security
 
 on:
   workflow_dispatch:
@@ -38,5 +38,39 @@ jobs:
         with:
           name: release-protection-${{ github.run_id }}-${{ github.run_attempt }}
           path: artifacts/release-preflight/environment.json
+          if-no-files-found: warn
+          retention-days: 7
+
+  mihomo-security:
+    name: Scan the pinned Mihomo binary
+    if: github.repository == 'Water-Run/ClashSharp' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'
+    runs-on: windows-2025
+    timeout-minutes: 15
+    env:
+      GOTOOLCHAIN: local
+    steps:
+      - name: Check out the exact binary and manifest
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+
+      - name: Set up Go for govulncheck
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.3'
+          cache: false
+
+      - name: Scan the exact release input
+        shell: pwsh
+        run: |
+          $null = [IO.Directory]::CreateDirectory((Join-Path $PWD 'artifacts/release-preflight'))
+          ./Tools/Test-MihomoReleaseSecurity.ps1 -OutputDirectory (Join-Path $PWD 'artifacts/release-preflight/mihomo')
+
+      - name: Retain the Mihomo scan and receipt
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: release-mihomo-security-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/release-preflight/mihomo/
           if-no-files-found: warn
           retention-days: 7

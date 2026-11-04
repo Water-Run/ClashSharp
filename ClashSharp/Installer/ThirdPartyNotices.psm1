@@ -219,7 +219,7 @@ function ConvertTo-ClashSharpNoticeBomJson {
     foreach ($file in @($geo.files | Sort-Object name -CaseSensitive)) {
         if ($file.sha256 -cnotmatch '^[0-9a-f]{64}$' -or $file.length -lt 1) { throw 'A BOM GeoData digest is invalid.' }
         $purl = 'pkg:generic/MetaCubeX/' + $file.name + '@' + $geo.dataCommit
-        $components.Add([ordered]@{
+        $component = [ordered]@{
             type = 'data'; 'bom-ref' = $purl; name = $file.name; version = $geo.dataCommit; purl = $purl
             hashes = @([ordered]@{ alg = 'SHA-256'; content = $file.sha256 })
             properties = @(
@@ -227,7 +227,24 @@ function ConvertTo-ClashSharpNoticeBomJson {
                 [ordered]@{ name = 'clashsharp:geodata:generator-commit'; value = $geo.sourceCommit },
                 [ordered]@{ name = 'clashsharp:geodata:upstream-input-revisions-recorded'; value = ([bool]$geo.upstreamInputRevisionsRecorded).ToString().ToLowerInvariant() }
             )
-        })
+        }
+        if ($file.Contains('directSource')) {
+            $source = $file.directSource
+            if ($source -isnot [Collections.IDictionary] -or $source.blobUrl -isnot [string] -or
+                $source.blobUrl -cnotmatch '^https://api\.github\.com/repos/([a-zA-Z0-9-]+/geoip)/git/blobs/[0-9a-f]{40}\z') {
+                throw 'A GeoData direct-source blob reference is invalid.'
+            }
+            $repository = $Matches[1]
+            $component.externalReferences = @([ordered]@{ type = 'distribution'; url = $source.blobUrl })
+            if ($source.Contains('releaseAssetUrl')) {
+                if ($source.releaseAssetUrl -isnot [string] -or $source.releaseAssetUrl -cnotmatch ('^https://api\.github\.com/repos/' +
+                        [regex]::Escape($repository) + '/releases/assets/[1-9][0-9]*\z')) {
+                    throw 'A GeoData direct-source release asset reference is invalid.'
+                }
+                $component.externalReferences += [ordered]@{ type = 'distribution'; url = $source.releaseAssetUrl }
+            }
+        }
+        $components.Add($component)
     }
     $rootRef = 'clashsharp:build-inputs:' + $Inventory.productVersion
     $bom = [ordered]@{
@@ -295,7 +312,7 @@ function New-ClashSharpThirdPartyNotices {
         $assets = [Text.Encoding]::UTF8.GetString($assetsBytes) | ConvertFrom-Json -AsHashtable -Depth 64
         $lockBytes = Read-ClashSharpNoticeFile -LiteralPath (Join-Path $projectRoot 'packages.lock.json')
         $lock = [Text.Encoding]::UTF8.GetString($lockBytes) | ConvertFrom-Json -AsHashtable -Depth 32
-        if ($assets.version -ne 3 -or $assets.project.restore.projectName -cne $name -or $lock.version -ne 1) {
+        if ($assets.version -notin @(3, 4) -or $assets.project.restore.projectName -cne $name -or $lock.version -ne 1) {
             throw 'Unsupported or mismatched production restore graph.'
         }
         $projects.Add([ordered]@{ name = $name; lockSha256 = Get-ClashSharpNoticeHash -Bytes $lockBytes })
@@ -459,7 +476,7 @@ function New-ClashSharpThirdPartyNotices {
             dataCommit = $release.geoData.commit; sourceCommit = $release.geoData.sourceCommit
             files = $release.geoData.files; documents = $geoDocuments
             upstreamInputRevisionsRecorded = $catalog.geoDataEvidence.upstreamInputRevisionsRecorded
-            sourceEvidenceScope = 'Pinned generator documents. Its moving upstream inputs are not reconstructed or relicensed by this archive.'
+            sourceEvidenceScope = 'Pinned generator documents and byte-matched direct-source references where recorded. Complete historical inputs and redistribution terms remain unverified.'
         }
     }
     $indexBytes = [Text.UTF8Encoding]::new($false).GetBytes(($inventory | ConvertTo-Json -Depth 16) + [char]10)
@@ -477,6 +494,7 @@ function New-ClashSharpThirdPartyNotices {
         'RTF documents can be opened in a compatible text editor or word processor.'
         'Build inputs are included conservatively; inclusion does not mean every package file is shipped.'
         'GeoData has multiple upstream sources. Its generator license does not replace their terms.'
+        'This product includes GeoLite Data created by MaxMind, available from https://www.maxmind.com.'
         'The source snapshots do not constitute a complete corresponding-source distribution.'
         ''
     ) -join [char]10

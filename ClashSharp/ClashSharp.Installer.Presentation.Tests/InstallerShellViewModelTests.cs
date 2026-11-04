@@ -38,9 +38,8 @@ public sealed class InstallerShellViewModelTests
 
         await viewModel.PrimaryActionCommand.ExecuteAsync();
 
-        Assert.Equal("安装证书归属冲突", viewModel.StatusTitle);
-        Assert.Contains("直接重试无法解决", viewModel.StatusDetail, StringComparison.Ordinal);
-        Assert.Contains(recoveryPending ? "现有操作尚未完成" : "维护开始前停止", viewModel.StatusDetail, StringComparison.Ordinal);
+        Assert.Equal("需要使用原安装包", viewModel.StatusTitle);
+        Assert.Contains(recoveryPending ? "启动该操作的 Setup.exe 继续恢复" : "原版本的 Setup.exe 卸载", viewModel.StatusDetail, StringComparison.Ordinal);
         Assert.Equal(recoveryPending ? "需要恢复或诊断。" : "操作未开始。", viewModel.ProgressStatus);
         Assert.False(viewModel.CanExecuteMutations);
     }

@@ -113,6 +113,10 @@ Assert-ReleaseCondition ($workflow.Contains("`$env:GITHUB_REF -cne 'refs/heads/m
     $workflow.Contains("`$env:GITHUB_REPOSITORY -cne 'Water-Run/ClashSharp'")) 'Manual preflight must enforce the repository and main ref.'
 Assert-ReleaseCondition ($workflow.Contains('./Tools/Get-ReleaseEnvironment.ps1') -and
     $workflow.Contains('if: always()') -and $workflow.Contains('artifacts/release-preflight/environment.json')) 'Actual observations and negative receipts must be retained.'
+Assert-ReleaseCondition ($workflow.Contains('  mihomo-security:') -and
+    $workflow.Contains("if: github.repository == 'Water-Run/ClashSharp' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'") -and
+    $workflow.Contains('./Tools/Test-MihomoReleaseSecurity.ps1') -and
+    $workflow.Contains('path: artifacts/release-preflight/mihomo/')) 'The Mihomo scan must run in the trusted preflight and retain its evidence.'
 Assert-ReleaseCondition (-not ($workflow -match '(?i)gh release|signtool|New-InternalCandidate|secrets\.CLASHSHARP')) 'Preflight cannot sign or publish a candidate.'
 $cli = [IO.File]::ReadAllText((Join-Path $RepositoryRoot 'Tools/Get-ReleaseEnvironment.ps1'))
 Assert-ReleaseCondition ($cli.Contains('Read-ReleaseProtection') -and

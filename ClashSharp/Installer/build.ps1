@@ -37,6 +37,9 @@ $geoDataDirectory = Join-Path $repoRoot "ClashSharp\ClashSharp\Binaries\GeoData"
 $geoDataManifest = Join-Path $geoDataDirectory "manifest.json"
 $signingDir = Join-Path $installerRoot "signing"
 $installerTargetRoot = Join-Path $repoRoot "artifacts\installer"
+if ($Development) {
+    $signingDir = Join-Path $installerTargetRoot 'development-signing'
+}
 $packagingStagingRoot = Join-Path $installerTargetRoot "packaging-staging"
 $releaseDir = Join-Path $installerTargetRoot "release"
 $publishedExecutableName = 'Setup.exe'
@@ -58,6 +61,19 @@ $authenticodeThumbprint = if ($Development) {
         throw "Official release builds require canonical CLASHSHARP_AUTHENTICODE_CERTIFICATE_THUMBPRINT."
     }
     $configuredThumbprint
+}
+$timestampUri = if (-not $Development) {
+    Get-ClashSharpAuthenticodeTimestampUri -Value ([string]$env:CLASHSHARP_AUTHENTICODE_TIMESTAMP_URL)
+}
+$requireMsixTimestamp = -not $Development -and -not $InternalCandidate
+$msixTimestampArguments = @()
+if ($requireMsixTimestamp) {
+    # MSBuild treats commas and semicolons as property separators and percent sequences as escapes.
+    $msixTimestampUri = $timestampUri.AbsoluteUri.Replace('%', '%25').Replace(';', '%3B').Replace(',', '%2C')
+    $msixTimestampArguments = @(
+        "-p:AppxPackageSigningTimestampServerUrl=$msixTimestampUri"
+        '-p:AppxPackageSigningTimestampDigestAlgorithm=SHA256'
+    )
 }
 
 <#
@@ -287,8 +303,11 @@ $releaseInputFile = Get-OrdinaryFile `
     -Description 'Pinned 1.0.0 release inputs' `
     -MaximumLength 65536
 $releaseInputs = Get-Content -LiteralPath $releaseInputFile.FullName -Raw | ConvertFrom-Json
+$sdkPin = (Get-Content -LiteralPath (Join-Path $repoRoot 'global.json') -Raw | ConvertFrom-Json).sdk.version
 if ($releaseInputs.schemaVersion -ne 1 -or $releaseInputs.productVersion -cne '1.0.0' -or
-    $releaseInputs.dotnetSdkVersion -cne '10.0.201' -or
+    $releaseInputs.dotnetSdkVersion -cne $sdkPin -or
+    $releaseInputs.dotnetRuntimeVersion -cnotmatch '^10\.0\.(0|[1-9][0-9]*)$' -or
+    [version]$releaseInputs.dotnetRuntimeVersion -lt [version]'10.0.14' -or
     $releaseInputs.windowsAppRuntime.architecture -cne 'x64' -or
     $releaseInputs.windowsAppRuntime.sha256 -cnotmatch '^[0-9a-f]{64}$' -or
     $releaseInputs.windowsAppRuntime.signerThumbprint -cnotmatch '^[0-9A-F]{40}$' -or
@@ -307,7 +326,9 @@ $geoDataManifestFile = Get-OrdinaryFile `
     -Description "Installer GeoData manifest" `
     -MaximumLength 65536
 if ($null -ne $geoDataManifestFile) {
-    $manifest = Get-Content -LiteralPath $geoDataManifest -Raw | ConvertFrom-Json
+    $geoDataManifestBytes = [IO.File]::ReadAllBytes($geoDataManifestFile.FullName)
+    $geoDataManifestHash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($geoDataManifestBytes)).ToLowerInvariant()
+    $manifest = [Text.Encoding]::UTF8.GetString($geoDataManifestBytes).TrimStart([char]0xfeff) | ConvertFrom-Json
     $geoDataManifestProperties = @($manifest.PSObject.Properties.Name)
     if ($geoDataManifestProperties.Count -ne 2 -or
         $geoDataManifestProperties -cnotcontains "schemaVersion" -or
@@ -438,7 +459,7 @@ $null = Get-OrdinaryFile -LiteralPath $certificatePfxPath -Description "MSIX sig
 $null = Get-OrdinaryFile -LiteralPath $certificateCerPath -Description "MSIX signing CER" -MaximumLength 1048576
 $payloadCertificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new($certificateCerPath)
 if (-not $payloadCertificate.Subject.Equals($manifestPublisher, [System.StringComparison]::Ordinal)) {
-    throw "Installer signing CER subject does not exactly match Package.appxmanifest Identity Publisher. Remove Installer\signing and regenerate it."
+    throw "Installer signing CER subject must match the MSIX publisher '$manifestPublisher'. Select matching signing material."
 }
 if ($payloadCertificate.NotAfter.ToUniversalTime() -le [DateTime]::UtcNow) {
     throw "MSIX signing certificate has expired."
@@ -467,7 +488,7 @@ $signingCertificate = Get-ChildItem -Path Cert:\CurrentUser\My |
 
 if ($null -eq $signingCertificate -and (Test-Path $certificatePfxPath)) {
     if ([string]::IsNullOrWhiteSpace($certificatePasswordText)) {
-        throw "Set CLASHSHARP_CERTIFICATE_PASSWORD to import the existing signing PFX, or remove Installer\signing to generate a new development certificate."
+        throw "Set CLASHSHARP_CERTIFICATE_PASSWORD to import the existing signing PFX."
     }
 
     $certificatePassword = ConvertTo-SecureString $certificatePasswordText -AsPlainText -Force
@@ -537,7 +558,7 @@ if ($LASTEXITCODE -ne 0) {
 $null = Copy-ClashSharpComponentPayload `
     -Source $servicePublishRoot `
     -Destination $serviceStagingRoot
-$null = Confirm-ClashSharpComponentStaging `
+$stagedService = Confirm-ClashSharpComponentStaging `
     -LiteralPath $serviceStagingRoot `
     -RequiredFiles @('ClashSharp.MihomoService.exe') `
     -ExactFileSet
@@ -587,7 +608,8 @@ dotnet publish $appProject `
     -p:ClashSharpInstallerServiceRoot=$serviceStagingRoot `
     -p:ClashSharpInstallerWatchdogRoot=$watchdogStagingRoot `
     "-p:ClashSharpThirdPartyNoticesPath=$thirdPartyNoticesPath" `
-    -p:PackageCertificateThumbprint=$($signingCertificate.Thumbprint)
+    -p:PackageCertificateThumbprint=$($signingCertificate.Thumbprint) `
+    @msixTimestampArguments
 if ($LASTEXITCODE -ne 0) {
     throw "MSIX publish failed with exit code $LASTEXITCODE."
 }
@@ -610,6 +632,9 @@ if ($appPackages.Count -ne 1) {
 $appPackage = $appPackages[0]
 $null = Assert-ClashSharpMsixThirdPartyNotices -LiteralPath $appPackage.FullName -ExpectedContract $thirdPartyNotices
 $dotNetRuntimeContract = Get-ClashSharpMsixDotNetRuntimeContract -LiteralPath $appPackage.FullName
+if ($dotNetRuntimeContract.version -cne $releaseInputs.dotnetRuntimeVersion) {
+    throw 'The primary MSIX .NET runtime does not match the patched release pin.'
+}
 $appIdentity = Get-ClashSharpMsixIdentity -LiteralPath $appPackage.FullName
 if (-not $appIdentity.Publisher.Equals($manifestPublisher, [StringComparison]::Ordinal) -or
     $appIdentity.Architecture -cne 'x64') {
@@ -619,7 +644,7 @@ $declaredDependencies = @(Get-ClashSharpMainPackageDependency `
         -ManifestDocument $appIdentity.Document)
 $windowsAppRuntimePublisher = 'CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US'
 if ($declaredDependencies.Count -ne 1 -or
-    $declaredDependencies[0].Name -cne 'Microsoft.WindowsAppRuntime.1.8' -or
+    $declaredDependencies[0].Name -cne $releaseInputs.windowsAppRuntime.name -or
     -not $declaredDependencies[0].Publisher.Equals(
         $windowsAppRuntimePublisher,
         [StringComparison]::Ordinal)) {
@@ -678,7 +703,8 @@ foreach ($declaration in $declaredDependencies) {
         throw "Dependency package is outside the exact x64 dependency directory."
     }
     $dependencyIdentity = Get-ClashSharpMsixIdentity -LiteralPath $dependencySource.FullName
-    if ($dependencyIdentity.Name -cne $declaration.Name -or
+    if (-not $dependencyIdentity.IsFramework -or $dependencyIdentity.Name -cne $declaration.Name -or
+        $dependencyIdentity.Version -cne $releaseInputs.windowsAppRuntime.version -or
         -not $dependencyIdentity.Publisher.Equals($declaration.Publisher, [StringComparison]::Ordinal) -or
         $dependencyIdentity.Architecture -cne 'x64' -or
         (ConvertTo-ClashSharpPackageVersion -Value $dependencyIdentity.Version) -lt
@@ -726,6 +752,9 @@ $mainSignatureParameters = @{
 }
 if (-not $Development) {
     $mainSignatureParameters.RequireTrusted = $true
+}
+if ($requireMsixTimestamp) {
+    $mainSignatureParameters.RequireTimestamp = $true
 }
 $mainSignature = Get-ClashSharpPackageSignature @mainSignatureParameters
 $primaryPayloadFile = Get-Item -LiteralPath $primaryPayloadPath -Force
@@ -783,11 +812,32 @@ $provenance | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $provenancePath
 $stagedPayloadCertificate.Dispose()
 $null = Get-ClashSharpDirectoryContract -LiteralPath $payloadStagingDir
 
+$expectedMachineFiles = @(
+    foreach ($asset in $releaseInputs.geoData.files) {
+        [pscustomobject]@{
+            RelativePath = 'binaries/geodata/' + $asset.name.ToLowerInvariant()
+            Length = [long]$asset.length; Sha256 = [string]$asset.sha256
+        }
+    }
+    [pscustomobject]@{
+        RelativePath = 'binaries/geodata/manifest.json'
+        Length = $geoDataManifestBytes.Length; Sha256 = $geoDataManifestHash
+    }
+    [pscustomobject]@{
+        RelativePath = 'binaries/mihomo.exe'
+        Length = [long]$mihomoManifest.length; Sha256 = [string]$mihomoManifest.sha256
+    }
+    [pscustomobject]@{
+        RelativePath = 'binaries/service/clashsharp.mihomoservice.exe'
+        Length = $stagedService.Length; Sha256 = $stagedService.Sha256
+    }
+)
 $installerReleaseManifest = New-ClashSharpInstallerReleaseManifest `
     -PayloadRoot $payloadStagingDir `
     -PrimaryIdentity $appIdentity `
     -PrimaryRelativePath ($appPackage.Name.ToLowerInvariant()) `
     -DependencyContracts @($csharpDependencyContracts) `
+    -ExpectedMachineFiles @($expectedMachineFiles | Sort-Object -Property RelativePath -CaseSensitive) `
     -CertificateRelativePath ($certificatePayloadFile.Name.ToLowerInvariant()) `
     -CertificateThumbprint $payloadCertificate.Thumbprint `
     -AuthenticodeCertificateThumbprint $authenticodeThumbprint `
@@ -851,9 +901,6 @@ Write-Host 'WPF Installer passed its isolated single-file build contract.'
             -Value "Development-only unsigned Installer. Do not publish or distribute this artifact."
         Write-Warning "Built an explicitly unsigned development Installer. It is not a release artifact."
     } else {
-        $timestampUri = Get-ClashSharpAuthenticodeTimestampUri `
-            -Value ([string]$env:CLASHSHARP_AUTHENTICODE_TIMESTAMP_URL)
-
         $authenticodeCertificate = Get-ChildItem -Path Cert:\CurrentUser\My |
             Where-Object {
                 $_.Thumbprint -ceq $authenticodeThumbprint -and

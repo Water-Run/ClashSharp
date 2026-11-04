@@ -23,7 +23,7 @@ Windows 管理的 WinUI 3 应用包，代理服务使用系统目录；这里的
 
 ## 离线输入与开发构建
 
-在独立的 Windows 构建机使用 PowerShell 7 和仓库固定的 .NET SDK 10.0.201：
+在独立的 Windows 构建机使用 PowerShell 7 和 `global.json` 锁定的 .NET SDK。
 
     dotnet restore ClashSharp/ClashSharp.slnx --locked-mode
     ./Tools/Get-ReleaseInputs.ps1
@@ -34,7 +34,7 @@ Windows 管理的 WinUI 3 应用包，代理服务使用系统目录；这里的
     ./Tools/Get-MihomoSourceMaterials.ps1
     ./ClashSharp/Installer/build.ps1 -Development
 
-开发构建会在构建用户的 My 证书存储创建开发 MSIX 签名证书，不执行安装、不信任证书，
+开发构建会在构建用户的 My 证书存储创建开发 MSIX 签名证书，材料放在 `artifacts/installer/development-signing`。不执行安装、不信任证书，
 不更改系统代理。请在 CI 或隔离构建机运行。已有 PFX 需要导入时，通过进程环境变量
 CLASHSHARP_CERTIFICATE_PASSWORD 提供密码；脚本在启动子进程前清除该环境变量。
 
@@ -97,11 +97,23 @@ CI 的 Offline Installer package 在干净 Windows runner 上执行以上完整�
 
 ## 正式签名与启用
 
+发布预检用 `Tools/Test-MihomoReleaseSecurity.ps1` 核对内置 Mihomo 的摘要并扫描实际二进制。
+发现已知漏洞或扫描失败都会阻止预检通过，扫描报告及摘要可在预检产物中复核。
+生成安装器清单前，打包器会逐项核对最终 MSIX 内的 Mihomo、GeoData 和服务文件，
+确保它们与固定输入和构建阶段记录的摘要一致。
+
+主 MSIX 的发布者在 Windows 中显示为 `WaterRun`，证书主题为 `CN=WaterRun, OU="Clash#"`。用户从完整解压目录运行
+`Setup.exe` 并确认 Windows 管理员提示。提权助手核验随包的公开证书，按需将该叶证书加入
+Trusted People，卸载时清理安装器拥有的记录。发布构建应持续使用同一 MSIX 签名身份。
+已安装旧内部版时，先备份应用数据，用原版本的 Setup 卸载，再安装新版本。
+
 不带 -Development 的构建另外需要受控的 MSIX PFX/CER、精确的
 CLASHSHARP_MSIX_CERTIFICATE_THUMBPRINT、可用的 Authenticode 私钥、
 CLASHSHARP_AUTHENTICODE_CERTIFICATE_THUMBPRINT、
 HTTP 或 HTTPS CLASHSHARP_AUTHENTICODE_TIMESTAMP_URL 和固定
 CLASHSHARP_WINDOWS_SDK_VERSION。脚本验证签名与时间戳后才产生正式文件名。
+公开发行构建在签署主 MSIX 和 `Setup.exe` 时分别取得 SHA-256 RFC3161 时间戳，
+并核验两个成品的签名者、信任链与时间戳。
 可选的 CLASHSHARP_WINDOWS_APP_RUNTIME_SIGNER_THUMBPRINT 必须与仓库固定输入一致。
 
 时间戳地址须为绝对 URI，不能含用户凭据、片段或空白。使用时间戳服务商公布的
@@ -128,7 +140,6 @@ GeoData 使用 [MetaCubeX/meta-rules-dat 固定数据提交](https://github.com/
 生成与归属信息见固定的
 [上游说明](https://github.com/MetaCubeX/meta-rules-dat/blob/4178770badecb1b349fbcd62c737e0d7a2079729/README.md)
 和 [仓库许可](https://github.com/MetaCubeX/meta-rules-dat/blob/4178770badecb1b349fbcd62c737e0d7a2079729/LICENSE)。
-该数据汇总了多个上游。说明包现在保留上述固定提交的 README、LICENSE 和生成
-工作流，并将它们绑定到四个数据文件；生成工作流仍引用了会变化的上游分支。
-这组快照不能重建当时全部上游输入，也不是完整的对应源代码发行包。正式发行仍须
-补齐相应源代码与上游数据许可归档，不能把生成器仓库的许可视为全部数据的唯一许可。
+该数据汇总了多个上游。说明包保留固定版本的生成材料、三份直拷文件的上游 Git Blob、
+可核对的发布资产引用、两家 GeoIP 仓库的许可证和 MaxMind 归属声明。正式发行仍须核对
+冻结 GeoLite 数据的分发条款，并补齐 GeoSite 的对应源材料与各上游许可。

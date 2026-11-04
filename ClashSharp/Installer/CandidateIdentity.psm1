@@ -8,13 +8,20 @@ function Get-ClashSharpCandidatePaths {
         Returns the fixed formal-shaped candidate inventory.
     .DESCRIPTION
         Development markers, unsigned entry points, private keys and extra files are not candidate inputs.
+    .PARAMETER ObservedPaths
+        Observed paths used to select exactly one current or retained runtime framework package.
     #>
     [CmdletBinding()]
-    param()
+    param([string[]] $ObservedPaths = @('payload/Dependencies/x64/Microsoft.WindowsAppRuntime.2.msix'))
+    $runtime = @($ObservedPaths | Where-Object {
+        $_ -cin @('payload/Dependencies/x64/Microsoft.WindowsAppRuntime.1.8.msix',
+            'payload/Dependencies/x64/Microsoft.WindowsAppRuntime.2.msix')
+    })
+    if ($runtime.Count -ne 1) { throw 'candidate.file-inventory' }
     @('Setup.exe','LICENSE','README.md','metadata/Setup.exe.sha256','licenses/MIHOMO-SOURCE-MATERIALS.zip',
         'licenses/THIRD-PARTY-NOTICES.zip','payload/ClashSharp_1.0.0.0_x64.msix',
         'payload/ClashSharp_TemporaryKey.cer','payload/payload-provenance.json',
-        'payload/Dependencies/x64/Microsoft.WindowsAppRuntime.1.8.msix')
+        $runtime[0])
 }
 
 function Get-ClashSharpCandidateDocument {
@@ -34,7 +41,7 @@ function Get-ClashSharpCandidateDocument {
     .PARAMETER CiEvidenceSha256
         SHA256 of the consumed artifact-and-TRX evidence snapshot.
     .PARAMETER Files
-        Eight ordinary candidate file observations with path, length and SHA256.
+        Ten ordinary candidate file observations with path, length and SHA256.
     .PARAMETER Signatures
         Fresh trusted signature observations keyed installer, primary and dependency.
     #>
@@ -48,7 +55,7 @@ function Get-ClashSharpCandidateDocument {
         $CiRunId -le 0 -or $CiEvidenceSha256 -cnotmatch '^[0-9a-f]{64}\z') {
         throw 'candidate.identity-input'
     }
-    $expected = @(Get-ClashSharpCandidatePaths)
+    $expected = @(Get-ClashSharpCandidatePaths -ObservedPaths $Files.path)
     if ($Files.Count -ne $expected.Count) { throw 'candidate.file-inventory' }
     $ordered = @(foreach ($path in $expected) {
         $matching = @($Files | Where-Object { $_.path -ceq $path })
@@ -103,7 +110,7 @@ function Get-ClashSharpCandidateFileSnapshot {
     param([string] $ReleaseDirectory, [Parameter(Mandatory)][scriptblock] $Consume)
     $root = Assert-ClashSharpOrdinaryPath -LiteralPath $ReleaseDirectory -RequireDirectory
     $inventory = @(Get-ClashSharpDirectoryContract -LiteralPath $root)
-    $expected = @(Get-ClashSharpCandidatePaths)
+    $expected = @(Get-ClashSharpCandidatePaths -ObservedPaths @($inventory | ForEach-Object RelativePath))
     if ($inventory.Count -ne $expected.Count -or @($inventory | Where-Object { $_.relativePath -cnotin $expected }).Count) {
         throw 'candidate.file-inventory'
     }

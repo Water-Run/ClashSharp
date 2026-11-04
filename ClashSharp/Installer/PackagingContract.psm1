@@ -772,7 +772,8 @@ function New-ClashSharpInstallerReleaseManifest {
         Generates the compact strict C# Installer release manifest from final staged payload bytes.
     .DESCRIPTION
         Verifies the exact payload role set, primary and dependency identities, certificate and
-        Authenticode anchors, and embedded machine files before atomically emitting bounded UTF-8
+        Authenticode anchors, and matches embedded machine files against the trusted input contract
+        before emitting bounded UTF-8
         JSON and checking its read-back hash.
     .PARAMETER PayloadRoot
         Ordinary final payload directory whose bytes are bound into the manifest.
@@ -782,6 +783,8 @@ function New-ClashSharpInstallerReleaseManifest {
         Canonical payload-relative path of the primary MSIX.
     .PARAMETER DependencyContracts
         Validated dependency identity and minimum-version contracts.
+    .PARAMETER ExpectedMachineFiles
+        Canonically ordered relative paths, lengths and hashes recorded before MSIX packaging.
     .PARAMETER CertificateRelativePath
         Canonical payload-relative path of the package signing certificate.
     .PARAMETER CertificateThumbprint
@@ -808,6 +811,10 @@ function New-ClashSharpInstallerReleaseManifest {
         [Parameter(Mandatory)]
         [ValidateNotNull()]
         [object[]] $DependencyContracts,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNullOrEmpty()]
+        [object[]] $ExpectedMachineFiles,
 
         [Parameter(Mandatory)]
         [ValidateNotNullOrEmpty()]
@@ -907,6 +914,8 @@ function New-ClashSharpInstallerReleaseManifest {
         [string]$payloadByPath[$canonicalPrimaryPath].RelativePath)
     $machineContract = @(
         Get-ClashSharpMsixMachineFileContract -LiteralPath $primaryMsixPath)
+    $observedMachineFiles = @($machineContract | Select-Object @{ Name = 'RelativePath'; Expression = { $_.Path } }, Length, Sha256)
+    Compare-ClashSharpDirectoryContract -Expected $ExpectedMachineFiles -Actual $observedMachineFiles
 
     $sortedPaths = [string[]]@($payloadByPath.Keys)
     [Array]::Sort($sortedPaths, [StringComparer]::Ordinal)

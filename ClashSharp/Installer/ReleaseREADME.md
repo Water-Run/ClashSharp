@@ -7,7 +7,7 @@
 适用于 Windows 11 x64 或 Windows Server 2025 桌面体验。
 
 1. 完整解压 `Clash#.zip`，保留所有子目录。
-2. 双击同目录的 `Setup.exe`，按提示安装；以后也可用它修复或卸载。
+2. 双击同目录的 `Setup.exe`，按提示确认 Windows 管理员授权。安装器会处理 Clash# 软件包的证书，也可用于修复或卸载。
 
 [完整文档与使用说明](https://github.com/Water-Run/ClashSharp/blob/main/README-zh.md) · [版本与更新](https://github.com/Water-Run/ClashSharp/releases)
 
@@ -16,7 +16,7 @@
 Requires Windows 11 x64 or Windows Server 2025 with Desktop Experience.
 
 1. Extract all of `Clash#.zip` and keep its subdirectories together.
-2. Run `Setup.exe` in this folder to install, repair, or uninstall Clash#.
+2. Run `Setup.exe` and confirm the Windows administrator prompt. Setup manages the Clash# package certificate and can also repair or uninstall the app.
 
 [Full documentation](https://github.com/Water-Run/ClashSharp/blob/main/README.md) · [Releases](https://github.com/Water-Run/ClashSharp/releases)
 

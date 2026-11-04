@@ -76,8 +76,8 @@ try{
   $identity=Get-ClashSharpMsixIdentity -LiteralPath $primary
   if($identity.Name -cne $sourceIdentity.GetAttribute('Name') -or $identity.Publisher -cne $sourceIdentity.GetAttribute('Publisher') -or
      $identity.Version -cne $sourceIdentity.GetAttribute('Version') -or $identity.Architecture -cne 'x64'){throw 'candidate.package-source-mismatch'}
-  $runtime=Join-Path $release 'payload/Dependencies/x64/Microsoft.WindowsAppRuntime.1.8.msix'
-  $runtimeFile=@($files|Where-Object path -CEQ 'payload/Dependencies/x64/Microsoft.WindowsAppRuntime.1.8.msix')[0]
+  $runtimeFile=@($files|Where-Object { $_.path.StartsWith('payload/Dependencies/x64/', [StringComparison]::Ordinal) })[0]
+  $runtime=Join-Path $release $runtimeFile.path
   if($runtimeFile.sha256 -cne $pins.windowsAppRuntime.sha256 -or $runtimeFile.length -ne $pins.windowsAppRuntime.length){throw 'candidate.runtime-pin'}
   $dependencyIdentity=Get-ClashSharpMsixIdentity -LiteralPath $runtime
   $signatures=[pscustomobject]@{

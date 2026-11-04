@@ -28,6 +28,8 @@ $environment = [pscustomobject]@{
 }
 Assert-SandboxGuestIdentity $plan $environment
 $candidate = $plan.candidate
+$dependencyPath = ($candidate.files | Where-Object role -CEQ 'dependency').path
+$dependencyName = [IO.Path]::GetFileNameWithoutExtension($dependencyPath)
 $startedAt = [DateTime]::UtcNow
 $steps = [Collections.Generic.List[object]]::new()
 $checks = [ordered]@{}
@@ -188,7 +190,7 @@ try {
         } finally { if ($null -ne $proxyKey) { $proxyKey.Dispose() } }
         $script:proxyBefore = Get-SandboxProxyFingerprint
         $script:servicesBefore = Get-SandboxServices
-        $script:dependencyBefore = @(Get-AppxPackage -Name 'Microsoft.WindowsAppRuntime.1.8' |
+        $script:dependencyBefore = @(Get-AppxPackage -Name $dependencyName |
             Select-Object -ExpandProperty PackageFullName | Sort-Object)
         $checks.isolation = [ordered]@{ inputReadOnly = $true; externalAdapterCount = $adapterCount; payloadFilesVerified = 0 }
     }
@@ -213,7 +215,7 @@ try {
     }
     Invoke-SandboxStep 'install-dependencies' {
         $script:dependenciesAttempted = $true
-        Add-AppxPackage -Path (Join-Path $stage 'Dependencies\x64\Microsoft.WindowsAppRuntime.1.8.msix')
+        Add-AppxPackage -Path (Join-Path $stage $dependencyPath)
     }
     Invoke-SandboxStep 'install-package' {
         $script:packageAttempted = $true
@@ -314,7 +316,7 @@ public static class SandboxProcessIdentity {
                 foreach ($package in $owned) { Remove-AppxPackage -Package $package.PackageFullName }
             }
             if ($script:dependenciesAttempted) {
-                foreach ($dependency in @(Get-AppxPackage -Name 'Microsoft.WindowsAppRuntime.1.8')) {
+                foreach ($dependency in @(Get-AppxPackage -Name $dependencyName)) {
                     if ($script:dependencyBefore -cnotcontains $dependency.PackageFullName) {
                         Remove-AppxPackage -Package $dependency.PackageFullName
                     }
@@ -328,7 +330,7 @@ public static class SandboxProcessIdentity {
         } },
         @{ Name = 'cleanup-payload'; Action = { Remove-SandboxStage } },
         @{ Name = 'verify-cleanup'; Action = {
-            $dependencyAfter = @(Get-AppxPackage -Name 'Microsoft.WindowsAppRuntime.1.8' |
+            $dependencyAfter = @(Get-AppxPackage -Name $dependencyName |
                 Select-Object -ExpandProperty PackageFullName | Sort-Object)
             $proxyAfter = Get-SandboxProxyFingerprint
             $checks.proxy = [ordered]@{ beforeSha256 = $proxyBefore; afterSha256 = $proxyAfter

@@ -191,7 +191,14 @@ function New-TestFixture {
     Write-TestJson -Path (Join-Path $root 'ClashSharp/Installer/release-inputs.json') -Value @{
         geoData = @{ commit = ('a' * 40); sourceCommit = ('b' * 40); files = @(
             @('ASN.mmdb', 'Country.mmdb', 'GeoIP.dat', 'GeoSite.dat') | ForEach-Object {
-                @{ name = $_; length = 1; sha256 = ('c' * 64) }
+                $file = @{ name = $_; length = 1; sha256 = ('c' * 64) }
+                if ($_ -ceq 'Country.mmdb') {
+                    $file.directSource = @{
+                        blobUrl = 'https://api.github.com/repos/fixture/geoip/git/blobs/' + ('e' * 40)
+                        releaseAssetUrl = 'https://api.github.com/repos/fixture/geoip/releases/assets/123'
+                    }
+                }
+                $file
             }
         ) }
     }
@@ -285,6 +292,10 @@ try {
     $bomText = $utf8.GetString($bomEntry.Bytes)
     Assert-TestCondition (Test-Json -Json $bomText -Schema $bomSchema) 'The generated BOM does not conform to the complete offline CycloneDX schema.'
     $invalidBom = $bomText | ConvertFrom-Json -AsHashtable
+    $country = $invalidBom.components | Where-Object { $_.type -ceq 'data' -and $_.name -ceq 'Country.mmdb' }
+    Assert-TestCondition ($country.externalReferences.Count -eq 2 -and
+        $country.externalReferences[0].url -ceq ('https://api.github.com/repos/fixture/geoip/git/blobs/' + ('e' * 40)) -and
+        $country.externalReferences[1].url -ceq 'https://api.github.com/repos/fixture/geoip/releases/assets/123') 'The BOM omitted the reviewed direct-source references.'
     $invalidBom.components[0].type = 'not-a-cyclonedx-component'
     $invalidBomText = $invalidBom | ConvertTo-Json -Depth 24
     Assert-TestCondition (-not (Test-Json -Json $invalidBomText -Schema $bomSchema -ErrorAction SilentlyContinue)) 'The standard schema accepted an invalid component kind.'
@@ -351,7 +362,7 @@ try {
     }
     foreach ($name in @('changed-package', 'missing-package', 'duplicate-package-entry', 'wrong-package-identity',
             'missing-license', 'oversized-license', 'lock-drift', 'unsafe-library-path', 'sdk-unpinned',
-            'sdk-range', 'source-drift', 'source-path', 'geodata-drift')) {
+            'sdk-range', 'source-drift', 'source-path', 'geodata-drift', 'geodata-source-mismatch')) {
         $root = New-TestFixture -Name $name
         $packagePath = Join-Path $root 'cache/fixture.library/1.0.0/fixture.library.1.0.0.nupkg'
         $packageEntries = @(Read-TestZip -Path $packagePath)
@@ -386,6 +397,13 @@ try {
             'source-drift' { $catalog.documents[0].sha256 = '0' * 64; Write-TestJson $catalogPath $catalog }
             'source-path' { $catalog.documents[0].file = '../outside.txt'; Write-TestJson $catalogPath $catalog }
             'geodata-drift' { $catalog.geoDataEvidence.sourceCommit = 'c' * 40; Write-TestJson $catalogPath $catalog }
+            'geodata-source-mismatch' {
+                $releasePath = Join-Path $root 'ClashSharp/Installer/release-inputs.json'
+                $release = Get-Content -LiteralPath $releasePath -Raw | ConvertFrom-Json -AsHashtable
+                $country = $release.geoData.files | Where-Object { $_.name -ceq 'Country.mmdb' }
+                $country.directSource.releaseAssetUrl = 'https://api.github.com/repos/other/geoip/releases/assets/123'
+                Write-TestJson $releasePath $release
+            }
         }
         $output = Join-Path $root 'rejected.zip'
         Assert-TestRejects $name { New-ClashSharpThirdPartyNotices -RepositoryRoot $root -OutputPath $output }
