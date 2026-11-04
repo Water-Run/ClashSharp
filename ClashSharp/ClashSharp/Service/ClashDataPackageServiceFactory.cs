@@ -234,4 +234,10 @@ internal sealed class ClashDataPackageSettingsAdapter :
         get => _settings.MasterInfoTileLayout;
         set => _settings.MasterInfoTileLayout = value;
     }
+
+    public string MasterInfoTilePresets
+    {
+        get => _settings.MasterInfoTilePresets;
+        set => _settings.MasterInfoTilePresets = value;
+    }
 }

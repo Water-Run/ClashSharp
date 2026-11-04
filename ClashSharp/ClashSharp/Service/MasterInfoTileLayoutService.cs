@@ -12,7 +12,11 @@ internal interface IMasterInfoTileLayoutSettings
 {
     string MasterInfoTileLayout { get; }
 
+    string MasterInfoTilePresets { get; }
+
     Task SaveInfoTileLayoutAsync(string layout, CancellationToken cancellationToken);
+
+    Task SaveInfoTilePresetsAsync(string presets, CancellationToken cancellationToken);
 }
 
 internal sealed class MasterInfoTileLayoutService : IMasterInfoTileLayoutService
@@ -60,6 +64,36 @@ internal sealed class MasterInfoTileLayoutService : IMasterInfoTileLayoutService
 
     public IReadOnlyList<string> GetRecommendedLayout(IReadOnlyCollection<string> availableTileIds) =>
         Normalize(DefaultLayout, availableTileIds);
+
+    /// <summary>Reads the saved template list; an unreadable value falls back to the built-in list.</summary>
+    public IReadOnlyList<MasterInfoTilePresetEntry> GetPresets() =>
+        MasterInfoTilePresetList.TryParse(_settings.MasterInfoTilePresets, out IReadOnlyList<MasterInfoTilePresetEntry> entries, out _)
+            ? entries
+            : DefaultPresets();
+
+    /// <summary>Persists the template list in the given order and returns the stored entries.</summary>
+    public async Task<IReadOnlyList<MasterInfoTilePresetEntry>> SavePresetsAsync(
+        IEnumerable<MasterInfoTilePresetEntry> entries,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(entries);
+        string canonical = MasterInfoTilePresetList.Format(entries);
+        if (!MasterInfoTilePresetList.TryParse(canonical, out IReadOnlyList<MasterInfoTilePresetEntry> normalized, out _))
+        {
+            throw new ArgumentException("The template list exceeds its limits.", nameof(entries));
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        await _settings.SaveInfoTilePresetsAsync(canonical, cancellationToken).ConfigureAwait(false);
+        return normalized;
+    }
+
+    /// <summary>Restores and persists the built-in template list, removing saved custom templates.</summary>
+    public Task<IReadOnlyList<MasterInfoTilePresetEntry>> RestoreDefaultPresetsAsync(CancellationToken cancellationToken) =>
+        SavePresetsAsync(DefaultPresets(), cancellationToken);
+
+    private static IReadOnlyList<MasterInfoTilePresetEntry> DefaultPresets() =>
+        MasterInfoTilePresetList.BuiltInIds.Select(MasterInfoTilePresetEntry.BuiltIn).ToArray();
 
     private static IReadOnlyList<string> Parse(string value)
     {

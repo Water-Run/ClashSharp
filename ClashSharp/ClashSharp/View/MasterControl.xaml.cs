@@ -12,6 +12,7 @@ using ClashSharp.Presentation.Composition;
 using ClashSharp.Presentation.Dialogs;
 using ClashSharp.Presentation.Layout;
 using ClashSharp.Presentation.Lifecycle;
+using ClashSharp.Settings;
 using ClashSharp.ViewModel;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Input;
@@ -54,6 +55,12 @@ public sealed partial class MasterControl : Page
     private const double InfoTileEditorMaxListHeight = 420;
     private const double InfoTileEditorMaxDialogHeight = 756;
     private const double InfoTileEditorWindowChrome = 272;
+
+    /// <summary>ContentDialog padding and border on both sides; the editor width excludes this frame.</summary>
+    private const double InfoTileEditorDialogFrame = 50;
+
+    /// <summary>Right gutter the option list keeps for its scroll bar; rows above and below align to it.</summary>
+    private const double InfoTileEditorScrollGutter = 14;
 
     /// <summary>Bindable view model for this page.</summary>
     private readonly MasterControlViewModel _viewModel;
@@ -710,13 +717,17 @@ public sealed partial class MasterControl : Page
         }
     }
 
-    /// <summary>Opens a small editor that toggles which information tiles are visible.</summary>
+    /// <summary>Opens the tile editor from the dashboard's edit command.</summary>
     private async void EditInfoTilesButton_Click(object sender, RoutedEventArgs e)
     {
         await _tileActions.RunAsync(ShowInfoTilesEditorAsync);
     }
 
-    /// <summary>Opens a small editor that toggles which information tiles are visible.</summary>
+    /// <summary>Opens the tile editor: visible tiles, layout templates and the saved template list.</summary>
+    /// <remarks>
+    /// Tile visibility is a draft committed only by Save. Template list changes (save as, delete, restore defaults)
+    /// are explicit actions that persist immediately, so they survive Cancel.
+    /// </remarks>
     private async Task ShowInfoTilesEditorAsync(CancellationToken cancellationToken)
     {
         XamlRoot dialogRoot = GetDialogXamlRoot();
@@ -738,37 +749,87 @@ public sealed partial class MasterControl : Page
             tile,
             tile.IsVisible)));
 
-        IReadOnlyList<MasterInfoTilePreset> presets = MasterInfoTilePresetCatalog.Create(_getString, _viewModel.RecommendedInfoTileIds);
+        IReadOnlyList<MasterInfoTilePresetEntry> templateEntries = _viewModel.InfoTilePresetEntries;
+        IReadOnlyList<MasterInfoTilePreset> presets = [];
         IReadOnlyList<string>? templateOrder = null;
         bool applyingTemplate = false;
+        bool restoreTemplatesEnabled = true;
+        TextBlock templateHeader = new() { Text = _getString("Master.Preset.Label") };
         ComboBox templatePicker = new()
         {
-            Header = _getString("Master.Preset.Label"),
             PlaceholderText = _getString("Master.Preset.Custom"),
-            Width = 220,
+            MinWidth = 160,
             HorizontalAlignment = HorizontalAlignment.Stretch,
         };
         AutomationProperties.SetAutomationId(templatePicker, "InfoTilePresetPicker");
-        Dictionary<ComboBoxItem, TextBlock> templateLabels = new();
-        foreach (MasterInfoTilePreset preset in presets)
+        AutomationProperties.SetName(templatePicker, templateHeader.Text);
+
+        TextBlock saveTemplateLabel = new() { Text = _getString("Master.Preset.SaveAs") };
+        StackPanel saveTemplateContent = new() { Orientation = Orientation.Horizontal, Spacing = 8 };
+        saveTemplateContent.Children.Add(new FontIcon { Glyph = "", FontSize = 14 });
+        saveTemplateContent.Children.Add(saveTemplateLabel);
+        Button saveTemplate = new() { Content = saveTemplateContent, VerticalAlignment = VerticalAlignment.Stretch };
+        AutomationProperties.SetAutomationId(saveTemplate, "SaveInfoTilePresetButton");
+        Button deleteTemplate = new()
         {
-            TextBlock label = new() { Text = preset.Title, TextTrimming = TextTrimming.CharacterEllipsis };
-            ComboBoxItem item = new() { Content = label, Tag = preset };
-            item.SetBinding(AutomationProperties.NameProperty, new Binding
-            {
-                Source = label,
-                Path = new PropertyPath(nameof(TextBlock.Text)),
-                Mode = BindingMode.OneWay,
-            });
-            templateLabels.Add(item, label);
-            ToolTipService.SetToolTip(item, preset.Description);
-            templatePicker.Items.Add(item);
-            if (_viewModel.VisibleInfoTiles.Select(static tile => tile.Id).SequenceEqual(preset.TileIds, StringComparer.Ordinal))
-            {
-                templatePicker.SelectedItem = item;
-            }
+            Content = new FontIcon { Glyph = "", FontSize = 14 },
+            Width = 36,
+            Padding = new Thickness(0),
+            VerticalAlignment = VerticalAlignment.Stretch,
+            IsEnabled = false,
+        };
+        AutomationProperties.SetAutomationId(deleteTemplate, "DeleteInfoTilePresetButton");
+        void LocalizeDeleteTemplate()
+        {
+            string label = _getString("Master.Preset.Delete");
+            AutomationProperties.SetName(deleteTemplate, label);
+            ToolTipService.SetToolTip(deleteTemplate, label);
         }
-        optionList.SearchLeadingContent = templatePicker;
+        LocalizeDeleteTemplate();
+
+        Grid templateRow = new() { ColumnSpacing = 8, Margin = new Thickness(0, 0, InfoTileEditorScrollGutter, 0) };
+        templateRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        templateRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        templateRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        Grid.SetColumn(saveTemplate, 1);
+        Grid.SetColumn(deleteTemplate, 2);
+        templateRow.Children.Add(templatePicker);
+        templateRow.Children.Add(saveTemplate);
+        templateRow.Children.Add(deleteTemplate);
+
+        // Save-as flyout: names a template from the current draft; an existing custom name is updated in place.
+        TextBlock saveTemplateTitle = new() { Text = _getString("Master.Preset.SaveAs"), Style = (Style)Microsoft.UI.Xaml.Application.Current.Resources["BodyStrongTextBlockStyle"] };
+        TextBox templateName = new()
+        {
+            PlaceholderText = _getString("Master.Preset.NamePlaceholder"),
+            MaxLength = MasterInfoTilePresetList.MaximumNameLength,
+            Width = 260,
+        };
+        AutomationProperties.SetAutomationId(templateName, "InfoTilePresetNameBox");
+        AutomationProperties.SetName(templateName, _getString("Master.Preset.NamePlaceholder"));
+        TextBlock templateError = new()
+        {
+            TextWrapping = TextWrapping.Wrap,
+            MaxWidth = 260,
+            Visibility = Visibility.Collapsed,
+            Foreground = (Brush)Microsoft.UI.Xaml.Application.Current.Resources["SystemFillColorCriticalBrush"],
+            Style = (Style)Microsoft.UI.Xaml.Application.Current.Resources["CaptionTextBlockStyle"],
+        };
+        AutomationProperties.SetLiveSetting(templateError, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Assertive);
+        Button confirmSaveTemplate = new()
+        {
+            Content = _getString("Command.Save"),
+            Style = (Style)Microsoft.UI.Xaml.Application.Current.Resources["AccentButtonStyle"],
+            HorizontalAlignment = HorizontalAlignment.Right,
+            MinWidth = 96,
+        };
+        StackPanel saveTemplatePanel = new() { Spacing = 10 };
+        saveTemplatePanel.Children.Add(saveTemplateTitle);
+        saveTemplatePanel.Children.Add(templateName);
+        saveTemplatePanel.Children.Add(templateError);
+        saveTemplatePanel.Children.Add(confirmSaveTemplate);
+        Flyout saveTemplateFlyout = new() { Content = saveTemplatePanel, Placement = FlyoutPlacementMode.BottomEdgeAlignedRight };
+        saveTemplate.Flyout = saveTemplateFlyout;
 
         StackPanel panel = new()
         {
@@ -783,18 +844,14 @@ public sealed partial class MasterControl : Page
             TextWrapping = TextWrapping.WrapWholeWords,
         };
         panel.Children.Add(editorDescription);
+        panel.Children.Add(templateHeader);
+        panel.Children.Add(templateRow);
         panel.Children.Add(optionList);
 
         TextBlock selectionCount = new()
         {
             FlowDirection = FlowDirection.LeftToRight,
-            TextWrapping = TextWrapping.WrapWholeWords,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-        ContentPresenter selectionCountHost = new()
-        {
-            Content = selectionCount,
-            HorizontalAlignment = HorizontalAlignment.Right,
+            TextWrapping = TextWrapping.NoWrap,
             VerticalAlignment = VerticalAlignment.Center,
         };
         void RefreshSelectionCount()
@@ -812,6 +869,60 @@ public sealed partial class MasterControl : Page
             AutomationProperties.SetName(selectionCount, description);
             ToolTipService.SetToolTip(selectionCount, description);
         }
+
+        // The draft order: the applied template or the current layout first, then newly checked tiles.
+        List<string> CurrentDraftOrder()
+        {
+            HashSet<string> selectedIds = optionList.SelectedOptions
+                .Select(static option => option.Id)
+                .ToHashSet(StringComparer.Ordinal);
+            IEnumerable<string> initialOrder = templateOrder ?? _viewModel.VisibleInfoTiles.Select(static tile => tile.Id);
+            List<string> ordered = initialOrder.Where(selectedIds.Contains).ToList();
+            HashSet<string> orderedIds = ordered.ToHashSet(StringComparer.Ordinal);
+            foreach (SearchableOptionItem option in optionList.Options)
+            {
+                if (selectedIds.Contains(option.Id) && orderedIds.Add(option.Id))
+                {
+                    ordered.Add(option.Id);
+                }
+            }
+
+            return ordered;
+        }
+
+        void SelectTemplate(MasterInfoTilePreset? preset)
+        {
+            templatePicker.SelectedItem = preset is null
+                ? null
+                : templatePicker.Items.OfType<ComboBoxItem>().FirstOrDefault(item => item.Tag is MasterInfoTilePreset candidate && candidate.Id == preset.Id);
+            ToolTipService.SetToolTip(templatePicker, (templatePicker.SelectedItem as ComboBoxItem)?.Tag is MasterInfoTilePreset chosen ? chosen.Description : null);
+            deleteTemplate.IsEnabled = templatePicker.SelectedItem is not null;
+        }
+
+        void RebuildTemplates(string? selectId)
+        {
+            bool previousApplying = applyingTemplate;
+            applyingTemplate = true;
+            try
+            {
+                presets = MasterInfoTilePresetCatalog.Create(_getString, _viewModel.RecommendedInfoTileIds, templateEntries);
+                templatePicker.Items.Clear();
+                foreach (MasterInfoTilePreset preset in presets)
+                {
+                    TextBlock label = new() { Text = preset.Title, TextTrimming = TextTrimming.CharacterEllipsis };
+                    ComboBoxItem item = new() { Content = label, Tag = preset };
+                    AutomationProperties.SetName(item, preset.Title);
+                    ToolTipService.SetToolTip(item, preset.Description);
+                    templatePicker.Items.Add(item);
+                }
+
+                List<string> draft = CurrentDraftOrder();
+                SelectTemplate(presets.FirstOrDefault(preset => preset.Id == selectId)
+                    ?? presets.FirstOrDefault(preset => preset.TileIds.SequenceEqual(draft, StringComparer.Ordinal)));
+            }
+            finally { applyingTemplate = previousApplying; }
+        }
+
         void SetAllChecked(bool isChecked)
         {
             // Bulk visibility includes options hidden by the search; only Save commits the draft.
@@ -819,15 +930,13 @@ public sealed partial class MasterControl : Page
             {
                 option.IsChecked = isChecked;
             }
-            templatePicker.SelectedIndex = -1;
-            ToolTipService.SetToolTip(templatePicker, null);
+            SelectTemplate(null);
             RefreshSelectionCount();
         }
         optionList.SelectionChanged += (_, _) =>
         {
             if (applyingTemplate) { return; }
-            templatePicker.SelectedIndex = -1;
-            ToolTipService.SetToolTip(templatePicker, null);
+            SelectTemplate(null);
             RefreshSelectionCount();
         };
         void ApplyTemplate(IReadOnlyList<string> order)
@@ -838,12 +947,7 @@ public sealed partial class MasterControl : Page
                 templateOrder = order.ToArray();
                 HashSet<string> selected = order.ToHashSet(StringComparer.Ordinal);
                 foreach (SearchableOptionItem option in optionList.Options) { option.IsChecked = selected.Contains(option.Id); }
-                templatePicker.SelectedItem = templatePicker.Items.OfType<ComboBoxItem>().FirstOrDefault(
-                    item => item.Tag is MasterInfoTilePreset preset && preset.TileIds.SequenceEqual(order, StringComparer.Ordinal));
-                if (templatePicker.SelectedItem is ComboBoxItem { Tag: MasterInfoTilePreset chosen })
-                {
-                    ToolTipService.SetToolTip(templatePicker, chosen.Description);
-                }
+                SelectTemplate(presets.FirstOrDefault(preset => preset.TileIds.SequenceEqual(order, StringComparer.Ordinal)));
                 RefreshSelectionCount();
             }
             finally { applyingTemplate = false; }
@@ -855,6 +959,110 @@ public sealed partial class MasterControl : Page
                 ApplyTemplate(chosen.TileIds);
             }
         };
+
+        // Template list changes persist immediately and report failures without discarding the tile draft.
+        void SetTemplateControlsEnabled(bool enabled)
+        {
+            templatePicker.IsEnabled = enabled;
+            saveTemplate.IsEnabled = enabled;
+            confirmSaveTemplate.IsEnabled = enabled;
+            restoreTemplatesEnabled = enabled;
+            deleteTemplate.IsEnabled = enabled && templatePicker.SelectedItem is not null;
+        }
+
+        async Task<bool> PersistTemplatesAsync(Func<Task<IReadOnlyList<MasterInfoTilePresetEntry>>> change, string? selectId)
+        {
+            SetTemplateControlsEnabled(false);
+            try
+            {
+                templateEntries = await change();
+                RebuildTemplates(selectId);
+                return true;
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                return false;
+            }
+            catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
+            {
+                await _errorSink.ReportAsync(new ApplicationError("master-tile-templates", exception), CancellationToken.None);
+                return false;
+            }
+            finally
+            {
+                SetTemplateControlsEnabled(true);
+            }
+        }
+
+        void ShowTemplateError(string message)
+        {
+            templateError.Text = message;
+            templateError.Visibility = Visibility.Visible;
+        }
+        saveTemplateFlyout.Opening += (_, _) =>
+        {
+            templateName.Text = (templatePicker.SelectedItem as ComboBoxItem)?.Tag is MasterInfoTilePreset { IsBuiltIn: false } custom
+                ? custom.Title
+                : string.Empty;
+            templateError.Visibility = Visibility.Collapsed;
+        };
+        saveTemplateFlyout.Opened += (_, _) => templateName.Focus(FocusState.Programmatic);
+        async Task SaveTemplateAsync()
+        {
+            if (!MasterInfoTilePresetList.TryNormalizeName(templateName.Text, out string name))
+            {
+                ShowTemplateError(_getString("Master.Preset.NameInvalid"));
+                return;
+            }
+
+            List<string> draft = CurrentDraftOrder();
+            if (draft.Count == 0)
+            {
+                ShowTemplateError(_getString("Master.Preset.EmptySelection"));
+                return;
+            }
+
+            MasterInfoTilePresetEntry template = MasterInfoTilePresetEntry.Custom(name, draft);
+            List<MasterInfoTilePresetEntry> next = templateEntries.ToList();
+            int existing = next.FindIndex(entry => !entry.IsBuiltIn && string.Equals(entry.Name, name, StringComparison.OrdinalIgnoreCase));
+            if (existing >= 0)
+            {
+                next[existing] = template;
+            }
+            else if (next.Count >= MasterInfoTilePresetList.MaximumEntries)
+            {
+                ShowTemplateError(string.Format(CultureInfo.CurrentCulture, _getString("Master.Preset.TooMany.Format"), MasterInfoTilePresetList.MaximumEntries));
+                return;
+            }
+            else
+            {
+                next.Add(template);
+            }
+
+            templateOrder = draft;
+            if (await PersistTemplatesAsync(() => _viewModel.SaveInfoTilePresetsAsync(next, cancellationToken), "custom:" + name))
+            {
+                saveTemplateFlyout.Hide();
+            }
+        }
+        confirmSaveTemplate.Click += async (_, _) => await SaveTemplateAsync();
+        templateName.KeyDown += async (_, args) =>
+        {
+            if (args.Key != Windows.System.VirtualKey.Enter) { return; }
+            args.Handled = true;
+            await SaveTemplateAsync();
+        };
+        deleteTemplate.Click += async (_, _) =>
+        {
+            if ((templatePicker.SelectedItem as ComboBoxItem)?.Tag is not MasterInfoTilePreset { Entry: { } removed })
+            {
+                return;
+            }
+
+            List<MasterInfoTilePresetEntry> next = templateEntries.Where(entry => !ReferenceEquals(entry, removed)).ToList();
+            await PersistTemplatesAsync(() => _viewModel.SaveInfoTilePresetsAsync(next, cancellationToken), null);
+        };
+
         Button showAll = new() { Content = _getString("Master.Tile.ShowAll") };
         Button hideAll = new() { Content = _getString("Master.Tile.HideAll") };
         AutomationProperties.SetAutomationId(showAll, "ShowAllTilesButton");
@@ -862,30 +1070,39 @@ public sealed partial class MasterControl : Page
         showAll.Click += (_, _) => SetAllChecked(true);
         hideAll.Click += (_, _) => SetAllChecked(false);
         TextBlock restoreLabel = new() { Text = _getString("Master.Tile.RestoreRecommended"), TextWrapping = TextWrapping.WrapWholeWords };
-        HyperlinkButton restoreLayout = new()
-        {
-            Content = restoreLabel,
-            Padding = new Thickness(0),
-            HorizontalAlignment = HorizontalAlignment.Stretch,
-            HorizontalContentAlignment = HorizontalAlignment.Left,
-        };
+        HyperlinkButton restoreLayout = new() { Content = restoreLabel, Padding = new Thickness(0) };
         AutomationProperties.SetAutomationId(restoreLayout, "RestoreRecommendedTilesButton");
         restoreLayout.Click += (_, _) => ApplyTemplate(_viewModel.RecommendedInfoTileIds);
-        Grid selectionActions = new() { ColumnSpacing = 10, RowSpacing = 8 };
+        TextBlock restoreTemplatesLabel = new() { Text = _getString("Master.Preset.RestoreDefaults"), TextWrapping = TextWrapping.WrapWholeWords };
+        HyperlinkButton restoreTemplates = new() { Content = restoreTemplatesLabel, Padding = new Thickness(0) };
+        AutomationProperties.SetAutomationId(restoreTemplates, "RestoreDefaultInfoTilePresetsButton");
+        restoreTemplates.Click += async (_, _) =>
+        {
+            if (!restoreTemplatesEnabled) { return; }
+            await PersistTemplatesAsync(() => _viewModel.RestoreDefaultInfoTilePresetsAsync(cancellationToken), null);
+        };
+        StackPanel restoreLinks = new() { Orientation = Orientation.Horizontal, Spacing = 20 };
+        restoreLinks.Children.Add(restoreLayout);
+        restoreLinks.Children.Add(restoreTemplates);
+
+        // Right edges line up with the list rows, which keep a gutter for the vertical scroll bar.
+        Grid selectionActions = new() { ColumnSpacing = 8, RowSpacing = 8, Margin = new Thickness(0, 0, InfoTileEditorScrollGutter, 0) };
         selectionActions.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         selectionActions.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         selectionActions.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         selectionActions.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         selectionActions.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         Grid.SetColumn(hideAll, 1);
-        Grid.SetRow(restoreLayout, 1);
-        Grid.SetColumnSpan(restoreLayout, 3);
-        Grid.SetColumn(selectionCountHost, 2);
+        Grid.SetColumn(selectionCount, 2);
+        selectionCount.HorizontalAlignment = HorizontalAlignment.Right;
+        Grid.SetRow(restoreLinks, 1);
+        Grid.SetColumnSpan(restoreLinks, 3);
         selectionActions.Children.Add(showAll);
         selectionActions.Children.Add(hideAll);
-        selectionActions.Children.Add(restoreLayout);
-        selectionActions.Children.Add(selectionCountHost);
+        selectionActions.Children.Add(selectionCount);
+        selectionActions.Children.Add(restoreLinks);
         panel.Children.Add(selectionActions);
+        RebuildTemplates(null);
         RefreshSelectionCount();
 
         ThemedContentDialog dialog = new()
@@ -897,7 +1114,7 @@ public sealed partial class MasterControl : Page
             DefaultButton = ContentDialogButton.Primary,
             XamlRoot = dialogRoot,
         };
-        dialog.Resources["ContentDialogMaxWidth"] = editorWidth + 48d;
+        dialog.Resources["ContentDialogMaxWidth"] = editorWidth + InfoTileEditorDialogFrame;
 
         void UpdateEditorBounds()
         {
@@ -906,7 +1123,7 @@ public sealed partial class MasterControl : Page
             if (panel.Width != width)
             {
                 panel.Width = width;
-                dialog.Resources["ContentDialogMaxWidth"] = width + 48d;
+                dialog.Resources["ContentDialogMaxWidth"] = width + InfoTileEditorDialogFrame;
             }
             optionList.MaxListHeight = CalculateInfoTilesEditorListHeight(dialogRoot, panel, optionList);
         }
@@ -924,12 +1141,21 @@ public sealed partial class MasterControl : Page
             editorDescription.Text = _viewModel.InfoTileSelectionDescriptionText;
             optionList.SearchPlaceholder = _viewModel.SearchInfoTilesPlaceholderText;
             optionList.EmptyText = _getString("Common.NoMatchingOptions");
-            templatePicker.Header = _getString("Master.Preset.Label");
+            templateHeader.Text = _getString("Master.Preset.Label");
+            AutomationProperties.SetName(templatePicker, templateHeader.Text);
             templatePicker.PlaceholderText = _getString("Master.Preset.Custom");
+            saveTemplateLabel.Text = _getString("Master.Preset.SaveAs");
+            saveTemplateTitle.Text = saveTemplateLabel.Text;
+            templateName.PlaceholderText = _getString("Master.Preset.NamePlaceholder");
+            AutomationProperties.SetName(templateName, templateName.PlaceholderText);
+            confirmSaveTemplate.Content = _getString("Command.Save");
+            LocalizeDeleteTemplate();
             showAll.Content = _getString("Master.Tile.ShowAll");
             hideAll.Content = _getString("Master.Tile.HideAll");
             restoreLabel.Text = _getString("Master.Tile.RestoreRecommended");
             AutomationProperties.SetName(restoreLayout, restoreLabel.Text);
+            restoreTemplatesLabel.Text = _getString("Master.Preset.RestoreDefaults");
+            AutomationProperties.SetName(restoreTemplates, restoreTemplatesLabel.Text);
             bool previousApplying = applyingTemplate;
             applyingTemplate = true;
             try
@@ -941,22 +1167,7 @@ public sealed partial class MasterControl : Page
                         option.UpdateDisplay(tile.Title, tile.TypeText, tile.Description);
                     }
                 }
-                IReadOnlyList<MasterInfoTilePreset> translated = MasterInfoTilePresetCatalog.Create(
-                    _getString, presets.Single(preset => preset.Id == "daily").TileIds);
-                // ComboBox moves the selected UIElement into its faceplate and clears the item's Content.
-                // Keep the label reference independently so it refreshes in either presentation state.
-                foreach ((ComboBoxItem item, TextBlock label) in templateLabels)
-                {
-                    if (item.Tag is not MasterInfoTilePreset preset) { continue; }
-                    MasterInfoTilePreset text = translated.Single(value => value.Id == preset.Id);
-                    label.Text = text.Title;
-                    item.Tag = preset with { Title = text.Title, Description = text.Description };
-                    ToolTipService.SetToolTip(item, text.Description);
-                }
-                if (templatePicker.SelectedItem is ComboBoxItem { Tag: MasterInfoTilePreset selected })
-                {
-                    ToolTipService.SetToolTip(templatePicker, selected.Description);
-                }
+                RebuildTemplates((templatePicker.SelectedItem as ComboBoxItem)?.Tag is MasterInfoTilePreset selected ? selected.Id : null);
                 optionList.RefreshFilter();
             }
             finally { applyingTemplate = previousApplying; }
@@ -986,23 +1197,7 @@ public sealed partial class MasterControl : Page
         }
 
         cancellationToken.ThrowIfCancellationRequested();
-        HashSet<string> selectedIds = optionList.SelectedOptions
-            .Select(static option => option.Id)
-            .ToHashSet(StringComparer.Ordinal);
-        IEnumerable<string> initialOrder = templateOrder ?? _viewModel.VisibleInfoTiles.Select(static tile => tile.Id);
-        List<string> orderedSelectedIds = initialOrder
-            .Where(selectedIds.Contains)
-            .ToList();
-        HashSet<string> orderedIds = orderedSelectedIds.ToHashSet(StringComparer.Ordinal);
-        foreach (SearchableOptionItem option in optionList.Options)
-        {
-            if (selectedIds.Contains(option.Id) && orderedIds.Add(option.Id))
-            {
-                orderedSelectedIds.Add(option.Id);
-            }
-        }
-
-        await _viewModel.SetVisibleInfoTileIdsAsync(orderedSelectedIds, cancellationToken);
+        await _viewModel.SetVisibleInfoTileIdsAsync(CurrentDraftOrder(), cancellationToken);
     }
 
     private void HeroStatusItemGrid_SizeChanged(object sender, SizeChangedEventArgs e)

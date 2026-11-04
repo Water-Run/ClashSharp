@@ -11,6 +11,7 @@ namespace ClashSharp.Tests.Integration;
 public sealed class SettingsEnvelopeRegionalUpgradeTests
 {
     private static readonly string[] NewKeys = ["DataUnitStyle", "RateUnit", "ClockFormat"];
+    private static readonly string[] LaterKeys = ["MasterInfoTilePresets"];
 
     [Fact]
     public void HistoricalEnvelopeKeepsEveryExistingValueAndQueuesOnlyNewFormats()
@@ -18,16 +19,17 @@ public sealed class SettingsEnvelopeRegionalUpgradeTests
         byte[] bytes = VersionOneBytes();
         SettingsEnvelope first = SettingsEnvelopeCodec.Decode(bytes, SettingsRegistry.Default);
         SettingsEnvelope second = SettingsEnvelopeCodec.Decode(bytes, SettingsRegistry.Default);
-        Assert.Equal(3, first.SchemaVersion);
+        Assert.Equal(SettingsEnvelope.CurrentSchemaVersion, first.SchemaVersion);
         Assert.Equal(1, first.EnvelopeRevision);
         Assert.Equal("Dark", first.Desired[SettingsRegistry.Keys.AppThemeMode].Value.CanonicalText);
         Assert.Equal("BinaryWithDecimalLabels", first.Desired[SettingsRegistry.Keys.DataUnitStyle].Value.CanonicalText);
         Assert.Equal("Bytes", first.Desired[SettingsRegistry.Keys.RateUnit].Value.CanonicalText);
         Assert.Equal("FollowSystem", first.Desired[SettingsRegistry.Keys.ClockFormat].Value.CanonicalText);
-        SettingsApplicationBatch batch = Assert.Single(first.PendingApplications, batch => batch.ApplicationKind == SettingApplicationKind.Appearance);
+        SettingsApplicationBatch batch = Assert.Single(first.PendingApplications, batch => batch.ApplicationKind == SettingApplicationKind.Appearance
+            && batch.Entries.Any(entry => entry.Key == SettingsRegistry.Keys.DataUnitStyle));
         Assert.Equal(NewKeys.Order(), batch.Entries.Select(entry => entry.Key.Value).Order());
         Assert.All(NewKeys, key => Assert.Equal(SettingAppliedStateKind.Unknown, first.Applied[new(key)].Kind));
-        Assert.Equal(2, first.MigrationHistory.Count);
+        Assert.Equal([1, 2, 3], first.MigrationHistory.Select(migration => migration.FromSchemaVersion));
         Assert.False(first.Desired[SettingsRegistry.Keys.McpServerEnabled].Value.Get<bool>());
         Assert.Single(first.PendingApplications, batch => batch.ApplicationKind == SettingApplicationKind.McpServer);
         byte[] upgraded = SettingsEnvelopeCodec.Encode(first, SettingsRegistry.Default).Bytes;
@@ -56,6 +58,7 @@ public sealed class SettingsEnvelopeRegionalUpgradeTests
     private static byte[] VersionOneBytes()
     {
         SettingsRegistry historical = SettingsRegistry.Create(SettingsRegistry.Default.Definitions.Where(definition => !NewKeys.Contains(definition.Key.Value)
+            && !LaterKeys.Contains(definition.Key.Value)
             && definition.ApplicationKind != SettingApplicationKind.McpServer));
         SettingsEnvelope source = SettingsEnvelopeTestData.CreateMatchingEnvelope(historical);
         SettingValue dark = historical.Get("AppThemeMode").Normalize("Dark").Value!;

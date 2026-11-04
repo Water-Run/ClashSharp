@@ -68,7 +68,8 @@ public sealed class SettingsRegistryTests
             ["MasterHeroStatusLayout"] =
                 "CoreStatus,SystemProxy,TransparentProxy,CurrentNode,UploadRate,DownloadRate,TotalTraffic,Availability",
             ["MasterInfoTileLayout"] =
-                "core,upload-rate,download-rate,active-connections,session-traffic,core-memory,system-proxy,transparent-proxy,latency,active-profile,current-mode,subscription-usage,subscription-expiry,profile-updated,core-uptime,mihomo-version,proxy-address,system-info,public-ip,connection-test",
+                "upload-rate,download-rate,session-traffic,current-node,latency,active-connections,active-profile,subscription-usage,subscription-expiry,system-proxy,transparent-proxy,connection-test",
+            ["MasterInfoTilePresets"] = "@daily;@traffic;@subscriptions;@diagnostics;@minimal",
             ["ConnectionTestProxyUrl1"] = "https://www.google.com",
             ["ConnectionTestProxyUrl2"] = "https://github.com",
             ["ConnectionTestDirectUrl"] = "https://www.baidu.com",
@@ -657,7 +658,7 @@ public sealed class SettingsRegistryTests
         },
         {
             SettingsResetScope.MasterControl,
-            ["MasterHeroStatusLayout", "MasterInfoTileLayout"]
+            ["MasterHeroStatusLayout", "MasterInfoTileLayout", "MasterInfoTilePresets"]
         },
         {
             SettingsResetScope.All,

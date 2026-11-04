@@ -47,4 +47,5 @@ internal sealed class DataPackageSettingsSnapshot(SettingsEnvelope envelope) : I
     public string ConnectionTestDirectUrl { get => Read<string>(nameof(ConnectionTestDirectUrl)); set => throw ReadOnly(); }
     public string MasterHeroStatusLayout { get => Read<string>(nameof(MasterHeroStatusLayout)); set => throw ReadOnly(); }
     public string MasterInfoTileLayout { get => Read<string>(nameof(MasterInfoTileLayout)); set => throw ReadOnly(); }
+    public string MasterInfoTilePresets { get => Read<string>(nameof(MasterInfoTilePresets)); set => throw ReadOnly(); }
 }

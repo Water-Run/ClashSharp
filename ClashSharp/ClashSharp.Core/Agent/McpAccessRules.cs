@@ -15,7 +15,7 @@ public static class McpAccessRules
         SettingsRegistry.Keys.TriggerNotificationsEnabled, SettingsRegistry.Keys.TrayUseMonochromeInactiveIcon,
         SettingsRegistry.Keys.TrayVisibleFeatureIds, SettingsRegistry.Keys.NotificationEnabled,
         SettingsRegistry.Keys.NotificationLevel, SettingsRegistry.Keys.MasterHeroStatusLayout,
-        SettingsRegistry.Keys.MasterInfoTileLayout,
+        SettingsRegistry.Keys.MasterInfoTileLayout, SettingsRegistry.Keys.MasterInfoTilePresets,
     }.ToFrozenSet();
 
     private static readonly FrozenSet<SettingKey> ConnectivitySettings = new[]

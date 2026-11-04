@@ -14,12 +14,13 @@ public sealed class SettingsEnvelopeAgentUpgradeTests
     [Fact]
     public void VersionTwoKeepsAllExistingEntriesAndAddsOnlyDisabledLocalAgentDefaults()
     {
-        SettingsRegistry historical = SettingsRegistry.Create(SettingsRegistry.Default.Definitions.Where(definition => definition.ApplicationKind != SettingApplicationKind.McpServer));
+        SettingsRegistry historical = SettingsRegistry.Create(SettingsRegistry.Default.Definitions.Where(definition => definition.ApplicationKind != SettingApplicationKind.McpServer
+            && definition.Key != SettingsRegistry.Keys.MasterInfoTilePresets));
         SettingsEnvelope before = SettingsEnvelopeTestData.CreateMatchingEnvelope(historical);
         byte[] bytes = VersionTwo(SettingsEnvelopeCodec.Encode(before, historical).Bytes);
         SettingsEnvelope after = SettingsEnvelopeCodec.Decode(bytes, SettingsRegistry.Default);
-        Assert.Equal(3, after.SchemaVersion);
-        Assert.Equal(37, after.Desired.Count);
+        Assert.Equal(SettingsEnvelope.CurrentSchemaVersion, after.SchemaVersion);
+        Assert.Equal(38, after.Desired.Count);
         foreach (var entry in before.Desired)
         {
             Assert.Equal(entry.Value, after.Desired[entry.Key]);
@@ -27,10 +28,10 @@ public sealed class SettingsEnvelopeAgentUpgradeTests
         }
         Assert.False(after.Desired[SettingsRegistry.Keys.McpServerEnabled].Value.Get<bool>());
         Assert.Equal(1, after.Desired[SettingsRegistry.Keys.McpAllowedScopes].Value.Get<int>());
-        SettingsApplicationBatch batch = Assert.Single(after.PendingApplications);
-        Assert.Equal(SettingApplicationKind.McpServer, batch.ApplicationKind);
+        Assert.Equal(2, after.PendingApplications.Count);
+        SettingsApplicationBatch batch = Assert.Single(after.PendingApplications, batch => batch.ApplicationKind == SettingApplicationKind.McpServer);
         Assert.Equal(3, batch.Entries.Count);
-        Assert.Equal(2, Assert.Single(after.MigrationHistory).FromSchemaVersion);
+        Assert.Equal([2, 3], after.MigrationHistory.Select(migration => migration.FromSchemaVersion));
         Assert.Equal(SettingsEnvelopeCodec.Encode(after, SettingsRegistry.Default).Bytes,
             SettingsEnvelopeCodec.Encode(SettingsEnvelopeCodec.Decode(bytes, SettingsRegistry.Default), SettingsRegistry.Default).Bytes);
     }

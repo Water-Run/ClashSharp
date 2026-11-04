@@ -27,7 +27,7 @@ public sealed class AppearanceSettingsParticipantTests
         IAppearanceSettingsReader reader = participant;
         AppearanceSettingsSnapshot snapshot = reader.CaptureSnapshot();
         Assert.Same(generation, snapshot.Generation);
-        Assert.Equal(9, snapshot.Values.Count);
+        Assert.Equal(10, snapshot.Values.Count);
         Assert.True(snapshot.Get<bool>(SettingsRegistry.Keys.TrayUseMonochromeInactiveIcon));
         Assert.Throws<KeyNotFoundException>(() => snapshot.Get<AppThemeMode>(SettingsRegistry.Keys.AppThemeMode));
         Assert.Throws<NotSupportedException>(() => ((IDictionary<SettingKey, SettingValue>)snapshot.Values).Clear());
@@ -48,6 +48,7 @@ public sealed class AppearanceSettingsParticipantTests
             Change("TrayVisibleFeatureIds", "settings,safe-exit"), Change("MainlandChinaFeatureMode", "Disabled"),
             Change("MainlandChinaUrlBlockingEnabled", "true"), Change("MasterHeroStatusLayout", ReverseDefault("MasterHeroStatusLayout")),
             Change("MasterInfoTileLayout", ReverseDefault("MasterInfoTileLayout")),
+            Change("MasterInfoTilePresets", "@minimal;custom:Work:latency,current-node"),
             Change("DataUnitStyle", "Binary"), Change("RateUnit", "Bits"), Change("ClockFormat", "TwentyFourHour")];
         Assert.Equal(SettingsRegistry.Default.Definitions.Where(definition => definition.ApplicationKind == SettingApplicationKind.Appearance)
             .Select(definition => definition.Key).OrderBy(key => key.Value), changes.Select(change => change.Key).OrderBy(key => key.Value));

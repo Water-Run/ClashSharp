@@ -85,6 +85,8 @@ internal interface IClashDataPackageSettings
     string MasterHeroStatusLayout { get; set; }
 
     string MasterInfoTileLayout { get; set; }
+
+    string MasterInfoTilePresets { get; set; }
 }
 
 /// <summary>Executes package settings batches under an explicitly owned process admission lease.</summary>
@@ -166,6 +168,7 @@ internal sealed partial class ClashDataPackageService
         StringSetting(nameof(IClashDataPackageSettings.ConnectionTestDirectUrl), settings => settings.ConnectionTestDirectUrl, (settings, value) => settings.ConnectionTestDirectUrl = value),
         RegisteredStringSetting(SettingsRegistry.Keys.MasterHeroStatusLayout, settings => settings.MasterHeroStatusLayout, (settings, value) => settings.MasterHeroStatusLayout = value),
         RegisteredStringSetting(SettingsRegistry.Keys.MasterInfoTileLayout, settings => settings.MasterInfoTileLayout, (settings, value) => settings.MasterInfoTileLayout = value),
+        RegisteredStringSetting(SettingsRegistry.Keys.MasterInfoTilePresets, settings => settings.MasterInfoTilePresets, (settings, value) => settings.MasterInfoTilePresets = value),
     ];
 
     /// <summary>Initializes a data package service.</summary>

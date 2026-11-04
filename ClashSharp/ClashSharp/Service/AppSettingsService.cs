@@ -24,6 +24,9 @@ public sealed partial class AppSettingsService :
     private static readonly SettingDefinition MasterInfoTileLayoutDefinition =
         SettingsRegistry.Default.Get(SettingsRegistry.Keys.MasterInfoTileLayout.Value);
 
+    private static readonly SettingDefinition MasterInfoTilePresetsDefinition =
+        SettingsRegistry.Default.Get(SettingsRegistry.Keys.MasterInfoTilePresets.Value);
+
     private static readonly Lazy<AppSettingsService> SharedSettings = new(static () => new AppSettingsService());
 
     /// <summary>Shared singleton instance opened when production first requests it.</summary>
@@ -128,6 +131,7 @@ public sealed partial class AppSettingsService :
 
     /// <summary>Storage key for the ordered visible information tiles on the master-control page.</summary>
     private const string KeyMasterInfoTileLayout = "MasterInfoTileLayout";
+    private const string KeyMasterInfoTilePresets = "MasterInfoTilePresets";
 
     private const string KeyConnectionTestProxyUrl1 = "ConnectionTestProxyUrl1";
     private const string KeyConnectionTestProxyUrl2 = "ConnectionTestProxyUrl2";
@@ -180,6 +184,7 @@ public sealed partial class AppSettingsService :
         KeyConnectionTestUrl,
         KeyMasterHeroStatusLayout,
         KeyMasterInfoTileLayout,
+        KeyMasterInfoTilePresets,
         KeyConnectionTestProxyUrl1,
         KeyConnectionTestProxyUrl2,
         KeyConnectionTestDirectUrl,
@@ -477,6 +482,15 @@ public sealed partial class AppSettingsService :
         set => WriteOrdinary(editor => editor.MasterInfoTileLayout = value);
     }
 
+    /// <summary>Gets or sets the canonical Master Control layout template list.</summary>
+    public string MasterInfoTilePresets
+    {
+        get => GetString(
+            KeyMasterInfoTilePresets,
+            MasterInfoTilePresetsDefinition.DefaultValue.CanonicalText);
+        set => WriteOrdinary(editor => editor.MasterInfoTilePresets = value);
+    }
+
     /// <summary>Gets or sets the first URL tested through the configured proxy path.</summary>
     /// <value>An absolute HTTP or HTTPS probe URL.</value>
     public string ConnectionTestProxyUrl1
@@ -625,6 +639,19 @@ public sealed partial class AppSettingsService :
         {
             return GetValue(key) is string value ? value : defaultValue;
         }
+    }
+
+    private static string NormalizeMasterInfoTilePresets(string value)
+    {
+        SettingNormalizationResult normalized = MasterInfoTilePresetsDefinition.Normalize(value);
+        if (!normalized.IsSuccess)
+        {
+            throw new ArgumentException(
+                $"Master information tile template list is invalid: {normalized.Error!.Code}.",
+                nameof(value));
+        }
+
+        return normalized.Value!.CanonicalText;
     }
 
     private static string NormalizeMasterInfoTileLayout(string value)

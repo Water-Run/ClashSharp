@@ -878,6 +878,21 @@ internal sealed partial class MasterControlViewModel : ObservableObject, ILocali
     }
 
     /// <summary>Awaits persistence before publishing the selected tile layout.</summary>
+    /// <summary>Gets the saved layout template list in display order.</summary>
+    public IReadOnlyList<MasterInfoTilePresetEntry> InfoTilePresetEntries => _infoTileLayout.GetPresets();
+
+    /// <summary>Persists the layout template list; independent of the visible tile layout.</summary>
+    /// <param name="entries">Templates in display order.</param>
+    /// <param name="cancellationToken">Editor operation lifetime.</param>
+    public Task<IReadOnlyList<MasterInfoTilePresetEntry>> SaveInfoTilePresetsAsync(
+        IEnumerable<MasterInfoTilePresetEntry> entries,
+        CancellationToken cancellationToken) => _infoTileLayout.SavePresetsAsync(entries, cancellationToken);
+
+    /// <summary>Restores the built-in layout template list, removing saved custom templates.</summary>
+    /// <param name="cancellationToken">Editor operation lifetime.</param>
+    public Task<IReadOnlyList<MasterInfoTilePresetEntry>> RestoreDefaultInfoTilePresetsAsync(CancellationToken cancellationToken) =>
+        _infoTileLayout.RestoreDefaultPresetsAsync(cancellationToken);
+
     public Task SetVisibleInfoTileIdsAsync(IEnumerable<string> tileIds, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(tileIds);

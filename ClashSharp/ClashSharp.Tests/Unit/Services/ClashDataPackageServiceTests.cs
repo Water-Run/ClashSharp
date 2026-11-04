@@ -1306,6 +1306,8 @@ public sealed partial class ClashDataPackageServiceTests
 
         public string MasterInfoTileLayout { get; set; } =
             "core,upload-rate,download-rate,active-connections,transparent-proxy,latency,active-profile,current-mode";
+
+        public string MasterInfoTilePresets { get; set; } = MasterInfoTilePresetList.DefaultCanonicalText;
     }
 
     private sealed class ThrowingClashDataPackageSettings : IClashDataPackageSettings
@@ -1400,6 +1402,8 @@ public sealed partial class ClashDataPackageServiceTests
 
         public string MasterInfoTileLayout { get; set; } =
             "core,upload-rate,download-rate,active-connections,transparent-proxy,latency,active-profile,current-mode";
+
+        public string MasterInfoTilePresets { get; set; } = MasterInfoTilePresetList.DefaultCanonicalText;
     }
 
     private sealed class TemporaryDirectory : IDisposable

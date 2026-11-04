@@ -117,8 +117,8 @@ public sealed class SettingsEnvelopeCodecTests
 
     /// <summary>Verifies unknown and duplicate members are rejected at the storage boundary.</summary>
     [Theory]
-    [InlineData("\"schemaVersion\":3", "\"schemaVersion\":3,\"unexpected\":true")]
-    [InlineData("\"schemaVersion\":3", "\"schemaVersion\":3,\"schemaVersion\":3")]
+    [InlineData("\"schemaVersion\":4", "\"schemaVersion\":4,\"unexpected\":true")]
+    [InlineData("\"schemaVersion\":4", "\"schemaVersion\":4,\"schemaVersion\":4")]
     public void Decode_UnexpectedShape_IsRejected(string source, string replacement)
     {
         SettingsEnvelopeCodec.EncodedSettingsEnvelope encoded =

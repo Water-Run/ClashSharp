@@ -32,7 +32,8 @@
     </UserControl.Resources>
 
     <StackPanel Spacing="10">
-        <Grid x:Name="SearchRow" ColumnDefinitions="Auto,*">
+        <!-- The right margin matches the list padding reserved for its scroll bar so all edges align. -->
+        <Grid x:Name="SearchRow" ColumnDefinitions="Auto,*" Margin="0,0,14,0">
             <ContentPresenter x:Name="SearchLeadingPresenter" Visibility="Collapsed"
                               Content="{Binding SearchLeadingContent, ElementName=Root}" VerticalAlignment="Bottom" />
             <TextBox

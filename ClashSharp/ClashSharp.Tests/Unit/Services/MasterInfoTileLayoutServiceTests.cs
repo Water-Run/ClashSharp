@@ -1,4 +1,5 @@
 using ClashSharp.Service;
+using ClashSharp.Settings;
 
 namespace ClashSharp.Tests.Unit.Services;
 
@@ -44,14 +45,12 @@ public sealed class MasterInfoTileLayoutServiceTests
 
         Assert.Equal(
             [
-                "core",
                 "upload-rate",
                 "download-rate",
-                "active-connections",
-                "transparent-proxy",
                 "latency",
+                "active-connections",
                 "active-profile",
-                "current-mode",
+                "transparent-proxy",
             ],
             layout);
     }
@@ -82,15 +81,69 @@ public sealed class MasterInfoTileLayoutServiceTests
         Assert.Equal("memory-usage,core", settings.MasterInfoTileLayout);
     }
 
+    [Fact]
+    public void GetPresets_WhenStoredListIsUnreadable_UsesTheBuiltInList()
+    {
+        FakeInfoTileLayoutSettings settings = new() { MasterInfoTilePresets = "not-a-template" };
+        MasterInfoTileLayoutService service = new(settings);
+
+        IReadOnlyList<MasterInfoTilePresetEntry> presets = service.GetPresets();
+
+        Assert.Equal(MasterInfoTilePresetList.BuiltInIds, presets.Select(static entry => entry.BuiltInId));
+    }
+
+    [Fact]
+    public async Task SavePresets_PersistsCanonicalOrderAndRestoreRemovesCustomTemplates()
+    {
+        FakeInfoTileLayoutSettings settings = new();
+        MasterInfoTileLayoutService service = new(settings);
+
+        IReadOnlyList<MasterInfoTilePresetEntry> saved = await service.SavePresetsAsync(
+            [MasterInfoTilePresetEntry.Custom(" Work ", ["Latency", "core"]), MasterInfoTilePresetEntry.BuiltIn("minimal")],
+            CancellationToken.None);
+
+        Assert.Equal("custom:Work:latency,core;@minimal", settings.MasterInfoTilePresets);
+        Assert.Equal(new string?[] { "Work", null }, saved.Select(static entry => entry.Name));
+        Assert.Equal(saved.Select(static entry => entry.Name), service.GetPresets().Select(static entry => entry.Name));
+
+        IReadOnlyList<MasterInfoTilePresetEntry> restored = await service.RestoreDefaultPresetsAsync(CancellationToken.None);
+
+        Assert.Equal(MasterInfoTilePresetList.DefaultCanonicalText, settings.MasterInfoTilePresets);
+        Assert.All(restored, static entry => Assert.True(entry.IsBuiltIn));
+    }
+
+    [Fact]
+    public async Task SavePresets_RejectsListsBeyondTheLimitWithoutWriting()
+    {
+        FakeInfoTileLayoutSettings settings = new();
+        MasterInfoTileLayoutService service = new(settings);
+        MasterInfoTilePresetEntry[] tooMany = Enumerable.Range(0, MasterInfoTilePresetList.MaximumEntries + 1)
+            .Select(static index => MasterInfoTilePresetEntry.Custom($"T{index}", ["core"]))
+            .ToArray();
+
+        await Assert.ThrowsAsync<ArgumentException>(() => service.SavePresetsAsync(tooMany, CancellationToken.None));
+
+        Assert.Equal(MasterInfoTilePresetList.DefaultCanonicalText, settings.MasterInfoTilePresets);
+    }
+
     private sealed class FakeInfoTileLayoutSettings : IMasterInfoTileLayoutSettings
     {
         public string MasterInfoTileLayout { get; set; } =
             string.Join(",", MasterInfoTileLayoutService.DefaultLayout);
 
+        public string MasterInfoTilePresets { get; set; } = MasterInfoTilePresetList.DefaultCanonicalText;
+
         public Task SaveInfoTileLayoutAsync(string layout, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
             MasterInfoTileLayout = layout;
+            return Task.CompletedTask;
+        }
+
+        public Task SaveInfoTilePresetsAsync(string presets, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            MasterInfoTilePresets = presets;
             return Task.CompletedTask;
         }
     }

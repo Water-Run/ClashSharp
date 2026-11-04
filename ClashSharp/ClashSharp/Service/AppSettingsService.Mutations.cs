@@ -18,6 +18,9 @@ public sealed partial class AppSettingsService
     Task IMasterInfoTileLayoutSettings.SaveInfoTileLayoutAsync(string layout, CancellationToken cancellationToken) =>
         ApplyLayoutChangeAsync(MasterInfoTileLayoutDefinition, layout, cancellationToken);
 
+    Task IMasterInfoTileLayoutSettings.SaveInfoTilePresetsAsync(string presets, CancellationToken cancellationToken) =>
+        ApplyLayoutChangeAsync(MasterInfoTilePresetsDefinition, presets, cancellationToken);
+
     Task IMasterHeroStatusLayoutSettings.SaveHeroStatusLayoutAsync(string layout, CancellationToken cancellationToken) =>
         ApplyLayoutChangeAsync(MasterHeroStatusLayoutDefinition, layout, cancellationToken);
 
@@ -472,6 +475,12 @@ public sealed partial class AppSettingsService
         {
             get => _owner.MasterInfoTileLayout;
             set => Stage(KeyMasterInfoTileLayout, NormalizeMasterInfoTileLayout(value));
+        }
+
+        public string MasterInfoTilePresets
+        {
+            get => _owner.MasterInfoTilePresets;
+            set => Stage(KeyMasterInfoTilePresets, NormalizeMasterInfoTilePresets(value));
         }
 
         public void ResetAllSettings()

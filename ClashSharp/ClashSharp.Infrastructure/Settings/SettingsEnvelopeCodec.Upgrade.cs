@@ -10,6 +10,7 @@ internal static partial class SettingsEnvelopeCodec
     [SettingsRegistry.Keys.DataUnitStyle, SettingsRegistry.Keys.RateUnit, SettingsRegistry.Keys.ClockFormat];
     private static readonly SettingKey[] VersionThreeKeys =
     [SettingsRegistry.Keys.McpServerEnabled, SettingsRegistry.Keys.McpServerPort, SettingsRegistry.Keys.McpAllowedScopes];
+    private static readonly SettingKey[] VersionFourKeys = [SettingsRegistry.Keys.MasterInfoTilePresets];
 
     /// <summary>Projects a fully validated historical envelope into the additive display schema.</summary>
     /// <remarks>
@@ -25,7 +26,7 @@ internal static partial class SettingsEnvelopeCodec
             throw Error("settings.persistence.envelope.schema_unsupported", "$.payload.schemaVersion");
         }
         SettingsRegistry historical = SettingsRegistry.Create(registry.Definitions.Where(definition =>
-            !VersionTwoKeys.Contains(definition.Key) && !VersionThreeKeys.Contains(definition.Key)));
+            !VersionTwoKeys.Contains(definition.Key) && !VersionThreeKeys.Contains(definition.Key) && !VersionFourKeys.Contains(definition.Key)));
         SettingsEnvelope validationView = new(SettingsEnvelope.CurrentSchemaVersion, source.EnvelopeRevision,
             source.Desired, source.Applied, source.PendingApplications, source.MigrationHistory);
         if (!new SettingsEnvelopeValidator(historical).Validate(validationView).IsValid)
@@ -60,7 +61,8 @@ internal static partial class SettingsEnvelopeCodec
         {
             throw Error("settings.persistence.envelope.schema_unsupported", "$.payload.schemaVersion");
         }
-        SettingsRegistry historical = SettingsRegistry.Create(registry.Definitions.Where(definition => !VersionThreeKeys.Contains(definition.Key)));
+        SettingsRegistry historical = SettingsRegistry.Create(registry.Definitions.Where(definition =>
+            !VersionThreeKeys.Contains(definition.Key) && !VersionFourKeys.Contains(definition.Key)));
         SettingsEnvelope validationView = new(SettingsEnvelope.CurrentSchemaVersion, source.EnvelopeRevision,
             source.Desired, source.Applied, source.PendingApplications, source.MigrationHistory);
         if (!new SettingsEnvelopeValidator(historical).Validate(validationView).IsValid)
@@ -78,11 +80,45 @@ internal static partial class SettingsEnvelopeCodec
         SettingsApplicationBatch agents = new(Identity("batch"), SettingsApplicationBatchKind.LiveReconcile,
             sequence, Identity("attempt"), SettingsApplicationBatchState.Pending, SettingApplicationKind.McpServer,
             VersionThreeKeys.Select(key => SettingsApplicationBatchEntry.Create(key, desired[key])));
-        return new(SettingsEnvelope.CurrentSchemaVersion, source.EnvelopeRevision, desired, applied,
+        return new(3, source.EnvelopeRevision, desired, applied,
             source.PendingApplications.Append(agents),
             source.MigrationHistory.Append(new SettingsMigrationRecord(Identity("migration"), 2, 3, sourceHash)));
 
         Guid Identity(string purpose) => new(SHA256.HashData(Encoding.UTF8.GetBytes(
             $"clashsharp-agent-schema-v3/{sourceHash}/{purpose}")).AsSpan(0, 16));
+    }
+
+    /// <summary>Adds the default Master Control layout template list without changing any existing preference.</summary>
+    private static SettingsEnvelope UpgradeVersionThree(SettingsEnvelope source, SettingsRegistry registry, string sourceHash)
+    {
+        if (VersionFourKeys.Any(key => !registry.Definitions.Any(definition => definition.Key == key))
+            || source.MigrationHistory.Any(migration => migration.ToSchemaVersion > 3))
+        {
+            throw Error("settings.persistence.envelope.schema_unsupported", "$.payload.schemaVersion");
+        }
+        SettingsRegistry historical = SettingsRegistry.Create(registry.Definitions.Where(definition => !VersionFourKeys.Contains(definition.Key)));
+        SettingsEnvelope validationView = new(SettingsEnvelope.CurrentSchemaVersion, source.EnvelopeRevision,
+            source.Desired, source.Applied, source.PendingApplications, source.MigrationHistory);
+        if (!new SettingsEnvelopeValidator(historical).Validate(validationView).IsValid)
+        {
+            throw Error("settings.persistence.envelope.legacy_invalid", "$.payload");
+        }
+        Dictionary<SettingKey, SettingDesiredEntry> desired = source.Desired.ToDictionary();
+        Dictionary<SettingKey, SettingAppliedState> applied = source.Applied.ToDictionary();
+        foreach (SettingKey key in VersionFourKeys)
+        {
+            desired.Add(key, new(registry.Get(key.Value).DefaultValue, keyDesiredRevision: 1));
+            applied.Add(key, SettingAppliedState.Unknown(SettingAppliedUnknownReason.NotObserved, SettingAppliedUnknownHandling.QueueApplication));
+        }
+        long sequence = checked(source.PendingApplications.Select(batch => batch.CreationSequence).DefaultIfEmpty(0).Max() + 1);
+        SettingsApplicationBatch templates = new(Identity("batch"), SettingsApplicationBatchKind.LiveReconcile,
+            sequence, Identity("attempt"), SettingsApplicationBatchState.Pending, SettingApplicationKind.Appearance,
+            VersionFourKeys.Select(key => SettingsApplicationBatchEntry.Create(key, desired[key])));
+        return new(SettingsEnvelope.CurrentSchemaVersion, source.EnvelopeRevision, desired, applied,
+            source.PendingApplications.Append(templates),
+            source.MigrationHistory.Append(new SettingsMigrationRecord(Identity("migration"), 3, 4, sourceHash)));
+
+        Guid Identity(string purpose) => new(SHA256.HashData(Encoding.UTF8.GetBytes(
+            $"clashsharp-tile-template-schema-v4/{sourceHash}/{purpose}")).AsSpan(0, 16));
     }
 }

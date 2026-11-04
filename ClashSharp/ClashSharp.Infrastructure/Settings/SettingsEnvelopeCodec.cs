@@ -87,6 +87,10 @@ internal static partial class SettingsEnvelopeCodec
             {
                 upgraded = UpgradeVersionTwo(upgraded, registry, EncodeCanonical(upgraded).ContentHash);
             }
+            if (upgraded.SchemaVersion == 3)
+            {
+                upgraded = UpgradeVersionThree(upgraded, registry, EncodeCanonical(upgraded).ContentHash);
+            }
             _ = Encode(upgraded, registry);
             EncodedSettingsEnvelope canonical = EncodeCanonical(envelope);
             if (!bytes.Span.SequenceEqual(canonical.Bytes))

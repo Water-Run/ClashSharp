@@ -641,9 +641,8 @@ public sealed partial class MasterControlViewModelTests
         Assert.True(viewModel.InfoTiles.Count >= 49);
         Assert.Equal(viewModel.InfoTiles.Count, viewModel.InfoTiles.Select(static tile => tile.Id).Distinct(StringComparer.Ordinal).Count());
         Assert.Equal(
-            ["core", "upload-rate", "download-rate", "active-connections", "session-traffic", "core-memory", "system-proxy",
-                "transparent-proxy", "latency", "active-profile", "current-mode", "subscription-usage", "subscription-expiry",
-                "profile-updated", "core-uptime", "mihomo-version", "proxy-address", "system-info", "public-ip", "connection-test"],
+            ["upload-rate", "download-rate", "session-traffic", "current-node", "latency", "active-connections",
+                "active-profile", "subscription-usage", "subscription-expiry", "system-proxy", "transparent-proxy", "connection-test"],
             viewModel.VisibleInfoTiles.Select(tile => tile.Id));
         Assert.DoesNotContain(viewModel.InfoTiles, tile => tile.Id == "edit-tiles");
         Assert.DoesNotContain(viewModel.InfoTiles, tile => tile.Id == "backup");
@@ -1782,6 +1781,23 @@ public sealed partial class MasterControlViewModelTests
             await (AfterSaveAsync?.Invoke(cancellationToken) ?? Task.CompletedTask);
             return SavedLayout;
         }
+
+        public IReadOnlyList<MasterInfoTilePresetEntry> SavedPresets { get; set; } =
+            MasterInfoTilePresetList.BuiltInIds.Select(MasterInfoTilePresetEntry.BuiltIn).ToArray();
+
+        public IReadOnlyList<MasterInfoTilePresetEntry> GetPresets() => SavedPresets;
+
+        public Task<IReadOnlyList<MasterInfoTilePresetEntry>> SavePresetsAsync(
+            IEnumerable<MasterInfoTilePresetEntry> entries,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            SavedPresets = entries.ToArray();
+            return Task.FromResult(SavedPresets);
+        }
+
+        public Task<IReadOnlyList<MasterInfoTilePresetEntry>> RestoreDefaultPresetsAsync(CancellationToken cancellationToken) =>
+            SavePresetsAsync(MasterInfoTilePresetList.BuiltInIds.Select(MasterInfoTilePresetEntry.BuiltIn), cancellationToken);
     }
 
     private sealed class TestStableRuntimeDiagnosticException(string diagnosticCode)

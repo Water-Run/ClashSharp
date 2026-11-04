@@ -113,6 +113,9 @@ public sealed partial class SettingsRegistry
         /// <summary>Master-control visible information-tile layout.</summary>
         public static SettingKey MasterInfoTileLayout { get; } = new("MasterInfoTileLayout");
 
+        /// <summary>Gets the key for the saved Master Control layout template list.</summary>
+        public static SettingKey MasterInfoTilePresets { get; } = new("MasterInfoTilePresets");
+
         /// <summary>First proxy-routed connection-test URL.</summary>
         public static SettingKey ConnectionTestProxyUrl1 { get; } = new("ConnectionTestProxyUrl1");
 

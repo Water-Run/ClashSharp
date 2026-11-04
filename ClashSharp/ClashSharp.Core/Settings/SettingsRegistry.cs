@@ -53,27 +53,21 @@ public sealed partial class SettingsRegistry
         "Availability",
     ];
 
+    // Four rows of three: live traffic, the current route, the subscription, and takeover state.
+    // Core status and mode already sit in the overview card and mode buttons above the tiles.
     private static readonly string[] DefaultMasterInfoTileIds =
     [
-        "core",
         "upload-rate",
         "download-rate",
-        "active-connections",
         "session-traffic",
-        "core-memory",
-        "system-proxy",
-        "transparent-proxy",
+        "current-node",
         "latency",
+        "active-connections",
         "active-profile",
-        "current-mode",
         "subscription-usage",
         "subscription-expiry",
-        "profile-updated",
-        "core-uptime",
-        "mihomo-version",
-        "proxy-address",
-        "system-info",
-        "public-ip",
+        "system-proxy",
+        "transparent-proxy",
         "connection-test",
     ];
 
@@ -410,6 +404,12 @@ public sealed partial class SettingsRegistry
             NormalizeMasterInfoTileLayout,
             Metadata(SettingCategory.Appearance, SettingsResetScope.MasterControl, SettingAuthority.Internal, SettingApplicationKind.Appearance, "Settings.MasterControl"));
         yield return SettingDefinition.CreateString(
+            Keys.MasterInfoTilePresets,
+            MasterInfoTilePresetList.DefaultCanonicalText,
+            MasterInfoTilePresetList.DefaultCanonicalText,
+            NormalizeMasterInfoTilePresets,
+            Metadata(SettingCategory.Appearance, SettingsResetScope.MasterControl, SettingAuthority.Internal, SettingApplicationKind.Appearance, "Settings.MasterControl"));
+        yield return SettingDefinition.CreateString(
             Keys.ConnectionTestProxyUrl1,
             DefaultConnectionTestProxyUrl1,
             DefaultConnectionTestProxyUrl1,
@@ -642,6 +642,11 @@ public sealed partial class SettingsRegistry
 
         return StringNormalizationOutcome.Succeeded(string.Join(",", normalized));
     }
+
+    private static StringNormalizationOutcome NormalizeMasterInfoTilePresets(string input) =>
+        MasterInfoTilePresetList.TryParse(input, out IReadOnlyList<MasterInfoTilePresetEntry> entries, out string? error)
+            ? StringNormalizationOutcome.Succeeded(MasterInfoTilePresetList.Format(entries))
+            : Invalid(error == "master_info_tile_preset.too_many" ? SettingValueErrorKind.OutOfRange : SettingValueErrorKind.UnsafeValue, error!);
 
     private static StringNormalizationOutcome Invalid(SettingValueErrorKind kind, string suffix) =>
         StringNormalizationOutcome.Failed(SettingDefinition.Error(kind, suffix));
