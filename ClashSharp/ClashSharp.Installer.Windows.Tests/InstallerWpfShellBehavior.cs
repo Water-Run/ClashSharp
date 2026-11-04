@@ -44,8 +44,18 @@ internal static class InstallerWpfShellBehavior
                         await WaitUntilAsync(() => runtime.Inspections == 1 && !model.IsBusy);
                         await window.Dispatcher.InvokeAsync(window.UpdateLayout, DispatcherPriority.ContextIdle);
                         FrameworkElement panel = (FrameworkElement)window.FindName("InstallPreferencesPanel");
-                        HeaderedContentControl[] rows = Descendants(panel).OfType<HeaderedContentControl>().ToArray();
+                        // Expander derives from HeaderedContentControl; the two preset details are counted separately.
+                        HeaderedContentControl[] rows = Descendants(panel).OfType<HeaderedContentControl>()
+                            .Where(static row => row is not Expander).ToArray();
                         Assert.Equal(8, rows.Length);
+                        Expander[] details = Descendants(panel).OfType<Expander>().ToArray();
+                        Assert.Equal(["SystemDefaultsDetailsExpander", "NotificationPresetDetailsExpander"], details.Select(static detail => detail.Name));
+                        foreach (Expander detail in details)
+                        {
+                            detail.IsExpanded = true;
+                        }
+                        await window.Dispatcher.InvokeAsync(window.UpdateLayout, DispatcherPriority.ContextIdle);
+                        Assert.All(details, static detail => Assert.True(detail.ActualHeight > 0));
                         foreach (HeaderedContentControl row in rows)
                         {
                             FrameworkElement text = (FrameworkElement)row.Template.FindName("OptionTextPanel", row);
