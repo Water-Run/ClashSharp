@@ -14,6 +14,7 @@ internal sealed class ApplicationDataClearOperation : IApplicationLifetimeMainte
     private readonly Action _clearHostData;
     private readonly string _dataDirectory;
     private readonly Func<bool> _repositoriesReleased;
+    private readonly Func<CancellationToken, Task> _restoreExternalState;
     private RuntimeShutdownResult? _shutdownResult;
     private bool _hostDataCleared;
 
@@ -21,11 +22,13 @@ internal sealed class ApplicationDataClearOperation : IApplicationLifetimeMainte
         Func<CancellationToken, Task<RuntimeShutdownResult>> prepareShutdown,
         Action clearHostData,
         string dataDirectory,
-        Func<bool>? repositoriesReleased = null)
+        Func<bool>? repositoriesReleased = null,
+        Func<CancellationToken, Task>? restoreExternalState = null)
     {
         _prepareShutdown = prepareShutdown ?? throw new ArgumentNullException(nameof(prepareShutdown));
         _clearHostData = clearHostData ?? throw new ArgumentNullException(nameof(clearHostData));
         _repositoriesReleased = repositoriesReleased ?? (() => true);
+        _restoreExternalState = restoreExternalState ?? (_ => Task.CompletedTask);
         ArgumentException.ThrowIfNullOrWhiteSpace(dataDirectory);
         _dataDirectory = Path.TrimEndingDirectorySeparator(Path.GetFullPath(dataDirectory));
         if (string.Equals(_dataDirectory, Path.GetPathRoot(_dataDirectory), StringComparison.OrdinalIgnoreCase))
@@ -43,7 +46,7 @@ internal sealed class ApplicationDataClearOperation : IApplicationLifetimeMainte
         }
     }
 
-    public Task ClearHostDataAsync(CancellationToken cancellationToken)
+    public async Task ClearHostDataAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (_shutdownResult is not { Outcome: RuntimeShutdownOutcome.PreparedForHostDisposal, ErrorCode: null }
@@ -52,9 +55,9 @@ internal sealed class ApplicationDataClearOperation : IApplicationLifetimeMainte
             throw new InvalidOperationException("Data cannot be removed after an unverified or degraded shutdown.");
         }
 
+        await _restoreExternalState(cancellationToken).ConfigureAwait(false);
         _clearHostData();
         _hostDataCleared = true;
-        return Task.CompletedTask;
     }
 
     public Task ClearLocalFilesAsync(CancellationToken cancellationToken)

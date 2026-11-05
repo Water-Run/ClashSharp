@@ -792,6 +792,11 @@ public sealed partial class RuntimeConfigurationTransactionTests
 
     private sealed class RecordingRuntime : ICoreConfigurationRuntime
     {
+        public Func<RuntimeConfigurationIntegrityObservation, CancellationToken, Task>? Preparing { get; set; }
+
+        public Task PrepareTransitionAsync(RuntimeConfigurationIntegrityObservation baseline, CancellationToken cancellationToken) =>
+            Preparing?.Invoke(baseline, cancellationToken) ?? Task.CompletedTask;
+
         public Queue<Exception?> ApplyFailures { get; } = new();
 
         public Queue<bool> ReadinessResults { get; } = new();

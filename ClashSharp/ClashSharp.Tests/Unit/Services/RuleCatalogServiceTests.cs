@@ -6,6 +6,17 @@ namespace ClashSharp.Tests.Unit.Services;
 /// <summary>Unit tests for rule catalog composition.</summary>
 public sealed class RuleCatalogServiceTests
 {
+    [Fact]
+    public void DuplicateConditionsDoNotInventActionSpecificCounts()
+    {
+        FakeRuleCatalogProfileRules source = new()
+        {
+            Rules = [new("source", "DOMAIN-SUFFIX", "example.com", "first", 0), new("source", "DOMAIN-SUFFIX", "example.com", "second", 0)],
+        };
+        FakeRuleCatalogHitStorage storage = new() { HitCounts = { ["DOMAINSUFFIX,example.com"] = 10 } };
+        Assert.All(CreateService(source, storage).GetRules(), rule => Assert.False(rule.IsHitCountKnown));
+    }
+
     /// <summary>Verifies an empty active profile produces a localized direct fallback row with stored hit counts.</summary>
     [Fact]
     public void GetRules_WhenActiveProfileHasNoRules_ReturnsLocalizedFallbackWithHitCounts()
@@ -15,7 +26,7 @@ public sealed class RuleCatalogServiceTests
         {
             HitCounts =
             {
-                ["MATCH,*,DIRECT"] = 7,
+                ["MATCH"] = 7,
             },
         };
         RuleCatalogService service = CreateService(profileRules, hitStorage);
@@ -48,7 +59,7 @@ public sealed class RuleCatalogServiceTests
         {
             HitCounts =
             {
-                ["DOMAIN-SUFFIX,example.com,PROXY"] = 11,
+                ["DOMAINSUFFIX,example.com"] = 11,
             },
         };
         RuleCatalogService service = CreateService(profileRules, hitStorage);

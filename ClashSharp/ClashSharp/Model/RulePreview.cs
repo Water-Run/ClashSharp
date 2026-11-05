@@ -20,4 +20,7 @@ public readonly record struct RulePreview(
 {
     /// <summary>Optional application-owned source label key; external provider names remain verbatim.</summary>
     public string? ProviderResourceKey { get; init; }
+
+    /// <summary>Gets whether native observations can be attributed to this unique rule condition.</summary>
+    public bool IsHitCountKnown { get; init; } = true;
 }

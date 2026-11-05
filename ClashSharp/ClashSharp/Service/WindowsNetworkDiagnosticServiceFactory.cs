@@ -5,6 +5,11 @@ using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using ClashSharp.ApplicationModel.Diagnostics;
+using ClashSharp.ApplicationModel.Mutations;
+using ClashSharp.ApplicationModel.Network;
+using ClashSharp.Model;
+using Microsoft.Win32;
 
 namespace ClashSharp.Service;
 
@@ -20,21 +25,46 @@ internal static class WindowsNetworkDiagnosticServiceFactory
 {
     /// <summary>Creates the default Windows network diagnostic service.</summary>
     /// <returns>A service wired to persistent settings, user environment variables, process execution, and localization resources.</returns>
-    public static WindowsNetworkDiagnosticService CreateDefault()
+    public static WindowsNetworkDiagnosticService CreateDefault(INetworkStateObserver? network = null, MutationAdmissionBarrier? admission = null)
     {
         return new WindowsNetworkDiagnosticService(
-            new WindowsDiagnosticSettingsAdapter(AppSettingsService.Instance),
+            new WindowsDiagnosticSettingsAdapter(network),
             new WindowsDiagnosticEnvironmentAdapter(),
             new WindowsDiagnosticProcessRunner(),
             new WindowsDiagnosticMutationJournalFileStore(
                 Path.Combine(AppDataPathService.ResolveLocalDataDirectory(), "WindowsNetworkMutationJournal.json")),
-            LocalizationService.Instance.GetString);
+            LocalizationService.Instance.GetString, admission);
     }
 }
 
-internal sealed class WindowsDiagnosticSettingsAdapter(AppSettingsService settings) : IWindowsDiagnosticSettings
+internal sealed class WindowsDiagnosticSettingsAdapter(INetworkStateObserver? network) : IWindowsDiagnosticSettings
 {
-    public int MixedPort => settings.MixedPort;
+    public async Task<NetworkStateSnapshot> ReadNetworkAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        try { if (network is not null) { return await network.ObserveAsync(cancellationToken).ConfigureAwait(false); } }
+        catch (Exception failure) when ((failure is InvalidOperationException or IOException or UnauthorizedAccessException
+            or System.Net.Http.HttpRequestException or TimeoutException)
+            && !ExceptionGraphClassifier.IsProcessFatal(failure)
+            && !ExceptionGraphClassifier.IsCallerCancellation(failure, cancellationToken))
+        { }
+        return new(ClashSharpMode.Faulted, false, false, false, 0, "unknown", IsKnown: false);
+    }
+
+    public bool IsDefaultWslVersionOne
+    {
+        get
+        {
+            try
+            {
+                using RegistryKey? distributions = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Lxss");
+                if (distributions?.GetValue("DefaultDistribution") is not string name || !Guid.TryParse(name, out Guid identity)) { return false; }
+                using RegistryKey? distro = distributions.OpenSubKey(identity.ToString("B"));
+                return distro?.GetValue("Version") is int version && version == 1;
+            }
+            catch (Exception failure) when (failure is IOException or UnauthorizedAccessException or System.Security.SecurityException) { return false; }
+        }
+    }
 }
 
 internal sealed class WindowsDiagnosticEnvironmentAdapter : IWindowsDiagnosticEnvironment

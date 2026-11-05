@@ -110,11 +110,8 @@ internal sealed partial class ClashDataPackageService
     private const string PackageVersion = "1";
     private const string ProfileCatalogFileName = "ProfileCatalog.json";
     private const string MihomoDirectoryName = "mihomo";
-    private const string GeneratedMihomoConfigFileName = "config.yaml";
 
-    private const string GeneratedMihomoStateFileName = "config.runtime-state.json";
 
-    private const string RuntimeGenerationsDirectoryName = "runtime-generations";
 
     internal const long MaxPackageBytes = 192L * 1024 * 1024;
 
@@ -778,36 +775,10 @@ internal sealed partial class ClashDataPackageService
     // Live core state is neither a portable configuration input nor an import target.
     private bool IsRuntimeOwnedPath(string path)
     {
-        string mihomoDirectoryPath = Path.Combine(
-            _localDataDirectory,
-            MihomoDirectoryName);
-        string normalizedPath = Path.GetFullPath(path);
-        string generatedRuntimeConfigPath = Path.Combine(
-            mihomoDirectoryPath,
-            GeneratedMihomoConfigFileName);
-        string generatedRuntimeStatePath = Path.Combine(
-            mihomoDirectoryPath,
-            GeneratedMihomoStateFileName);
-        string runtimeGenerationsRoot = EnsureTrailingSeparator(Path.Combine(
-            mihomoDirectoryPath,
-            RuntimeGenerationsDirectoryName));
-        string fileName = Path.GetFileName(normalizedPath);
-        bool isPrivateConfigurationSidecar =
-            fileName.StartsWith("config.yaml.runtime-staging.", StringComparison.OrdinalIgnoreCase)
-            || fileName.StartsWith("config.yaml.runtime-backup.", StringComparison.OrdinalIgnoreCase)
-            || fileName.StartsWith("config.yaml.staging.", StringComparison.OrdinalIgnoreCase)
-            || fileName.StartsWith("config.yaml.backup.", StringComparison.OrdinalIgnoreCase);
-        return string.Equals(normalizedPath, generatedRuntimeConfigPath, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(normalizedPath, generatedRuntimeStatePath, StringComparison.OrdinalIgnoreCase)
-            || normalizedPath.StartsWith(runtimeGenerationsRoot, StringComparison.OrdinalIgnoreCase)
-            || isPrivateConfigurationSidecar
-            || string.Equals(
-                Path.GetDirectoryName(normalizedPath),
-                mihomoDirectoryPath,
-                StringComparison.OrdinalIgnoreCase)
-                && (fileName.Equals("cache.db", StringComparison.OrdinalIgnoreCase)
-                    || fileName.StartsWith("config.yaml.restore.", StringComparison.OrdinalIgnoreCase)
-                    || fileName.StartsWith("config.runtime-state.json.tmp.", StringComparison.OrdinalIgnoreCase));
+        string root = Path.GetFullPath(Path.Combine(_localDataDirectory, MihomoDirectoryName));
+        string normalized = Path.GetFullPath(path);
+        return normalized.StartsWith(EnsureTrailingSeparator(root), StringComparison.OrdinalIgnoreCase)
+            && !ClashSharp.Data.MihomoUserFilePolicy.IsPortableRelativePath(Path.GetRelativePath(root, normalized));
     }
 
     private static string EnsureTrailingSeparator(string path)

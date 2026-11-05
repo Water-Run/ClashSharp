@@ -10,6 +10,12 @@ internal static partial class LocalizationResources
     {
         return new ReadOnlyDictionary<string, string>(new Dictionary<string, string>
         {
+            ["WindowsDiagnostic.Network.Unknown"] = "Не удалось проверить работающий прокси. Переменные среды не изменены.",
+            ["WindowsDiagnostic.Network.Inactive"] = "Запустите ядро прокси перед настройкой переменных среды.",
+            ["WindowsDiagnostic.Network.Transparent"] = "Прозрачный прокси работает; переменные локального HTTP-прокси не нужны. Проверьте сеть в целевой программе.",
+            ["WindowsDiagnostic.Network.TransparentResetRequired"] = "Прозрачный прокси работает. Примените исправление для отмены прежних переменных локального прокси.",
+            ["WindowsDiagnostic.Wsl.NatUnsupported"] = "WSL2 использует NAT и не может подключиться к прокси на localhost. Сначала включите зеркальный режим сети WSL.",
+            ["WindowsDiagnostic.Wsl.NetworkModeUnknown"] = "Не удалось определить режим сети WSL. Переменные прокси не изменены.",
             ["Notification.TransparentProxy.Title"] = "Прозрачный прокси",
             ["Notification.TransparentProxy.Disabled"] = "Прозрачный прокси выключен.",
             ["Notification.TransparentProxy.Enabled"] = "Прозрачный прокси включён и проверен.",

@@ -56,7 +56,7 @@ internal sealed class AppDataGenerationRuntimeComposer(
         repositories.OwnSettingsParticipant(new SamplingSettingsParticipant(generation, admission, sampling));
         NetworkTakeoverService scopedTakeover = takeover.BindDataScope(repositories.Configuration,
             repositories.ProxySelections ?? throw new InvalidOperationException("The generation has no proxy-selection owner."),
-            traffic.RefreshAsync, sampling.FlushAsync, repositories.Logs);
+            traffic.RefreshAsync, sampling.FlushAsync, repositories.Logs, flushObservedSampling: sampling.FlushAsync);
         INetworkSettingsRuntime network = createNetwork?.Invoke(repositories.Configuration)
             ?? new NetworkSettingsRuntime(repositories.Configuration, scopedTakeover, proxy);
         repositories.OwnSettingsParticipant(new NetworkSettingsParticipant(generation, admission, network));

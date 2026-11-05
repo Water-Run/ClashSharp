@@ -52,6 +52,7 @@ internal sealed class MihomoEffectiveConfigurationMaterializer
 
     private readonly bool _protectDirectory;
     private readonly MihomoRuntimeAssetStager _assetStager;
+    private readonly string? _installedConfigurationPath;
     private readonly object _ownedPathsGate = new();
     private readonly HashSet<string> _ownedPaths = new(StringComparer.OrdinalIgnoreCase);
 
@@ -80,13 +81,19 @@ internal sealed class MihomoEffectiveConfigurationMaterializer
     }
 
     internal MihomoEffectiveConfigurationMaterializer(MihomoServiceOptions options)
+        : this(options, protectDirectory: true)
+    {
+    }
+
+    internal MihomoEffectiveConfigurationMaterializer(MihomoServiceOptions options, bool protectDirectory)
     {
         ArgumentNullException.ThrowIfNull(options);
-        _protectDirectory = true;
+        _protectDirectory = protectDirectory;
+        _installedConfigurationPath = options.ConfigPath;
         _assetStager = new MihomoRuntimeAssetStager(
             options.GeoDataDirectory,
             Path.GetDirectoryName(options.ConfigPath),
-            protectDirectory: true);
+            protectDirectory);
     }
 
     internal async Task<MihomoEffectiveGeneration> MaterializeAsync(
@@ -112,12 +119,15 @@ internal sealed class MihomoEffectiveConfigurationMaterializer
             throw new MihomoConfigurationHashMismatchException();
         }
 
+        string? sourceAssetRoot = _installedConfigurationPath is null ? null : Path.GetDirectoryName(
+            MihomoServiceSourcePaths.ResolveConfiguration(_installedConfigurationPath, source.DataGenerationId));
         YamlMappingNode root = LoadRootMapping(Utf8WithoutBom.GetString(sourceBytes));
         await _assetStager.PrepareAsync(
                 root,
                 source.ConfigurationPath,
                 runtimeDirectory,
-                cancellationToken)
+                cancellationToken,
+                sourceAssetRoot)
             .ConfigureAwait(false);
         RemoveRootControllerKeys(root);
 

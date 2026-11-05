@@ -26,6 +26,10 @@ internal readonly record struct RuntimeConfigurationIntegrityObservation(
     public Guid? DataGenerationId { get; init; }
     public RuntimeDnsConfiguration? Dns { get; init; }
 
+    /// <summary>Identifies one verified configuration's statistical observations, never a desired preference.</summary>
+    public string StatisticsIdentity => IsKnown && AppliedGeneration is long generation && AppliedContentHash is not null
+        ? FormattableString.Invariant($"{DataGenerationId:N}:{generation}:{AppliedContentHash}") : "unknown";
+
     public static RuntimeConfigurationIntegrityObservation Unknown { get; } = new(false, null);
 
     public static RuntimeConfigurationIntegrityObservation Inactive { get; } = new(true, null);
@@ -297,6 +301,8 @@ public sealed partial class CoreConfigurationService
                 await _validator
                     .ValidateRuntimeAsync(_configurationDirectoryPath, stagingPath, cancellationToken)
                     .ConfigureAwait(false);
+                await runtime.PrepareTransitionAsync(new(true, baseline.AppliedPlan, baseline.AppliedGeneration, baseline.AppliedContentHash)
+                { DataGenerationId = _dataGenerationId }, cancellationToken).ConfigureAwait(false);
                 cancellationToken.ThrowIfCancellationRequested();
             }
             catch (OperationCanceledException validationCancellationFailure) when (!ExceptionGraphClassifier.IsProcessFatal(validationCancellationFailure))

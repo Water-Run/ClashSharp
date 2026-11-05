@@ -1,11 +1,10 @@
 using System.Buffers;
 using System.Text.Json;
-using ClashSharp.ServiceProtocol;
 
-namespace ClashSharp.MihomoService;
+namespace ClashSharp.ServiceProtocol;
 
 /// <summary>Reads counters and row count with bounded memory, retaining small connection documents only.</summary>
-internal sealed class MihomoConnectionResponseReader
+public sealed class MihomoConnectionResponseReader
 {
     private const int MaximumTokenBytes = 64 * 1024;
     private const int MaximumDetailBytes = 512 * 1024;
@@ -21,7 +20,13 @@ internal sealed class MihomoConnectionResponseReader
     private bool _hasConnections;
     private bool _ended;
 
-    internal static async Task<(byte[] Content, int? OmittedCount)> ReadAsync(Stream stream, CancellationToken token)
+    private MihomoConnectionResponseReader() { }
+
+    /// <summary>Retains a small complete document or projects only trustworthy counters and total row count.</summary>
+    /// <param name="stream">Untrusted UTF-8 connection document.</param>
+    /// <param name="token">Cancels scanning, including a stalled response body.</param>
+    /// <returns>Bounded JSON plus an omitted row count when details exceed their budget.</returns>
+    public static async Task<(byte[] Content, int? OmittedCount)> ReadAsync(Stream stream, CancellationToken token)
     {
         MihomoConnectionResponseReader parser = new();
         byte[] buffer = ArrayPool<byte>.Shared.Rent(MaximumTokenBytes);

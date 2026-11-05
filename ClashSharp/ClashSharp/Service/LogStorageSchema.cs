@@ -35,6 +35,7 @@ internal static class LogStorageSchema
         ExecuteNonQuery(connection, "CREATE TABLE IF NOT EXISTS NodeTrafficStats (NodeName TEXT PRIMARY KEY, RegionCode TEXT NULL, UploadBytes INTEGER NOT NULL DEFAULT 0, DownloadBytes INTEGER NOT NULL DEFAULT 0, UpdatedAtUnixTime INTEGER NOT NULL);");
         ExecuteNonQuery(connection, "CREATE TABLE IF NOT EXISTS NodeHealthStats (NodeName TEXT PRIMARY KEY, RegionCode TEXT NULL, LatencyMilliseconds INTEGER NULL, UpdatedAtUnixTime INTEGER NOT NULL);");
         ExecuteNonQuery(connection, "CREATE TABLE IF NOT EXISTS RuleHitStats (RuleName TEXT PRIMARY KEY, HitCount INTEGER NOT NULL DEFAULT 0, UpdatedAtUnixTime INTEGER NOT NULL);");
+        ExecuteNonQuery(connection, "CREATE TABLE IF NOT EXISTS ObservedRuleHits (ConfigurationIdentity TEXT NOT NULL, RuleKey TEXT NOT NULL, HitCount INTEGER NOT NULL, UpdatedAtUnixTime INTEGER NOT NULL, PRIMARY KEY (ConfigurationIdentity, RuleKey));");
     }
 
     /// <summary>Executes a schema non-query SQL command.</summary>

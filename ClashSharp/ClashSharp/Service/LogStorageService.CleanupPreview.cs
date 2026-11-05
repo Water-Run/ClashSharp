@@ -22,7 +22,8 @@ public sealed partial class LogStorageService
                      + (SELECT COUNT(*) FROM Connections WHERE CreatedAtUnixTime < $cutoff)
                      + (SELECT COUNT(*) FROM TrafficSnapshots WHERE CreatedAtUnixTime < $cutoff)
                      + (SELECT COUNT(*) FROM NodeHealthStats WHERE UpdatedAtUnixTime < $cutoff)
-                     + (SELECT COUNT(*) FROM RuleHitStats WHERE UpdatedAtUnixTime < $cutoff);
+                     + (SELECT COUNT(*) FROM RuleHitStats WHERE UpdatedAtUnixTime < $cutoff)
+                     + (SELECT COUNT(*) FROM ObservedRuleHits WHERE UpdatedAtUnixTime < $cutoff);
                 """;
             command.Parameters.AddWithValue("$cutoff", cutoff.ToUnixTimeSeconds());
             return Convert.ToInt64(command.ExecuteScalar(), CultureInfo.InvariantCulture);
@@ -62,7 +63,8 @@ public sealed partial class LogStorageService
                      + (SELECT COUNT(*) FROM ProfileTrafficStats)
                      + (SELECT COUNT(*) FROM NodeTrafficStats)
                      + (SELECT COUNT(*) FROM NodeHealthStats)
-                     + (SELECT COUNT(*) FROM RuleHitStats);
+                     + (SELECT COUNT(*) FROM RuleHitStats)
+                     + (SELECT COUNT(*) FROM ObservedRuleHits);
                 """);
         }
     }

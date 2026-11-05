@@ -61,12 +61,13 @@ internal sealed class MihomoRuntimeAssetStager
         YamlMappingNode root,
         string sourceConfigurationPath,
         string runtimeDirectory,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? sourceAssetRootOverride = null)
     {
         ArgumentNullException.ThrowIfNull(root);
         ArgumentException.ThrowIfNullOrWhiteSpace(sourceConfigurationPath);
         ArgumentException.ThrowIfNullOrWhiteSpace(runtimeDirectory);
-        string sourceRoot = _sourceAssetRoot
+        string sourceRoot = sourceAssetRootOverride ?? _sourceAssetRoot
             ?? Path.GetDirectoryName(Path.GetFullPath(sourceConfigurationPath))
             ?? throw new InvalidDataException("The source configuration root is unavailable.");
         EnsureOrdinaryDirectory(sourceRoot, "configuration asset root");

@@ -6,6 +6,18 @@ namespace ClashSharp.Tests.Unit.Services;
 /// <summary>Unit tests for the mihomo profile parser service.</summary>
 public sealed class MihomoProfileParserServiceTests
 {
+    [Theory]
+    [InlineData("AND,((NETWORK,UDP),(DST-PORT,443)),REJECT", "((NETWORK,UDP),(DST-PORT,443))", "REJECT")]
+    [InlineData("SUB-RULE,(NETWORK,TCP),sub1", "(NETWORK,TCP)", "sub1")]
+    [InlineData("DOMAIN-REGEX,foo{1,3}\\.example,PROXY,no-resolve", "foo{1,3}\\.example", "PROXY")]
+    [InlineData("PROCESS-PATH,C:\\apps\\tools(legacy\\app.exe,DIRECT", "C:\\apps\\tools(legacy\\app.exe", "DIRECT")]
+    public void ComplexRulePreviewPreservesTheCompletePayload(string raw, string payload, string action)
+    {
+        RulePreview rule = Assert.Single(CreateService(new("rules:\n  - '" + raw + "'\n")).ParseActiveProfileRules());
+        Assert.Equal(payload, rule.Payload);
+        Assert.Equal(action, rule.Action);
+    }
+
     /// <summary>Verifies active-profile node parsing reads text from the injected source and uses injected region metadata.</summary>
     [Fact]
     public void ParseActiveProfileNodes_WhenProfileTextExists_ParsesNodesWithInjectedRegionResolver()

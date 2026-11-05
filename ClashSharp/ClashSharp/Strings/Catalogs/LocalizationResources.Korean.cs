@@ -10,6 +10,12 @@ internal static partial class LocalizationResources
     {
         return new ReadOnlyDictionary<string, string>(new Dictionary<string, string>
         {
+            ["WindowsDiagnostic.Network.Unknown"] = "실행 중인 프록시를 확인할 수 없어 환경 변수를 변경하지 않았습니다.",
+            ["WindowsDiagnostic.Network.Inactive"] = "프록시 환경 변수를 설정하기 전에 코어를 시작하세요.",
+            ["WindowsDiagnostic.Network.Transparent"] = "투명 프록시가 활성화되어 로컬 HTTP 프록시 변수가 필요하지 않습니다. 대상 프로그램에서 연결을 확인하세요.",
+            ["WindowsDiagnostic.Network.TransparentResetRequired"] = "투명 프록시가 활성화되어 있습니다. 적용을 눌러 기존 로컬 프록시 환경 설정을 복원하세요.",
+            ["WindowsDiagnostic.Wsl.NatUnsupported"] = "WSL2가 NAT를 사용하므로 localhost 전용 프록시에 연결할 수 없습니다. 먼저 미러링 네트워크로 전환하세요.",
+            ["WindowsDiagnostic.Wsl.NetworkModeUnknown"] = "WSL 네트워크 모드를 확인할 수 없어 프록시 환경 변수를 변경하지 않았습니다.",
             ["Notification.TransparentProxy.Title"] = "투명 프록시",
             ["Notification.TransparentProxy.Disabled"] = "투명 프록시가 꺼졌습니다.",
             ["Notification.TransparentProxy.Enabled"] = "투명 프록시가 켜졌으며 확인되었습니다.",

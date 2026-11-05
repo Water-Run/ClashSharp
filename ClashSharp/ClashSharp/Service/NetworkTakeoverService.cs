@@ -131,6 +131,7 @@ public sealed partial class NetworkTakeoverService : ICoreConfigurationRuntime
     private readonly INetworkTakeoverProxySelections? _proxySelections;
 
     private readonly Func<CancellationToken, Task>? _flushTraffic;
+    private readonly Func<RuntimeConfigurationIntegrityObservation, CancellationToken, Task>? _flushObservedTraffic;
 
     private readonly Func<string, string> _getString;
 
@@ -145,7 +146,8 @@ public sealed partial class NetworkTakeoverService : ICoreConfigurationRuntime
         Func<string, string> getString,
         INetworkTakeoverProxySelections? proxySelections = null,
         Func<CancellationToken, Task>? flushTraffic = null,
-        SemaphoreSlim? transitionGate = null)
+        SemaphoreSlim? transitionGate = null,
+        Func<RuntimeConfigurationIntegrityObservation, CancellationToken, Task>? flushObservedTraffic = null)
     {
         _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
         _core = core ?? throw new ArgumentNullException(nameof(core));
@@ -156,6 +158,7 @@ public sealed partial class NetworkTakeoverService : ICoreConfigurationRuntime
         _getString = getString ?? throw new ArgumentNullException(nameof(getString));
         _proxySelections = proxySelections;
         _flushTraffic = flushTraffic;
+        _flushObservedTraffic = flushObservedTraffic;
         _transitionGate = transitionGate ?? new(1, 1);
     }
 
@@ -272,7 +275,7 @@ public sealed partial class NetworkTakeoverService : ICoreConfigurationRuntime
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (_flushTraffic is not null)
+        if (_flushObservedTraffic is null && _flushTraffic is not null)
         {
             await _flushTraffic(cancellationToken).ConfigureAwait(false);
         }

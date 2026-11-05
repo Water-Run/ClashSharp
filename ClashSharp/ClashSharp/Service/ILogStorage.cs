@@ -34,6 +34,8 @@ internal interface ILogStorage
 
     IReadOnlyDictionary<string, long> GetRuleHitCounts();
 
+    IReadOnlyDictionary<string, long> GetRuleHitCounts(string configurationIdentity) => new Dictionary<string, long>();
+
     void AppendLog(string level, string source, string message, string? detail);
 
     IReadOnlyList<LogRecord> GetRecentLogs(int limit);

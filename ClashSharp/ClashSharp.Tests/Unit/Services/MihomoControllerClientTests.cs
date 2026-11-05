@@ -12,7 +12,7 @@ using ClashSharp.ServiceProtocol;
 namespace ClashSharp.Tests.Unit.Services;
 
 /// <summary>Unit tests for mihomo external-controller client behavior.</summary>
-public sealed class MihomoControllerClientTests
+public sealed partial class MihomoControllerClientTests
 {
     private const string ControllerSecret = "controller-test-secret";
 
@@ -319,7 +319,7 @@ public sealed class MihomoControllerClientTests
     [Fact]
     public async Task GetActiveConnectionsAsync_WithSecret_SendsBearerAuthorization()
     {
-        RecordingHttpHandler handler = new("""{"connections":[]}""");
+        RecordingHttpHandler handler = new("""{"connections":[],"uploadTotal":0,"downloadTotal":0}""");
         MihomoControllerClient client = new(
             new HttpClient(handler),
             new Uri("http://127.0.0.1:9090"),
@@ -450,7 +450,7 @@ public sealed class MihomoControllerClientTests
     [Fact]
     public async Task CloseAllConnectionsAsync_SendsDeleteConnections()
     {
-        RecordingHttpHandler handler = new("""{"connections":[]}""");
+        RecordingHttpHandler handler = new("""{"connections":[],"uploadTotal":0,"downloadTotal":0}""");
         MihomoControllerClient client = new(new HttpClient(handler), new Uri("http://127.0.0.1:9090"));
 
         await client.CloseAllConnectionsAsync(CancellationToken.None);
@@ -585,7 +585,7 @@ public sealed class MihomoControllerClientTests
     [Fact]
     public async Task GetActiveConnectionsAsync_ServiceOwner_UsesBoundBrokerWithoutHttpFallback()
     {
-        RecordingHttpHandler handler = new("""{"connections":[]}""");
+        RecordingHttpHandler handler = new("""{"connections":[],"uploadTotal":0,"downloadTotal":0}""");
         FakeControllerServiceBroker broker = FakeControllerServiceBroker.Running();
         MihomoControllerClient client = CreateOwnerAwareClient(
             handler,
@@ -610,7 +610,7 @@ public sealed class MihomoControllerClientTests
     public async Task GetActiveConnectionsAsync_AppOwnerAndReleasedServiceChild_UsesDirectController(
         bool keepHostRunning)
     {
-        RecordingHttpHandler handler = new("""{"connections":[]}""");
+        RecordingHttpHandler handler = new("""{"connections":[],"uploadTotal":0,"downloadTotal":0}""");
         FakeControllerServiceBroker broker = new(new MihomoServiceStatus(
             IsInstalled: true,
             IsRunning: false,
@@ -638,7 +638,7 @@ public sealed class MihomoControllerClientTests
     [Fact]
     public async Task GetActiveConnectionsAsync_AppOwnerAndUnauthenticatedIdleHost_FailsClosed()
     {
-        RecordingHttpHandler handler = new("""{"connections":[]}""");
+        RecordingHttpHandler handler = new("""{"connections":[],"uploadTotal":0,"downloadTotal":0}""");
         FakeControllerServiceBroker broker = new(new MihomoServiceStatus(
             IsInstalled: true,
             IsRunning: false,
@@ -665,7 +665,7 @@ public sealed class MihomoControllerClientTests
     [InlineData(true)]
     public async Task GetActiveConnectionsAsync_UnknownOrDoubleOwner_FailsClosed(bool doubleOwner)
     {
-        RecordingHttpHandler handler = new("""{"connections":[]}""");
+        RecordingHttpHandler handler = new("""{"connections":[],"uploadTotal":0,"downloadTotal":0}""");
         FakeControllerServiceBroker broker = doubleOwner
             ? FakeControllerServiceBroker.Running()
             : new FakeControllerServiceBroker(MihomoServiceStatus.Unknown("unknown"));

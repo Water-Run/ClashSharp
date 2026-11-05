@@ -108,16 +108,7 @@ internal static partial class MihomoProfilePreviewParser
                 continue;
             }
 
-            string[] parts = rawRule.Split(',', StringSplitOptions.TrimEntries);
-            if (parts.Length == 0 || string.IsNullOrWhiteSpace(parts[0]))
-            {
-                continue;
-            }
-
-            string ruleType = parts[0];
-            string payload = parts.Length > 2 ? parts[1] : "*";
-            string action = parts.Length > 2 ? parts[2] : parts.Length > 1 ? parts[1] : "DIRECT";
-            rules.Add(new RulePreview(sourceName, ruleType, payload, action, 0));
+            rules.Add(ParseRulePreview(sourceName, rawRule));
         }
 
         return rules;

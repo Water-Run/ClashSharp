@@ -51,7 +51,7 @@
                         <TextBlock Grid.Column="1" Text="{Binding RuleType}" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding RuleType}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                         <TextBlock Grid.Column="2" Text="{Binding PayloadDisplay}" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding PayloadDisplay}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
                         <TextBlock Grid.Column="3" Text="{Binding Action}" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding Action}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-                        <TextBlock Grid.Column="4" Text="{Binding HitCount}" TextAlignment="Right" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <TextBlock Grid.Column="4" Text="{Binding HitCountDisplay}" TextAlignment="Right" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                     </Grid>
                 </DataTemplate>
             </ListView.ItemTemplate>

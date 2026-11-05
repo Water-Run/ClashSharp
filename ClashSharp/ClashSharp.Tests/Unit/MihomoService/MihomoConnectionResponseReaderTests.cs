@@ -1,6 +1,6 @@
 using System.Text;
 using System.Text.Json;
-using ClashSharp.MihomoService;
+using ClashSharp.ServiceProtocol;
 
 namespace ClashSharp.Tests.Unit.MihomoService;
 

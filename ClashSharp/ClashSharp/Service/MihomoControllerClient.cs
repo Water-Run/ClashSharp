@@ -235,8 +235,8 @@ public sealed class MihomoControllerClient
             return MapConnections(RequireSuccessful(response).ConnectionSnapshot!);
         }
 
-        using JsonDocument document = await GetJsonAsync("connections", cancellationToken).ConfigureAwait(false);
-        return ParseActiveConnections(document.RootElement);
+        var projected = await ReadConnectionResponseAsync(cancellationToken).ConfigureAwait(false);
+        return RequireConnectionDetails(projected);
     }
 
     /// <summary>Reads the total independently from omitted detail rows.</summary>
@@ -250,8 +250,8 @@ public sealed class MihomoControllerClient
             MihomoServiceIpcConnectionSnapshot snapshot = RequireSuccessful(response).ConnectionSnapshot!;
             return snapshot.TotalConnectionCount ?? snapshot.Connections.Count;
         }
-        using JsonDocument document = await GetJsonAsync("connections", cancellationToken).ConfigureAwait(false);
-        return ParseActiveConnections(document.RootElement).Count;
+        var projected = await ReadConnectionResponseAsync(cancellationToken).ConfigureAwait(false);
+        return projected.OmittedCount ?? RequireConnectionDetails(projected).Count;
     }
 
     /// <summary>Reads cumulative counters bound to one authenticated core process.</summary>
@@ -297,7 +297,8 @@ public sealed class MihomoControllerClient
             throw new MihomoAppControllerIdentityException("The traffic counter owner is unavailable.");
         }
 
-        using JsonDocument document = await GetJsonAsync("connections", cancellationToken).ConfigureAwait(false);
+        var projected = await ReadConnectionResponseAsync(cancellationToken).ConfigureAwait(false);
+        using JsonDocument document = JsonDocument.Parse(projected.Content);
         if (identity is { } captured && !_appControllerTransport!.IsStillCurrent(captured))
         {
             throw new MihomoAppControllerIdentityException("The traffic counter owner changed during sampling.");
@@ -315,9 +316,11 @@ public sealed class MihomoControllerClient
             identity?.Epoch ?? _integrationTrafficEpoch,
             ReadTrafficTotal(root, "uploadTotal"),
             ReadTrafficTotal(root, "downloadTotal"),
-            ParseActiveConnections(root),
+            projected.OmittedCount is null ? ParseActiveConnections(root) : [],
             identity?.MemoryBytes,
-            identity?.StartedAt);
+            identity?.StartedAt,
+            projected.OmittedCount is null,
+            projected.OmittedCount);
     }
 
     private static long ReadTrafficTotal(JsonElement root, string name)
@@ -437,13 +440,9 @@ public sealed class MihomoControllerClient
 
         while (socket.State == WebSocketState.Open)
         {
-            byte[]? payload = await ReceiveTextMessageAsync(socket, cancellationToken).ConfigureAwait(false);
-            if (payload is null)
-            {
-                yield break;
-            }
-
-            yield return ParseActiveConnectionsPayload(payload);
+            var projected = await ReceiveConnectionMessageAsync(socket, cancellationToken).ConfigureAwait(false);
+            if (projected is null) { yield break; }
+            yield return RequireConnectionDetails(projected.Value);
         }
     }
 
@@ -1135,15 +1134,88 @@ public sealed class MihomoControllerClient
         response.EnsureSuccessStatusCode();
     }
 
-    /// <summary>Reads and parses one JSON endpoint.</summary>
+    private CancellationTokenSource CreateReadDeadline(CancellationToken cancellationToken)
+    {
+        CancellationTokenSource deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        TimeSpan timeout = _httpClient.Timeout;
+        deadline.CancelAfter(timeout == Timeout.InfiniteTimeSpan || timeout > TimeSpan.FromSeconds(5) ? TimeSpan.FromSeconds(5) : timeout);
+        return deadline;
+    }
+
+    private async Task<(byte[] Content, int? OmittedCount)> ReadConnectionResponseAsync(CancellationToken cancellationToken)
+    {
+        using CancellationTokenSource deadline = CreateReadDeadline(cancellationToken);
+        using HttpRequestMessage request = CreateRequest(HttpMethod.Get, "connections");
+        using HttpResponseMessage response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, deadline.Token).ConfigureAwait(false);
+        response.EnsureSuccessStatusCode();
+        await using Stream stream = await response.Content.ReadAsStreamAsync(deadline.Token).ConfigureAwait(false);
+        try { return await MihomoConnectionResponseReader.ReadAsync(stream, deadline.Token).ConfigureAwait(false); }
+        catch (InvalidDataException failure) { throw new JsonException("The connection document is invalid or exceeds its safety budget.", failure); }
+    }
+
+    private static IReadOnlyList<ActiveConnection> RequireConnectionDetails((byte[] Content, int? OmittedCount) projected)
+    {
+        if (projected.OmittedCount is int count) { throw new IncompleteConnectionSnapshotException(count); }
+        return ParseActiveConnectionsPayload(projected.Content);
+    }
+
+    /// <summary>Reads other controller documents under an explicit byte budget and one header/body deadline.</summary>
     private async Task<JsonDocument> GetJsonAsync(string relativePath, CancellationToken cancellationToken)
     {
+        using CancellationTokenSource deadline = CreateReadDeadline(cancellationToken);
         using HttpRequestMessage request = CreateRequest(HttpMethod.Get, relativePath);
-        using HttpResponseMessage response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        using HttpResponseMessage response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, deadline.Token).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
+        await response.Content.LoadIntoBufferAsync(MaximumStreamMessageBytes, deadline.Token).ConfigureAwait(false);
+        await using Stream stream = await response.Content.ReadAsStreamAsync(deadline.Token).ConfigureAwait(false);
+        return await JsonDocument.ParseAsync(stream, new JsonDocumentOptions { MaxDepth = 32 }, deadline.Token).ConfigureAwait(false);
+    }
 
-        await using Stream stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-        return await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken).ConfigureAwait(false);
+    /// <summary>Projects one connection frame with the same budgets used by REST and the privileged broker.</summary>
+    internal static async Task<(byte[] Content, int? OmittedCount)?> ReceiveConnectionMessageAsync(WebSocket socket, CancellationToken cancellationToken)
+    {
+        using CancellationTokenSource deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        deadline.CancelAfter(TimeSpan.FromSeconds(5));
+        await using ConnectionMessageStream stream = new(socket);
+        try { return await MihomoConnectionResponseReader.ReadAsync(stream, deadline.Token).ConfigureAwait(false); }
+        catch (JsonException) when (stream.Closed && stream.BytesRead == 0) { return null; }
+    }
+
+    // This stream owns one message boundary, while the caller retains the authenticated socket.
+    private sealed class ConnectionMessageStream(WebSocket socket) : Stream
+    {
+        private bool _finished;
+        internal bool Closed { get; private set; }
+        internal long BytesRead { get; private set; }
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+        public override void Flush() => throw new NotSupportedException();
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            while (!_finished)
+            {
+                ValueWebSocketReceiveResult received = await socket.ReceiveAsync(buffer, cancellationToken).ConfigureAwait(false);
+                if (received.MessageType == WebSocketMessageType.Close)
+                {
+                    Closed = true;
+                    _finished = true;
+                    if (BytesRead != 0) { throw new IOException("The connection message ended before its final frame."); }
+                    return 0;
+                }
+                if (received.MessageType != WebSocketMessageType.Text) { throw new InvalidDataException("Expected a text connection frame."); }
+                _finished = received.EndOfMessage;
+                BytesRead += received.Count;
+                if (received.Count != 0 || _finished) { return received.Count; }
+            }
+            return 0;
+        }
     }
 
     /// <summary>Builds an absolute request URI.</summary>

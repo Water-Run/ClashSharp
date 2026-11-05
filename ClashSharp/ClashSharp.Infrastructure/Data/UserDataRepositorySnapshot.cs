@@ -1,5 +1,6 @@
 using ClashSharp.ApplicationModel.Data;
 using ClashSharp.ApplicationModel.Mutations;
+using ClashSharp.Data;
 using Microsoft.Data.Sqlite;
 
 namespace ClashSharp.Infrastructure.Data;
@@ -10,11 +11,9 @@ public sealed class UserDataRepositorySnapshot
 {
     private static readonly string[] DocumentFiles =
     [
-        "ProfileCatalog.json", "Triggers.json", "Triggers.json.migration-intent",
-        Path.Combine("mihomo", "proxy-selections.json")
+        "ProfileCatalog.json", "Triggers.json", "Triggers.json.migration-intent"
     ];
     private static readonly string[] DatabaseFiles = ["ClashSharpLogs.sqlite3", "Triggers.db", "Triggers.db.backup"];
-    private static readonly string[] ProfileDirectories = ["profiles", "history"];
     private readonly string _sourceRoot;
     private readonly DataGenerationPathPolicy _paths;
     private readonly MutationAdmissionBarrier _admission;
@@ -65,10 +64,7 @@ public sealed class UserDataRepositorySnapshot
         {
             await CopyDocumentIfPresentAsync(candidate, relativePath, cancellationToken).ConfigureAwait(false);
         }
-        foreach (string directory in ProfileDirectories)
-        {
-            await CopyDirectoryIfPresentAsync(candidate, Path.Combine("mihomo", directory), cancellationToken).ConfigureAwait(false);
-        }
+        await CopyDirectoryIfPresentAsync(candidate, "mihomo", cancellationToken).ConfigureAwait(false);
         foreach (string relativePath in DatabaseFiles)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -98,9 +94,17 @@ public sealed class UserDataRepositorySnapshot
             foreach (string child in Directory.EnumerateFileSystemEntries(directory).Order(StringComparer.Ordinal))
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                ValidateSource(child);
                 string childRelative = Path.GetRelativePath(_sourceRoot, child);
-                if ((File.GetAttributes(child) & FileAttributes.Directory) != 0) { pending.Push(childRelative); }
+                if (!MihomoUserFilePolicy.IsPortableRelativePath(Path.GetRelativePath(GetSourcePath("mihomo"), child))) { continue; }
+                ValidateSource(child);
+                bool isDirectory = (File.GetAttributes(child) & FileAttributes.Directory) != 0;
+                string portablePath = Path.GetRelativePath(GetSourcePath("mihomo"), child).Replace('\\', '/');
+                if (portablePath.Equals("proxy-selections.json", StringComparison.OrdinalIgnoreCase) && isDirectory
+                    || (portablePath.Equals("profiles", StringComparison.OrdinalIgnoreCase) || portablePath.Equals("history", StringComparison.OrdinalIgnoreCase)) && !isDirectory)
+                {
+                    throw new InvalidDataException("A known mihomo repository has the wrong filesystem type.");
+                }
+                if (isDirectory) { pending.Push(childRelative); }
                 else { await CopyDocumentIfPresentAsync(candidate, childRelative, cancellationToken).ConfigureAwait(false); }
             }
         }

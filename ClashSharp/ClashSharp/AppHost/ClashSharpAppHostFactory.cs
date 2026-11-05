@@ -96,7 +96,8 @@ internal static class ClashSharpAppHostFactory
             services.AddSingleton<IProxySelectionService>(_ => RuntimeDataServices.ProxySelections);
             services.AddSingleton(_ => NetworkTakeoverService.Instance);
             services.AddSingleton(_ => WindowsProxyService.Instance);
-            services.AddSingleton(_ => WindowsNetworkDiagnosticService.Instance);
+            services.AddSingleton(provider => WindowsNetworkDiagnosticServiceFactory.CreateDefault(
+                provider.GetRequiredService<INetworkStateObserver>(), mutationAdmission));
             services.AddSingleton(_ => MihomoCoreService.Instance);
             services.AddSingleton<ICoreConfigurationStore>(_ => RuntimeDataServices.Configuration);
             services.AddSingleton(_ => MihomoServiceManager.Instance);
@@ -156,7 +157,8 @@ internal static class ClashSharpAppHostFactory
             services.AddSingleton<IApplicationDataClearOperationFactory>(provider => new GenerationDataClearOperationFactory(
                 provider.GetRequiredService<DataGenerationManager>(), mutationAdmission,
                 provider.GetRequiredService<ControllerCredentialService>(), provider.GetRequiredService<AppSettingsService>(),
-                provider.GetRequiredService<RuntimeLifecycleCoordinator>(), dataRoot.Value));
+                provider.GetRequiredService<RuntimeLifecycleCoordinator>(), dataRoot.Value,
+                provider.GetRequiredService<WindowsNetworkDiagnosticService>().RestoreForDataRemovalAsync));
             services.AddSingleton(provider => new ApplicationActionService(
                 provider.GetRequiredService<IRuntimeSettingsAuthority>(),
                 provider.GetRequiredService<MutationAdmissionBarrier>(),

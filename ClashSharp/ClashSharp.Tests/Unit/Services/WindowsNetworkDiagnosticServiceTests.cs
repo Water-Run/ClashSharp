@@ -1,3 +1,4 @@
+using ClashSharp.ApplicationModel.Network;
 using ClashSharp.Model;
 using ClashSharp.Service;
 
@@ -332,6 +333,10 @@ public sealed class WindowsNetworkDiagnosticServiceTests
     private sealed class FakeWindowsDiagnosticSettings : IWindowsDiagnosticSettings
     {
         public int MixedPort { get; set; }
+        public NetworkStateSnapshot? Network { get; set; }
+        public bool IsDefaultWslVersionOne { get; set; }
+        public Task<NetworkStateSnapshot> ReadNetworkAsync(CancellationToken cancellationToken) => Task.FromResult(Network
+            ?? new(ClashSharpMode.Standby, true, false, false, MixedPort, "observed"));
     }
 
     private sealed class FakeWindowsDiagnosticEnvironment : IWindowsDiagnosticEnvironment
@@ -369,6 +374,7 @@ public sealed class WindowsNetworkDiagnosticServiceTests
 
     private sealed class FakeWindowsDiagnosticProcessRunner : IWindowsDiagnosticProcessRunner
     {
+        public string WslNetworkMode { get; set; } = "mirrored";
         public bool StoreExemptionPresent { get; set; }
 
         public int AddCalls { get; private set; }
@@ -408,7 +414,7 @@ public sealed class WindowsNetworkDiagnosticServiceTests
                 return Task.FromResult(new WindowsDiagnosticProcessResult(0, output, string.Empty));
             }
 
-            return Task.FromResult(new WindowsDiagnosticProcessResult(0, string.Empty, string.Empty));
+            return Task.FromResult(new WindowsDiagnosticProcessResult(0, arguments.Contains("--networking-mode", StringComparer.Ordinal) ? WslNetworkMode : string.Empty, string.Empty));
         }
     }
 }

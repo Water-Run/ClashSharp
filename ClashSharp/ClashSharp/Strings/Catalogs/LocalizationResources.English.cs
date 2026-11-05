@@ -10,6 +10,12 @@ internal static partial class LocalizationResources
     {
         return new ReadOnlyDictionary<string, string>(new Dictionary<string, string>
         {
+            ["WindowsDiagnostic.Network.Unknown"] = "Proxy runtime could not be verified. Environment variables were not changed.",
+            ["WindowsDiagnostic.Network.Inactive"] = "Start the proxy core before configuring proxy environment variables.",
+            ["WindowsDiagnostic.Network.Transparent"] = "Transparent proxy is active; local HTTP proxy variables are unnecessary. Test connectivity in the target program.",
+            ["WindowsDiagnostic.Network.TransparentResetRequired"] = "Transparent proxy is active. Apply this repair to undo the old local proxy environment changes.",
+            ["WindowsDiagnostic.Wsl.NatUnsupported"] = "WSL2 uses NAT and cannot reach the localhost-only proxy. Switch WSL to mirrored networking before applying this repair.",
+            ["WindowsDiagnostic.Wsl.NetworkModeUnknown"] = "WSL networking mode could not be verified. No proxy environment changes were made.",
             ["Notification.TransparentProxy.Title"] = "Transparent proxy",
             ["Notification.TransparentProxy.Disabled"] = "Transparent proxy is off.",
             ["Notification.TransparentProxy.Enabled"] = "Transparent proxy is on and verified.",

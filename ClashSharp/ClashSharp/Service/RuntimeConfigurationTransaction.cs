@@ -8,6 +8,9 @@ namespace ClashSharp.Service;
 /// <summary>Applies and verifies one promoted mihomo runtime configuration generation.</summary>
 internal interface ICoreConfigurationRuntime
 {
+    /// <summary>Captures old-runtime accounting before the live file changes under the configuration owner's gate.</summary>
+    Task PrepareTransitionAsync(RuntimeConfigurationIntegrityObservation baseline, CancellationToken cancellationToken) => Task.CompletedTask;
+
     /// <summary>Starts or reloads the runtime with the promoted managed configuration.</summary>
     Task ApplyAsync(
         CoreConfigurationState configuration,

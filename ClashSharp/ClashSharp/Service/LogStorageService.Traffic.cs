@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using ClashSharp.Model;
+using ClashSharp.Model.Rules;
 using Microsoft.Data.Sqlite;
 
 namespace ClashSharp.Service;
@@ -67,6 +68,12 @@ public sealed partial class LogStorageService
                 {
                     newConnectionCount++;
                     UpsertRuleHit(connection, transaction, row.RawRuleDisplay, 1, now);
+                    if (snapshot.ConfigurationIdentity is { Length: > 0 } configurationIdentity && configurationIdentity != "unknown")
+                    {
+                        ExecuteNonQuery(connection, transaction,
+                            "INSERT INTO ObservedRuleHits (ConfigurationIdentity, RuleKey, HitCount, UpdatedAtUnixTime) VALUES ($identity, $rule, 1, $now) ON CONFLICT(ConfigurationIdentity, RuleKey) DO UPDATE SET HitCount = HitCount + 1, UpdatedAtUnixTime = excluded.UpdatedAtUnixTime;",
+                            ("$identity", configurationIdentity), ("$rule", RuleObservationKey.Create(row.RuleName, row.RulePayload)), ("$now", now));
+                    }
                 }
 
                 if (!observedBefore || connectionUpload > 0 || connectionDownload > 0)

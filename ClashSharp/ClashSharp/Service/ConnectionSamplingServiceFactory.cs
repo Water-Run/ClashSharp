@@ -43,6 +43,17 @@ internal sealed class ConnectionSamplingSettingsAdapter(AppSettingsService setti
 
 internal sealed class ConnectionSamplingSourceAdapter(MihomoConnectionService connections, ICoreConfigurationStore? configuration = null) : IConnectionSamplingSource
 {
+    public async Task<MihomoTrafficSnapshot?> GetTransitionSnapshotAsync(RuntimeConfigurationIntegrityObservation baseline, CancellationToken cancellationToken)
+    {
+        // Only the native/configuration transition owner can supply this baseline; the live file has not been promoted yet.
+        MihomoTrafficSnapshot? sample = await connections.TryGetTrafficSnapshotAsync(cancellationToken).ConfigureAwait(false);
+        return sample is null ? null : sample with
+        {
+            ConfigurationIdentity = baseline.StatisticsIdentity,
+            ProfileId = baseline.IsKnown && baseline.AppliedPlan is { } plan ? plan.ProfileId : "unknown",
+        };
+    }
+
     public async Task<MihomoTrafficSnapshot?> GetTrafficSnapshotAsync(CancellationToken cancellationToken)
     {
         ICoreConfigurationStore store = configuration ?? RuntimeDataServices.Configuration;
@@ -53,7 +64,7 @@ internal sealed class ConnectionSamplingSourceAdapter(MihomoConnectionService co
         return sample is null ? null : sample with
         {
             ConfigurationIdentity = before.IsKnown && before == after
-                ? $"{before.AppliedGeneration}:{before.AppliedContentHash}" : "unknown",
+                ? before.StatisticsIdentity : "unknown",
             ProfileId = before.IsKnown && before == after && before.AppliedPlan is { } plan
                 ? plan.ProfileId : "unknown",
         };

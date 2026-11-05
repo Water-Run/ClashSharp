@@ -26,6 +26,7 @@ internal static class RuleCatalogServiceFactory
 
 internal sealed class RuleCatalogProfileRulesAdapter(MihomoProfileParserService parser) : IRuleCatalogProfileRules
 {
+    public string StatisticsIdentity => RuntimeDataServices.Configuration.ObserveRuntimeConfigurationIntegrity().StatisticsIdentity;
     public IReadOnlyList<RulePreview> ParseActiveProfileRules()
     {
         return parser.ParseActiveProfileRules();
@@ -43,4 +44,6 @@ internal sealed class RuleCatalogHitStorageAdapter(ILogStorage storage) : IRuleC
     {
         return storage.GetRuleHitCounts();
     }
+
+    public IReadOnlyDictionary<string, long> GetRuleHitCounts(string identity) => storage.GetRuleHitCounts(identity);
 }

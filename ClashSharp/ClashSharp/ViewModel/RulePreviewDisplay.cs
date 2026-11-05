@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using ClashSharp.Model;
 
 namespace ClashSharp.ViewModel;
@@ -17,6 +18,7 @@ internal sealed class RulePreviewDisplay(
     /// <summary>Relocalizes only explicitly tagged application labels while retaining the rule and its row.</summary>
     public void RefreshLocalization(Func<string, string> getString, Func<string, string> filter)
     {
+        OnPropertyChanged(nameof(HitCountDisplay));
         if (Model.ProviderResourceKey is string key)
         { SetProperty(ref _providerNameDisplay, filter(getString(key)), nameof(ProviderNameDisplay)); }
     }
@@ -25,4 +27,6 @@ internal sealed class RulePreviewDisplay(
     public string Action => Model.Action;
 
     public long HitCount => Model.HitCount;
+
+    public string HitCountDisplay => Model.IsHitCountKnown ? Model.HitCount.ToString("N0", CultureInfo.CurrentCulture) : "—";
 }

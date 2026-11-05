@@ -146,29 +146,8 @@ internal sealed class MihomoGenerationStore
         }
     }
 
-    private string ResolveSourceConfiguration(Guid? dataGenerationId)
-    {
-        if (dataGenerationId is not Guid identity) { return _options.ConfigPath; }
-        string? mihomoDirectory = Path.GetDirectoryName(_options.ConfigPath);
-        if (!string.Equals(Path.GetFileName(_options.ConfigPath), "config.yaml", StringComparison.OrdinalIgnoreCase)
-            || !string.Equals(Path.GetFileName(mihomoDirectory), "mihomo", StringComparison.OrdinalIgnoreCase)
-            || Path.GetDirectoryName(mihomoDirectory) is not string applicationRoot)
-        {
-            throw new InvalidDataException("The installed service configuration has no canonical application data root.");
-        }
-        string source = Path.Combine(applicationRoot, "Data", "v1", "generations", identity.ToString("N"), "mihomo", "config.yaml");
-        // The request carries an opaque identity, never an arbitrary privileged input path.
-        string? current = source;
-        while (current is not null)
-        {
-            if ((File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
-            {
-                throw new InvalidDataException("A service configuration source traverses a reparse point.");
-            }
-            current = Directory.GetParent(current)?.FullName;
-        }
-        return source;
-    }
+    private string ResolveSourceConfiguration(Guid? dataGenerationId) =>
+        MihomoServiceSourcePaths.ResolveConfiguration(_options.ConfigPath, dataGenerationId);
 
     internal static async Task VerifyHashAsync(
         string path,

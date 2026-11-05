@@ -10,6 +10,12 @@ internal static partial class LocalizationResources
     {
         return new ReadOnlyDictionary<string, string>(new Dictionary<string, string>
         {
+            ["WindowsDiagnostic.Network.Unknown"] = "无法核验代理运行状态，未修改环境变量。",
+            ["WindowsDiagnostic.Network.Inactive"] = "请先启动代理内核，再设置代理环境变量。",
+            ["WindowsDiagnostic.Network.Transparent"] = "透明代理已启用，无需设置本地 HTTP 代理环境变量。请在目标程序中测试网络。",
+            ["WindowsDiagnostic.Network.TransparentResetRequired"] = "透明代理已启用。请点击应用，撤销旧的本地代理环境修正。",
+            ["WindowsDiagnostic.Wsl.NatUnsupported"] = "WSL2 当前使用 NAT，无法访问仅监听 localhost 的代理。请改用镜像网络后再应用修正。",
+            ["WindowsDiagnostic.Wsl.NetworkModeUnknown"] = "无法确定 WSL 网络模式，未修改代理环境变量。",
             ["Notification.TransparentProxy.Title"] = "透明代理",
             ["Notification.TransparentProxy.Disabled"] = "透明代理已关闭。",
             ["Notification.TransparentProxy.Enabled"] = "透明代理已开启并生效。",

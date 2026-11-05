@@ -24,6 +24,10 @@ internal interface IConnectionSamplingSource
 {
     /// <summary>Returns an authenticated snapshot, or null when no core is active.</summary>
     Task<MihomoTrafficSnapshot?> GetTrafficSnapshotAsync(CancellationToken cancellationToken);
+
+    /// <summary>Reads the runtime whose immutable identity is held by the configuration transition owner.</summary>
+    Task<MihomoTrafficSnapshot?> GetTransitionSnapshotAsync(RuntimeConfigurationIntegrityObservation baseline, CancellationToken cancellationToken) =>
+        GetTrafficSnapshotAsync(cancellationToken);
 }
 
 /// <summary>Persists sampled connection snapshots and sampling logs.</summary>
@@ -168,11 +172,16 @@ public sealed partial class ConnectionSamplingService : IRuntimeParticipant
     /// <summary>Samples active connections once and writes them to SQLite.</summary>
     /// <param name="cancellationToken">Cancels the sample.</param>
     internal async Task SampleOnceAsync(CancellationToken cancellationToken)
+        => await SampleCoreAsync(null, cancellationToken).ConfigureAwait(false);
+
+    private async Task SampleCoreAsync(RuntimeConfigurationIntegrityObservation? baseline, CancellationToken cancellationToken)
     {
         await _sampleGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            MihomoTrafficSnapshot? snapshot = await _source.GetTrafficSnapshotAsync(cancellationToken).ConfigureAwait(false);
+            MihomoTrafficSnapshot? snapshot = baseline is { } observed
+                ? await _source.GetTransitionSnapshotAsync(observed, cancellationToken).ConfigureAwait(false)
+                : await _source.GetTrafficSnapshotAsync(cancellationToken).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
             _lastInsertedCount = snapshot is null ? 0 : _storage.AppendTrafficSnapshot(snapshot);
         }
@@ -184,13 +193,20 @@ public sealed partial class ConnectionSamplingService : IRuntimeParticipant
 
     /// <summary>Captures a final enabled sample before the controller is stopped or replaced.</summary>
     internal async Task FlushAsync(CancellationToken cancellationToken)
+        => await FlushCoreAsync(null, cancellationToken).ConfigureAwait(false);
+
+    /// <summary>Accounts for the verified old runtime while its configuration owner excludes promotion.</summary>
+    internal Task FlushAsync(RuntimeConfigurationIntegrityObservation baseline, CancellationToken cancellationToken) =>
+        FlushCoreAsync(baseline, cancellationToken);
+
+    private async Task FlushCoreAsync(RuntimeConfigurationIntegrityObservation? baseline, CancellationToken cancellationToken)
     {
         await _configurationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             if (IsConfiguredEnabled)
             {
-                await SampleOnceAsync(cancellationToken).ConfigureAwait(false);
+                await SampleCoreAsync(baseline, cancellationToken).ConfigureAwait(false);
             }
         }
         finally

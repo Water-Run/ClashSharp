@@ -98,6 +98,9 @@ internal sealed class GenerationLogStorage : ILogStorage
         return Execute<IReadOnlyDictionary<string, long>>(storage => storage.GetRuleHitCounts());
     }
 
+    public IReadOnlyDictionary<string, long> GetRuleHitCounts(string configurationIdentity) =>
+        Execute(storage => storage.GetRuleHitCounts(configurationIdentity));
+
     public void AppendLog(string level, string source, string message, string? detail)
     {
         Execute(storage => storage.AppendLog(level, source, message, detail));

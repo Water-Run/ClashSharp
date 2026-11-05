@@ -10,6 +10,12 @@ internal static partial class LocalizationResources
     {
         return new ReadOnlyDictionary<string, string>(new Dictionary<string, string>
         {
+            ["WindowsDiagnostic.Network.Unknown"] = "وضعیت اجرای پراکسی تأیید نشد. متغیرهای محیطی تغییر نکردند.",
+            ["WindowsDiagnostic.Network.Inactive"] = "پیش از تنظیم متغیرهای پراکسی، هسته را اجرا کنید.",
+            ["WindowsDiagnostic.Network.Transparent"] = "پراکسی شفاف فعال است و متغیرهای پراکسی HTTP محلی لازم نیستند. اتصال را در برنامهٔ مقصد بررسی کنید.",
+            ["WindowsDiagnostic.Network.TransparentResetRequired"] = "پراکسی شفاف فعال است. برای بازگردانی تغییرات قبلی متغیرهای پراکسی محلی، اصلاح را اعمال کنید.",
+            ["WindowsDiagnostic.Wsl.NatUnsupported"] = "WSL2 از NAT استفاده می‌کند و به پراکسی محدود به localhost دسترسی ندارد. ابتدا حالت شبکهٔ mirrored را فعال کنید.",
+            ["WindowsDiagnostic.Wsl.NetworkModeUnknown"] = "حالت شبکهٔ WSL تأیید نشد. متغیرهای پراکسی تغییر نکردند.",
             ["Notification.TransparentProxy.Title"] = "پراکسی شفاف",
             ["Notification.TransparentProxy.Disabled"] = "پراکسی شفاف خاموش است.",
             ["Notification.TransparentProxy.Enabled"] = "پراکسی شفاف روشن و تأیید شده است.",

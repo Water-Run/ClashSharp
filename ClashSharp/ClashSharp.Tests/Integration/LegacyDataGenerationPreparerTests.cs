@@ -12,6 +12,26 @@ namespace ClashSharp.Tests.Integration;
 public sealed class LegacyDataGenerationPreparerTests
 {
     [Fact]
+    public async Task ResourceClosureSurvivesAnEstablishedGenerationSnapshot()
+    {
+        await using DataGenerationTestDirectory directory = new();
+        DataGenerationDescriptor source = directory.Policy.CreateGeneration(Guid.NewGuid(), 1);
+        string resources = Path.Combine(source.RootPath, "mihomo", "rules");
+        Directory.CreateDirectory(resources);
+        await File.WriteAllTextAsync(Path.Combine(resources, "local.yaml"), "payload: [retained.example]");
+        string profiles = Path.Combine(source.RootPath, "mihomo", "profiles", "profile-a");
+        Directory.CreateDirectory(profiles);
+        const string configuration = "rule-providers:\n  local:\n    type: file\n    path: rules/local.yaml\n";
+        await File.WriteAllTextAsync(Path.Combine(profiles, "config.yaml"), configuration);
+        DataGenerationDescriptor candidate = directory.Policy.CreateGeneration(Guid.NewGuid(), 2);
+        MutationAdmissionBarrier admission = new();
+        await using var lease = await admission.CloseAndDrainAsync(MutationAdmissionClosure.Destructive, CancellationToken.None);
+        await new UserDataRepositorySnapshot(directory.RootPath, source.RootPath, admission).CopyAdmittedAsync(candidate, lease, false, CancellationToken.None);
+        Assert.Equal(configuration, await File.ReadAllTextAsync(Path.Combine(candidate.RootPath, "mihomo/profiles/profile-a/config.yaml")));
+        Assert.Equal("payload: [retained.example]", await File.ReadAllTextAsync(Path.Combine(candidate.RootPath, "mihomo/rules/local.yaml")));
+    }
+
+    [Fact]
     public async Task MigratesSettingsProfilesAndCommittedWalRecords_WithoutPublishingOrChangingLegacyData()
     {
         await using DataGenerationTestDirectory directory = new();
@@ -24,6 +44,8 @@ public sealed class LegacyDataGenerationPreparerTests
             [Path.Combine("mihomo", "proxy-selections.json")] = "{\"version\":1,\"profiles\":{\"example\":{\"GLOBAL\":\"Node B\"}}}",
             [Path.Combine("mihomo", "profiles", "example", "config.yaml")] = "proxies: []\nrules: [MATCH,DIRECT]",
             [Path.Combine("mihomo", "history", "example", "revision.yaml")] = "rules: [MATCH,REJECT]",
+            [Path.Combine("mihomo", "rules", "local.yaml")] = "payload: [local.example]",
+            [Path.Combine("mihomo", "custom", "nodes.yaml")] = "proxies: []",
         };
         foreach ((string path, string contents) in documents)
         {
@@ -32,6 +54,8 @@ public sealed class LegacyDataGenerationPreparerTests
             await File.WriteAllTextAsync(file, contents);
         }
         await File.WriteAllTextAsync(Path.Combine(directory.RootPath, "mihomo", "config.yaml"), "old generated runtime with credentials");
+        await File.WriteAllTextAsync(Path.Combine(directory.RootPath, "mihomo", "cache.db-wal"), "private live cache");
+        await File.WriteAllTextAsync(Path.Combine(directory.RootPath, "mihomo", "profiles", "example", "config.yaml.backup.private"), "private controller transaction");
         await File.WriteAllTextAsync(Path.Combine(directory.RootPath, "unrelated-private-file"), "retain only at source");
         using SqliteConnection logs = CreateWalDatabase(directory, "ClashSharpLogs.sqlite3", 37);
         using SqliteConnection triggers = CreateWalDatabase(directory, "Triggers.db", 53);
@@ -59,6 +83,8 @@ public sealed class LegacyDataGenerationPreparerTests
             Assert.Equal(hash, HashFile(path));
         }
         Assert.False(File.Exists(Path.Combine(candidate.RootPath, "mihomo", "config.yaml")));
+        Assert.False(File.Exists(Path.Combine(candidate.RootPath, "mihomo", "cache.db-wal")));
+        Assert.False(File.Exists(Path.Combine(candidate.RootPath, "mihomo", "profiles", "example", "config.yaml.backup.private")));
         Assert.False(File.Exists(Path.Combine(candidate.RootPath, "unrelated-private-file")));
         SettingsPersistenceResult settings = await new JsonSettingsRepository(candidate, SettingsRegistry.Default).OpenAsync(CancellationToken.None);
         Assert.Equal(10808, settings.Envelope!.Desired[SettingsRegistry.Keys.MixedPort].Value.Get<int>());

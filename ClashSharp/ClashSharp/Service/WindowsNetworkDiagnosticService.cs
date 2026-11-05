@@ -1,8 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using ClashSharp.ApplicationModel.Mutations;
+using ClashSharp.ApplicationModel.Network;
 using ClashSharp.Model;
 
 namespace ClashSharp.Service;
@@ -10,8 +13,11 @@ namespace ClashSharp.Service;
 /// <summary>Provides settings required by Windows-native diagnostics.</summary>
 internal interface IWindowsDiagnosticSettings
 {
-    /// <summary>Gets the local mixed HTTP/SOCKS port used by environment proxy URLs.</summary>
-    int MixedPort { get; }
+    /// <summary>Reads the actual runtime and listener; desired preferences never authorize environment writes.</summary>
+    Task<NetworkStateSnapshot> ReadNetworkAsync(CancellationToken cancellationToken);
+
+    /// <summary>Gets whether the registered default distribution is conclusively WSL1.</summary>
+    bool IsDefaultWslVersionOne => false;
 }
 
 /// <summary>Reads and writes user-level environment variables for Windows-native diagnostics.</summary>
@@ -70,6 +76,7 @@ public sealed partial class WindowsNetworkDiagnosticService
     private readonly IWindowsDiagnosticMutationJournalStore _mutationJournal;
 
     private readonly Func<string, string> _getString;
+    private readonly MutationAdmissionBarrier? _admission;
 
     /// <summary>Serializes journal-backed apply and reset transactions.</summary>
     private readonly SemaphoreSlim _mutationGate = new(1, 1);
@@ -80,13 +87,15 @@ public sealed partial class WindowsNetworkDiagnosticService
         IWindowsDiagnosticEnvironment environment,
         IWindowsDiagnosticProcessRunner processRunner,
         IWindowsDiagnosticMutationJournalStore mutationJournal,
-        Func<string, string> getString)
+        Func<string, string> getString,
+        MutationAdmissionBarrier? admission = null)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _environment = environment ?? throw new ArgumentNullException(nameof(environment));
         _processRunner = processRunner ?? throw new ArgumentNullException(nameof(processRunner));
         _mutationJournal = mutationJournal ?? throw new ArgumentNullException(nameof(mutationJournal));
         _getString = getString ?? throw new ArgumentNullException(nameof(getString));
+        _admission = admission;
     }
 
     /// <summary>Diagnoses one Windows-native network target.</summary>
@@ -99,7 +108,7 @@ public sealed partial class WindowsNetworkDiagnosticService
         return target switch
         {
             WindowsDiagnosticTarget.Wsl => DiagnoseWslAsync(cancellationToken),
-            WindowsDiagnosticTarget.Terminal => Task.FromResult(DiagnoseTerminal()),
+            WindowsDiagnosticTarget.Terminal => DiagnoseTerminalAsync(cancellationToken),
             WindowsDiagnosticTarget.MicrosoftStore => DiagnoseMicrosoftStoreAsync(cancellationToken),
             _ => throw new ArgumentOutOfRangeException(nameof(target), target, "Unsupported Windows diagnostic target."),
         };
@@ -112,17 +121,32 @@ public sealed partial class WindowsNetworkDiagnosticService
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="target"/> is not supported.</exception>
     public async Task<WindowsDiagnosticResult> ApplyAsync(WindowsDiagnosticTarget target, CancellationToken cancellationToken)
     {
+        using MutationAdmissionLease? lease = _admission?.AcquireOrdinary(cancellationToken);
+        using CancellationTokenSource lifetime = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, lease?.RevocationToken ?? default);
+        cancellationToken = lifetime.Token;
         await _mutationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (target is WindowsDiagnosticTarget.Wsl or WindowsDiagnosticTarget.Terminal)
+            {
+                NetworkStateSnapshot network = await _settings.ReadNetworkAsync(cancellationToken).ConfigureAwait(false);
+                if (RuntimeIssue(target, network) is { } unavailable) { return unavailable; }
+                if (network.TransparentProxyEnabled)
+                {
+                    ResetEnvironmentMutations(WindowsDiagnosticMutationOwner.Terminal | WindowsDiagnosticMutationOwner.Wsl, includeWslBridge: true);
+                    return Status(target, true, "WindowsDiagnostic.Network.Transparent");
+                }
+                if (target == WindowsDiagnosticTarget.Wsl && await ReadWslModeIssueAsync(cancellationToken).ConfigureAwait(false) is { } modeIssue)
+                {
+                    return Status(target, false, modeIssue);
+                }
+                ApplyEnvironmentMutations(target == WindowsDiagnosticTarget.Wsl ? WindowsDiagnosticMutationOwner.Wsl : WindowsDiagnosticMutationOwner.Terminal,
+                    target == WindowsDiagnosticTarget.Wsl, BuildLocalProxyUrl(network));
+                return await DiagnoseAsync(target, cancellationToken).ConfigureAwait(false);
+            }
             switch (target)
             {
-                case WindowsDiagnosticTarget.Wsl:
-                    ApplyEnvironmentMutations(WindowsDiagnosticMutationOwner.Wsl, includeWslBridge: true);
-                    return await DiagnoseWslAsync(cancellationToken).ConfigureAwait(false);
-                case WindowsDiagnosticTarget.Terminal:
-                    ApplyEnvironmentMutations(WindowsDiagnosticMutationOwner.Terminal, includeWslBridge: false);
-                    return DiagnoseTerminal();
                 case WindowsDiagnosticTarget.MicrosoftStore:
                     return await ApplyOwnedMicrosoftStoreLoopbackAsync(cancellationToken).ConfigureAwait(false);
                 default:
@@ -142,6 +166,9 @@ public sealed partial class WindowsNetworkDiagnosticService
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="target"/> is not supported.</exception>
     public async Task<WindowsDiagnosticResult> ResetAsync(WindowsDiagnosticTarget target, CancellationToken cancellationToken)
     {
+        using MutationAdmissionLease? lease = _admission?.AcquireOrdinary(cancellationToken);
+        using CancellationTokenSource lifetime = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, lease?.RevocationToken ?? default);
+        cancellationToken = lifetime.Token;
         await _mutationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
@@ -152,7 +179,7 @@ public sealed partial class WindowsNetworkDiagnosticService
                     return await DiagnoseWslAsync(cancellationToken).ConfigureAwait(false);
                 case WindowsDiagnosticTarget.Terminal:
                     ResetEnvironmentMutations(WindowsDiagnosticMutationOwner.Terminal, includeWslBridge: false);
-                    return DiagnoseTerminal();
+                    return await DiagnoseTerminalAsync(cancellationToken).ConfigureAwait(false);
                 case WindowsDiagnosticTarget.MicrosoftStore:
                     return await ResetOwnedMicrosoftStoreLoopbackAsync(cancellationToken).ConfigureAwait(false);
                 default:
@@ -165,41 +192,78 @@ public sealed partial class WindowsNetworkDiagnosticService
         }
     }
 
-    /// <summary>Diagnoses WSL availability and proxy environment bridging.</summary>
-    /// <param name="cancellationToken">Cancels the WSL status process.</param>
-    /// <returns>WSL diagnostic result.</returns>
+    /// <summary>Retires all owned native repairs before data removal can destroy their recovery journal.</summary>
+    internal async Task RestoreForDataRemovalAsync(CancellationToken cancellationToken)
+    {
+        using MutationAdmissionLease lease = (_admission ?? throw new InvalidOperationException("Native recovery has no shutdown authority."))
+            .AcquireShutdownMaintenance();
+        await _mutationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            ResetEnvironmentMutations(WindowsDiagnosticMutationOwner.Terminal | WindowsDiagnosticMutationOwner.Wsl, includeWslBridge: true);
+            if (_mutationJournal.Read().MicrosoftStore is not null)
+            {
+                _ = await ResetOwnedMicrosoftStoreLoopbackAsync(CancellationToken.None).ConfigureAwait(false);
+            }
+            if (!_mutationJournal.Read().IsEmpty) { throw new IOException("Native network restoration still owns pending changes."); }
+        }
+        finally { _mutationGate.Release(); }
+    }
+
+    /// <summary>Checks runtime ownership, Linux networking mode and the explicitly configured bridge.</summary>
     private async Task<WindowsDiagnosticResult> DiagnoseWslAsync(CancellationToken cancellationToken)
     {
-        WindowsDiagnosticProcessResult result = await _processRunner
-            .RunAsync("wsl.exe", ["--status"], TimeSpan.FromSeconds(5), cancellationToken)
-            .ConfigureAwait(false);
-        bool isAvailable = result.ExitCode == 0;
-        string proxyUrl = BuildLocalProxyUrl();
-        string wslEnv = GetEnvironment("WSLENV");
-        bool hasBridge = ContainsAllWslEnvTokens(wslEnv);
-        bool hasProxyEnvironment = IsProxyEnvironmentConfigured(proxyUrl);
-        bool isHealthy = isAvailable && hasBridge && hasProxyEnvironment;
-        string messageKey = ResolveWslMessageKey(isHealthy, isAvailable, hasBridge);
-        string message = GetString(messageKey);
-        string detail = isAvailable ? $"WSLENV={wslEnv}; {BuildProxyEnvironmentDetail()}" : result.Error;
-
-        return new WindowsDiagnosticResult(WindowsDiagnosticTarget.Wsl, "WSL", isHealthy, message, detail) { MessageResourceKey = messageKey };
+        WindowsDiagnosticProcessResult available = await _processRunner.RunAsync("wsl.exe", ["--status"],
+            TimeSpan.FromSeconds(5), cancellationToken).ConfigureAwait(false);
+        if (available.ExitCode != 0) { return Status(WindowsDiagnosticTarget.Wsl, false, "WindowsDiagnostic.Wsl.Unavailable"); }
+        NetworkStateSnapshot network = await _settings.ReadNetworkAsync(cancellationToken).ConfigureAwait(false);
+        if (RuntimeIssue(WindowsDiagnosticTarget.Wsl, network) is { } issue) { return issue; }
+        if (network.TransparentProxyEnabled) { return TransparentStatus(WindowsDiagnosticTarget.Wsl); }
+        if (await ReadWslModeIssueAsync(cancellationToken).ConfigureAwait(false) is { } modeIssue)
+        {
+            return Status(WindowsDiagnosticTarget.Wsl, false, modeIssue);
+        }
+        bool hasBridge = ContainsAllWslEnvTokens(GetEnvironment("WSLENV"));
+        bool healthy = hasBridge && IsProxyEnvironmentConfigured(BuildLocalProxyUrl(network));
+        return Status(WindowsDiagnosticTarget.Wsl, healthy, healthy ? "WindowsDiagnostic.Wsl.Ready"
+            : hasBridge ? "WindowsDiagnostic.Wsl.ProxyEnvironmentMissing" : "WindowsDiagnostic.Wsl.BridgeMissing");
     }
 
-    /// <summary>Diagnoses terminal proxy environment variables for newly launched shells.</summary>
-    /// <returns>Terminal diagnostic result.</returns>
-    private WindowsDiagnosticResult DiagnoseTerminal()
+    private async Task<string?> ReadWslModeIssueAsync(CancellationToken cancellationToken)
     {
-        string proxyUrl = BuildLocalProxyUrl();
-        bool isHealthy = IsProxyEnvironmentConfigured(proxyUrl);
-        string messageKey = isHealthy
-            ? "WindowsDiagnostic.Terminal.Ready"
-            : "WindowsDiagnostic.Terminal.ProxyEnvironmentMissing";
-        string message = GetString(messageKey);
-        string detail = BuildProxyEnvironmentDetail();
-
-        return new WindowsDiagnosticResult(WindowsDiagnosticTarget.Terminal, GetString("WindowsDiagnostic.Target.Terminal"), isHealthy, message, detail) { MessageResourceKey = messageKey };
+        if (_settings.IsDefaultWslVersionOne) { return null; }
+        WindowsDiagnosticProcessResult result = await _processRunner.RunAsync("wsl.exe", ["--exec", "wslinfo", "--networking-mode"],
+            TimeSpan.FromSeconds(5), cancellationToken).ConfigureAwait(false);
+        string mode = result.Output.Replace("\0", string.Empty, StringComparison.Ordinal).Trim().ToLowerInvariant();
+        if (result.ExitCode == 0 && mode is "mirrored" or "wsl1") { return null; }
+        return result.ExitCode == 0 && mode == "nat" ? "WindowsDiagnostic.Wsl.NatUnsupported" : "WindowsDiagnostic.Wsl.NetworkModeUnknown";
     }
+
+    private async Task<WindowsDiagnosticResult> DiagnoseTerminalAsync(CancellationToken cancellationToken)
+    {
+        NetworkStateSnapshot network = await _settings.ReadNetworkAsync(cancellationToken).ConfigureAwait(false);
+        if (RuntimeIssue(WindowsDiagnosticTarget.Terminal, network) is { } issue) { return issue; }
+        if (network.TransparentProxyEnabled) { return TransparentStatus(WindowsDiagnosticTarget.Terminal); }
+        bool healthy = IsProxyEnvironmentConfigured(BuildLocalProxyUrl(network));
+        return Status(WindowsDiagnosticTarget.Terminal, healthy, healthy ? "WindowsDiagnostic.Terminal.Ready"
+            : "WindowsDiagnostic.Terminal.ProxyEnvironmentMissing", BuildProxyEnvironmentDetail());
+    }
+
+    private WindowsDiagnosticResult? RuntimeIssue(WindowsDiagnosticTarget target, NetworkStateSnapshot network) =>
+        !network.IsKnown ? Status(target, false, "WindowsDiagnostic.Network.Unknown")
+        : !network.CoreRunning || network.Mode is ClashSharpMode.Disabled or ClashSharpMode.Faulted
+            || network.MixedPort is < 1 or > 65535 ? Status(target, false, "WindowsDiagnostic.Network.Inactive") : null;
+
+    private WindowsDiagnosticResult TransparentStatus(WindowsDiagnosticTarget target)
+    {
+        bool pending = _mutationJournal.Read().EnvironmentVariables.Count != 0;
+        return Status(target, !pending, pending ? "WindowsDiagnostic.Network.TransparentResetRequired" : "WindowsDiagnostic.Network.Transparent");
+    }
+
+    private WindowsDiagnosticResult Status(WindowsDiagnosticTarget target, bool healthy, string key, string detail = "") =>
+        new(target, target == WindowsDiagnosticTarget.Terminal ? GetString("WindowsDiagnostic.Target.Terminal") : "WSL", healthy,
+            GetString(key), detail)
+        { MessageResourceKey = key };
 
     /// <summary>Diagnoses Microsoft Store loopback exemption state.</summary>
     /// <param name="cancellationToken">Cancels the CheckNetIsolation process.</param>
@@ -209,7 +273,7 @@ public sealed partial class WindowsNetworkDiagnosticService
         WindowsDiagnosticProcessResult result = await _processRunner
             .RunAsync("CheckNetIsolation.exe", ["LoopbackExempt", "-s"], TimeSpan.FromSeconds(5), cancellationToken)
             .ConfigureAwait(false);
-        bool isHealthy = result.Output.Contains(MicrosoftStorePackageFamilyName, StringComparison.OrdinalIgnoreCase);
+        bool isHealthy = result.ExitCode == 0 && result.Output.Contains(MicrosoftStorePackageFamilyName, StringComparison.OrdinalIgnoreCase);
         string messageKey = isHealthy
             ? "WindowsDiagnostic.MicrosoftStore.Ready"
             : "WindowsDiagnostic.MicrosoftStore.LoopbackMissing";
@@ -219,32 +283,14 @@ public sealed partial class WindowsNetworkDiagnosticService
         return new WindowsDiagnosticResult(WindowsDiagnosticTarget.MicrosoftStore, "Microsoft Store", isHealthy, message, detail) { MessageResourceKey = messageKey };
     }
 
-    /// <summary>Resolves WSL diagnostic status text.</summary>
-    private static string ResolveWslMessageKey(bool isHealthy, bool isAvailable, bool hasBridge)
-    {
-        if (isHealthy)
-        {
-            return "WindowsDiagnostic.Wsl.Ready";
-        }
-
-        if (!isAvailable)
-        {
-            return "WindowsDiagnostic.Wsl.Unavailable";
-        }
-
-        return hasBridge
-            ? "WindowsDiagnostic.Wsl.ProxyEnvironmentMissing"
-            : "WindowsDiagnostic.Wsl.BridgeMissing";
-    }
-
     /// <summary>Captures and applies environment mutations owned by one diagnostic target.</summary>
-    private void ApplyEnvironmentMutations(WindowsDiagnosticMutationOwner owner, bool includeWslBridge)
+    private void ApplyEnvironmentMutations(WindowsDiagnosticMutationOwner owner, bool includeWslBridge, string proxyUrl)
     {
         WindowsDiagnosticMutationJournal journal = _mutationJournal.Read();
         Dictionary<string, WindowsDiagnosticEnvironmentMutation> mutations = new(
             journal.EnvironmentVariables,
             StringComparer.OrdinalIgnoreCase);
-        Dictionary<string, string> desiredValues = BuildDesiredEnvironmentValues(includeWslBridge);
+        Dictionary<string, string> desiredValues = BuildDesiredEnvironmentValues(includeWslBridge, proxyUrl);
 
         foreach ((string name, string desiredValue) in desiredValues)
         {
@@ -333,7 +379,12 @@ public sealed partial class WindowsNetworkDiagnosticService
             string? currentValue = _environment.GetUserEnvironmentVariable(name);
             if (IsOwnedEnvironmentValue(currentValue, mutation))
             {
-                SetEnvironment(name, mutation.BaselineExists ? mutation.BaselineValue : null);
+                string? baseline = mutation.BaselineExists ? mutation.BaselineValue : null;
+                SetEnvironment(name, baseline);
+                if (!StringComparer.Ordinal.Equals(_environment.GetUserEnvironmentVariable(name), baseline))
+                {
+                    throw new IOException("A restored environment value could not be verified.");
+                }
             }
 
             mutations.Remove(name);
@@ -376,9 +427,8 @@ public sealed partial class WindowsNetworkDiagnosticService
     }
 
     /// <summary>Builds the exact environment values written by one repair action.</summary>
-    private Dictionary<string, string> BuildDesiredEnvironmentValues(bool includeWslBridge)
+    private Dictionary<string, string> BuildDesiredEnvironmentValues(bool includeWslBridge, string proxyUrl)
     {
-        string proxyUrl = BuildLocalProxyUrl();
         Dictionary<string, string> desiredValues = new(StringComparer.OrdinalIgnoreCase)
         {
             ["HTTP_PROXY"] = proxyUrl,
@@ -505,6 +555,11 @@ public sealed partial class WindowsNetworkDiagnosticService
             }
         }
 
+        bool verified = await GetMicrosoftStoreLoopbackStateAsync(CancellationToken.None).ConfigureAwait(false);
+        if (IsOwnedMicrosoftStoreState(currentState, mutation) && verified != mutation.BaselinePresent)
+        {
+            throw new IOException("The restored Store exemption could not be verified.");
+        }
         _mutationJournal.Write(journal with { MicrosoftStore = null });
         return await DiagnoseMicrosoftStoreAsync(cancellationToken).ConfigureAwait(false);
     }
@@ -533,14 +588,8 @@ public sealed partial class WindowsNetworkDiagnosticService
         return result.Output.Contains(MicrosoftStorePackageFamilyName, StringComparison.OrdinalIgnoreCase);
     }
 
-    /// <summary>Builds the local proxy URL used by Windows diagnostic apply actions.</summary>
-    /// <returns>HTTP proxy URL using the configured mixed port.</returns>
-    private string BuildLocalProxyUrl()
-    {
-        return string.Create(
-            CultureInfo.InvariantCulture,
-            $"http://127.0.0.1:{_settings.MixedPort}");
-    }
+    private static string BuildLocalProxyUrl(NetworkStateSnapshot network) =>
+        string.Create(CultureInfo.InvariantCulture, $"http://127.0.0.1:{network.MixedPort}");
 
     private string GetString(string key)
     {

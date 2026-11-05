@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using ClashSharp.Model;
+using ClashSharp.Model.Rules;
 using YamlDotNet.RepresentationModel;
 
 namespace ClashSharp.Service;
@@ -56,11 +57,13 @@ internal static partial class MihomoProfilePreviewParser
         foreach (var child in sequence.Children)
         {
             if (child is not YamlScalarNode { Value: { } raw } || string.IsNullOrWhiteSpace(raw)) { continue; }
-            string[] parts = raw.Split(',', StringSplitOptions.TrimEntries);
-            if (string.IsNullOrWhiteSpace(parts[0])) { continue; }
-            rules.Add(new(sourceName, parts[0], parts.Length > 2 ? parts[1] : "*",
-                parts.Length > 2 ? parts[2] : parts.Length > 1 ? parts[1] : "DIRECT", 0));
+            rules.Add(ParseRulePreview(sourceName, raw));
         }
         return rules;
     }
+
+    private static RulePreview ParseRulePreview(string sourceName, string raw) =>
+        MihomoRuleSyntax.TryParse(raw, out ParsedMihomoRule rule)
+            ? new(sourceName, rule.Type, rule.Payload, rule.Action, 0)
+            : new(sourceName, raw, string.Empty, string.Empty, 0) { IsHitCountKnown = false };
 }

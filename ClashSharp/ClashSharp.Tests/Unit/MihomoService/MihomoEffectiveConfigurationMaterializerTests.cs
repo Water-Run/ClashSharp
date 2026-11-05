@@ -7,6 +7,34 @@ namespace ClashSharp.Tests.Unit.MihomoService;
 
 public sealed class MihomoEffectiveConfigurationMaterializerTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task MaterializeAsync_DataGenerationUsesItsOwnProviderBytes(bool legacyResourceExists)
+    {
+        using MihomoServiceTemporaryDirectory temporaryDirectory = new();
+        MihomoServiceOptions options = MihomoServiceTestSupport.CreateOptions(temporaryDirectory.Path, generationLayout: true);
+        Guid identity = Guid.NewGuid();
+        string legacy = Path.GetDirectoryName(options.ConfigPath)!;
+        string current = Path.Combine(temporaryDirectory.Path, "app", "Data", "v1", "generations", identity.ToString("N"), "mihomo");
+        Directory.CreateDirectory(Path.Combine(legacy, "rules"));
+        Directory.CreateDirectory(Path.Combine(current, "rules"));
+        Directory.CreateDirectory(options.RuntimeDirectory);
+        if (legacyResourceExists) { await File.WriteAllTextAsync(Path.Combine(legacy, "rules/local.yaml"), "payload: [old.example]"); }
+        const string input = "rule-providers:\n  local:\n    type: file\n    behavior: domain\n    path: rules/local.yaml\n";
+        await File.WriteAllTextAsync(Path.Combine(current, "config.yaml"), input);
+        await File.WriteAllTextAsync(Path.Combine(current, "rules/local.yaml"), "payload: [new.example]");
+        string staged = Path.Combine(options.ServiceDataDirectory, "generation.yaml");
+        await File.WriteAllTextAsync(staged, input);
+        MihomoEffectiveConfigurationMaterializer materializer = new(options, protectDirectory: false);
+        MihomoEffectiveGeneration effective = await materializer.MaterializeAsync(new(1, MihomoServiceTestSupport.ComputeHash(input), staged, identity),
+            options.RuntimeDirectory, CancellationToken.None);
+        string copied = Assert.Single(Directory.GetFiles(Path.Combine(options.RuntimeDirectory, "providers/file/rule"), "*.yaml"));
+        Assert.Equal("payload: [new.example]", await File.ReadAllTextAsync(copied));
+        Assert.Equal(identity, effective.Source.DataGenerationId);
+        materializer.DeleteAfterJobEmpty(effective);
+    }
+
     [Fact]
     public async Task MaterializeAsync_ReplacesOnlyRootControllerAuthority_WithoutChangingSource()
     {

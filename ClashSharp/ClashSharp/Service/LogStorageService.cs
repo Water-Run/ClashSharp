@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using ClashSharp.ApplicationModel.Data;
 using ClashSharp.Diagnostics;
 using ClashSharp.Model;
+using ClashSharp.Model.Rules;
 using Microsoft.Data.Sqlite;
 
 namespace ClashSharp.Service;
@@ -880,6 +881,7 @@ public sealed partial class LogStorageService : ILogStorage, IAsyncDisposable
             ExecuteNonQuery(connection, transaction, "DELETE FROM Connections WHERE CreatedAtUnixTime < $cutoff;", ("$cutoff", cutoffUnixTime));
             ExecuteNonQuery(connection, transaction, "DELETE FROM TrafficSnapshots WHERE CreatedAtUnixTime < $cutoff;", ("$cutoff", cutoffUnixTime));
             ExecuteNonQuery(connection, transaction, "DELETE FROM RuleHitStats WHERE UpdatedAtUnixTime < $cutoff;", ("$cutoff", cutoffUnixTime));
+            ExecuteNonQuery(connection, transaction, "DELETE FROM ObservedRuleHits WHERE UpdatedAtUnixTime < $cutoff;", ("$cutoff", cutoffUnixTime));
             ExecuteNonQuery(connection, transaction, "DELETE FROM NodeHealthStats WHERE UpdatedAtUnixTime < $cutoff;", ("$cutoff", cutoffUnixTime));
             transaction.Commit();
             LogStorageMaintenance.Vacuum(connection);
@@ -987,6 +989,7 @@ public sealed partial class LogStorageService : ILogStorage, IAsyncDisposable
             ExecuteNonQuery(connection, transaction, "DELETE FROM NodeTrafficStats;");
             ExecuteNonQuery(connection, transaction, "DELETE FROM NodeHealthStats;");
             ExecuteNonQuery(connection, transaction, "DELETE FROM RuleHitStats;");
+            ExecuteNonQuery(connection, transaction, "DELETE FROM ObservedRuleHits;");
             transaction.Commit();
             LogStorageMaintenance.Vacuum(connection);
         }
@@ -1217,12 +1220,33 @@ public sealed partial class LogStorageService : ILogStorage, IAsyncDisposable
     /// <returns>Stable rule name.</returns>
     private static string BuildRuleName(RulePreview rule)
     {
-        return $"{rule.RuleType},{rule.Payload},{rule.Action}";
+        return RuleObservationKey.Create(rule.RuleType, rule.Payload);
     }
 
     private string GetActiveProfileId()
     {
         return _getActiveProfileId();
+    }
+
+    /// <summary>Reads canonical rule-condition hits from one installed configuration, excluding ambiguous legacy rows.</summary>
+    /// <param name="configurationIdentity">Identity carried by the sampled runtime configuration.</param>
+    /// <returns>Detached condition counters for this identity.</returns>
+    public IReadOnlyDictionary<string, long> GetRuleHitCounts(string configurationIdentity)
+    {
+        using IDisposable operation = _operations.Enter();
+        ArgumentException.ThrowIfNullOrWhiteSpace(configurationIdentity);
+        lock (_syncLock)
+        {
+            EnsureInitialized();
+            using SqliteConnection connection = OpenConnection();
+            using SqliteCommand command = connection.CreateCommand();
+            command.CommandText = "SELECT RuleKey, HitCount FROM ObservedRuleHits WHERE ConfigurationIdentity = $identity;";
+            command.Parameters.AddWithValue("$identity", configurationIdentity);
+            using SqliteDataReader reader = command.ExecuteReader();
+            Dictionary<string, long> counts = new(StringComparer.Ordinal);
+            while (reader.Read()) { counts.Add(reader.GetString(0), reader.GetInt64(1)); }
+            return counts;
+        }
     }
 
 }

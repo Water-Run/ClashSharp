@@ -107,6 +107,8 @@ internal static class RuntimeDataServices
 
         public IReadOnlyDictionary<string, long> GetRuleHitCounts() => RequireOwner().Logs.GetRuleHitCounts();
 
+        public IReadOnlyDictionary<string, long> GetRuleHitCounts(string configurationIdentity) => RequireOwner().Logs.GetRuleHitCounts(configurationIdentity);
+
         public void AppendLog(string level, string source, string message, string? detail) => RequireOwner().Logs.AppendLog(level, source, message, detail);
 
         public IReadOnlyList<LogRecord> GetRecentLogs(int limit) => RequireOwner().Logs.GetRecentLogs(limit);
