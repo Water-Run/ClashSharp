@@ -28,7 +28,7 @@ public sealed class MihomoRuntimeConfigurationBuilderTests
     {
         string imported = $"proxy-providers:\n  nodes:\n    type: http\n    url: https://example.invalid/nodes\n    path: '{path}'\nrule-providers:\n  rules:\n    type: http\n    behavior: classical\n    url: https://example.invalid/rules\n    path: '{path}'\nproxies: []\nproxy-groups: []\nrules: [MATCH,DIRECT]\n";
         string output = MihomoRuntimeConfigurationBuilder.OverrideRuntimeKeys(
-            imported, 7890, ClashSharpMode.RuleTakeover, true, ControllerSecret);
+            imported, 7890, ClashSharpMode.RuleTakeover, false, ControllerSecret);
         YamlStream yaml = new();
         yaml.Load(new StringReader(output));
         YamlMappingNode root = (YamlMappingNode)yaml.Documents[0].RootNode;

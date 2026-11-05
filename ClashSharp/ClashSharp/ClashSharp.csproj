@@ -236,4 +236,7 @@
     <AppxBundle>Never</AppxBundle>
     <GenerateAppInstallerFile>False</GenerateAppInstallerFile>
   </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\ClashSharp.MihomoService\MihomoServiceConfigurationTrustValidator.cs" Link="Service\MihomoServiceConfigurationTrustValidator.cs" />
+  </ItemGroup>
 </Project>

@@ -61,7 +61,8 @@ internal static class MasterControlPageComposition
         IApplicationErrorSink errorSink = context.ErrorSink;
         MasterControlTileActionSession tileActions = new(errorSink);
         IMasterControlRuntimeSnapshotSource runtimeSnapshotSource = new MasterControlRuntimeSnapshotSource(
-            () => settings.ActiveProfileId,
+            () => coreConfiguration.ObserveRuntimeConfigurationIntegrity() is { IsKnown: true, AppliedPlan: { } plan }
+                ? plan.ProfileId : string.Empty,
             coreConfiguration.GetState,
             profileId => coreConfiguration.TryReadProfileConfigurationText(
                 profileId,

@@ -313,6 +313,7 @@ internal sealed class StatisticsViewModel : ObservableObject, ILocalizedPresenta
 
     public string StatusText => IsLoading ? LoadingText : _lastUpdated is DateTimeOffset updated
         ? string.Format(CultureInfo.CurrentCulture, _localization.GetString("Statistics.Updated.Format"), _localization.Formatter.Timestamp(updated))
+            + (_lastSnapshot?.Summary.IncompleteSampleCount > 0 ? " - " + _localization.GetString("Statistics.DetailsIncomplete") : string.Empty)
         : string.Empty;
 
     public bool HasNoProfileTraffic => HasSnapshot && !IsLoading && !HasLoadError && ProfileTrafficRows.Count == 0;

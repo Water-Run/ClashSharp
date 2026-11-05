@@ -12,7 +12,15 @@ internal sealed record MihomoTrafficSnapshot(
     long? MemoryBytes = null,
     DateTimeOffset? CoreStartedAt = null,
     bool ConnectionsComplete = true,
-    int? TotalConnectionCount = null)
+    int? TotalConnectionCount = null,
+    string? ProfileId = null,
+    string? ConfigurationIdentity = null)
 {
     public int ActiveConnectionCount => TotalConnectionCount ?? Connections.Count;
+}
+
+/// <summary>Signals a reachable controller whose connection details were intentionally omitted.</summary>
+internal sealed class IncompleteConnectionSnapshotException(int totalCount) : System.IO.IOException("Connection details exceed the display limit.")
+{
+    public int TotalCount { get; } = totalCount;
 }

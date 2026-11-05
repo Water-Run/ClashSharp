@@ -260,6 +260,13 @@ internal sealed class MihomoServiceControllerBroker
                 HttpStatusCode.OK,
                 cancellationToken)
             .ConfigureAwait(false);
+        // Apply the same projection to injected transports; real pipe transport already scans without buffering all rows.
+        if (response.OmittedConnectionCount is null)
+        {
+            using MemoryStream stream = new(response.Content.ToArray(), writable: false);
+            var projected = await MihomoConnectionResponseReader.ReadAsync(stream, cancellationToken).ConfigureAwait(false);
+            response = response with { Content = projected.Content, OmittedConnectionCount = projected.OmittedCount };
+        }
         using JsonDocument document = ParseStrictJson(response.Content);
         JsonElement root = RequireObject(document.RootElement, "connections response");
         if (!root.TryGetProperty("connections", out JsonElement rows)
@@ -269,8 +276,8 @@ internal sealed class MihomoServiceControllerBroker
         }
 
         List<MihomoServiceIpcConnection> connections = [];
-        int connectionCount = rows.ValueKind == JsonValueKind.Array ? rows.GetArrayLength() : 0;
-        bool complete = connectionCount <= MihomoServiceIpcProtocol.MaximumControllerConnections;
+        int connectionCount = response.OmittedConnectionCount ?? (rows.ValueKind == JsonValueKind.Array ? rows.GetArrayLength() : 0);
+        bool complete = response.OmittedConnectionCount is null && connectionCount <= MihomoServiceIpcProtocol.MaximumControllerConnections;
         if (complete && rows.ValueKind == JsonValueKind.Array)
         {
             foreach (JsonElement row in rows.EnumerateArray())

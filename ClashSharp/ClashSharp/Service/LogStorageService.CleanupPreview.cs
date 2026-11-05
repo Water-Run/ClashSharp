@@ -58,6 +58,7 @@ public sealed partial class LogStorageService
                 SELECT (SELECT COUNT(*) FROM Logs)
                      + (SELECT COUNT(*) FROM Connections)
                      + (SELECT COUNT(*) FROM TrafficSnapshots)
+                     + (SELECT COUNT(*) FROM TrafficDetailGaps)
                      + (SELECT COUNT(*) FROM ProfileTrafficStats)
                      + (SELECT COUNT(*) FROM NodeTrafficStats)
                      + (SELECT COUNT(*) FROM NodeHealthStats)

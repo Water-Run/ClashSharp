@@ -18,7 +18,8 @@ internal static class LogStorageServiceFactory
     {
         return CreateForDirectory(
             AppDataPathService.ResolveLocalDataDirectory(),
-            () => AppSettingsService.Instance.ActiveProfileId);
+            () => RuntimeDataServices.Configuration.ObserveRuntimeConfigurationIntegrity() is { IsKnown: true, AppliedPlan: { } plan }
+                ? plan.ProfileId : "unknown");
     }
 
     /// <summary>Creates one database service for an explicit data root without opening or creating files.</summary>

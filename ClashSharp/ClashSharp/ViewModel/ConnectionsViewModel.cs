@@ -179,8 +179,10 @@ internal sealed class ConnectionsViewModel : ObservableObject, ILocalizedPresent
     /// <summary>Gets whether a connection close operation is still running.</summary>
     public bool IsClosing => _closeCount > 0;
 
+    private int _omittedConnectionCount;
+
     /// <summary>Gets close-action availability against the full snapshot, independently of the visible filter.</summary>
-    public bool CanCloseConnections => _isAvailable && _allConnections.Count > 0 && !IsClosing;
+    public bool CanCloseConnections => _isAvailable && (_allConnections.Count > 0 || _omittedConnectionCount > 0) && !IsClosing;
 
     /// <summary>Gets whether the page should explain why no rows are displayed.</summary>
     public bool HasEmptyState => !IsRefreshing && Connections.Count == 0;
@@ -189,7 +191,8 @@ internal sealed class ConnectionsViewModel : ObservableObject, ILocalizedPresent
     public bool HasStatusSummary => !HasEmptyState;
 
     /// <summary>Gets a distinct explanation for initial, unavailable, empty, or filtered-empty state.</summary>
-    public string EmptyStateText => !_hasObservation
+    public string EmptyStateText => _omittedConnectionCount > 0
+        ? _localization.GetString("Connections.Status.DetailsOmitted") : !_hasObservation
         ? _localization.GetString("Connections.Status.NotRefreshed")
         : !_isAvailable
             ? _localization.GetString(_isCoreStopped ? "Connections.Status.CoreStopped" : "Connections.Status.Unavailable")
@@ -200,7 +203,7 @@ internal sealed class ConnectionsViewModel : ObservableObject, ILocalizedPresent
         CultureInfo.CurrentCulture,
         _localization.GetString("Connections.FilterCount.Format"),
         Connections.Count,
-        _allConnections.Count);
+        _omittedConnectionCount > 0 ? _omittedConnectionCount : _allConnections.Count);
 
     /// <summary>Gets active connection rows.</summary>
     /// <value>Active connection rows; never null.</value>
@@ -248,6 +251,7 @@ internal sealed class ConnectionsViewModel : ObservableObject, ILocalizedPresent
         ++_snapshotRevision;
         _hasObservation = false;
         _isAvailable = false;
+        _omittedConnectionCount = 0;
         _isCoreStopped = false;
         _allConnections = [];
         Connections = [];
@@ -281,6 +285,11 @@ internal sealed class ConnectionsViewModel : ObservableObject, ILocalizedPresent
                         !unavailableLogged, cancellationToken);
                     unavailableLogged = !_isCoreStopped;
                 }
+            }
+            catch (IncompleteConnectionSnapshotException limited)
+            {
+                ApplyOmittedConnections(limited.TotalCount);
+                unavailableLogged = false;
             }
             catch (Exception exception) when (
                 exception is HttpRequestException
@@ -325,6 +334,11 @@ internal sealed class ConnectionsViewModel : ObservableObject, ILocalizedPresent
             ApplyConnections(connections);
             return connections;
         }
+        catch (IncompleteConnectionSnapshotException limited)
+        {
+            if (revision == _snapshotRevision) { ApplyOmittedConnections(limited.TotalCount); }
+            return [];
+        }
         catch (Exception exception) when (
             exception is HttpRequestException or WebSocketException or IOException or JsonException
                 or TimeoutException or OperationCanceledException or InvalidOperationException
@@ -345,8 +359,21 @@ internal sealed class ConnectionsViewModel : ObservableObject, ILocalizedPresent
         }
     }
 
+    private void ApplyOmittedConnections(int count)
+    {
+        ++_snapshotRevision;
+        _hasObservation = true;
+        _isAvailable = true;
+        _isCoreStopped = false;
+        _omittedConnectionCount = count;
+        _allConnections = [];
+        ApplyFilter();
+        SetConnectionStatus("Connections.Status.DetailsOmitted");
+    }
+
     private void ApplyConnections(IReadOnlyList<ActiveConnection> connections)
     {
+        _omittedConnectionCount = 0;
         ++_snapshotRevision;
         _hasObservation = true;
         _isAvailable = true;
@@ -385,6 +412,7 @@ internal sealed class ConnectionsViewModel : ObservableObject, ILocalizedPresent
         ++_snapshotRevision;
         _hasObservation = true;
         _isAvailable = false;
+        _omittedConnectionCount = 0;
         _isCoreStopped = coreStopped;
         _allConnections = [];
         ApplyFilter();

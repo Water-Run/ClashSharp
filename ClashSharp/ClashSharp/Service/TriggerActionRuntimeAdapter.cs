@@ -65,7 +65,7 @@ internal sealed class TriggerActionRuntimeAdapter : ITriggerActionRuntime
             bool? desired = action.DesiredEffect.Kind switch
             {
                 TriggerActionKind.CloseConnections =>
-                    (await _connections.GetActiveConnectionsAsync(cancellationToken).ConfigureAwait(false)).Count == 0,
+                    await _connections.GetActiveConnectionCountAsync(cancellationToken).ConfigureAwait(false) == 0,
                 TriggerActionKind.SetLaunchAtStartup => await ProbeStartupLaunchAsync(
                     RequireBoolean(action),
                     cancellationToken).ConfigureAwait(false),

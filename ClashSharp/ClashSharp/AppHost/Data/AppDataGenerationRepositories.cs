@@ -45,7 +45,8 @@ internal sealed class AppDataGenerationRepositories : IServiceProvider, IAsyncDi
         GenerationRepositorySettings settings = new(session, settingsAuthority);
         Configuration = new(Path.Combine(session.Generation.RootPath, "mihomo"), settings, credentials, metrics, validator, getString,
             dataGenerationId: session.Generation.GenerationId);
-        Logs = LogStorageServiceFactory.CreateForDirectory(session.Generation.RootPath, () => settings.ActiveProfileId);
+        Logs = LogStorageServiceFactory.CreateForDirectory(session.Generation.RootPath, () => Configuration.ObserveRuntimeConfigurationIntegrity() is { IsKnown: true, AppliedPlan: { } plan }
+            ? plan.ProfileId : "unknown");
         _trafficContext = new SqliteTriggerTrafficContextSource(Logs.DatabasePath);
         _profileRuntime = createProfileRuntime(Configuration, session);
         Profiles = ProfileCatalogServiceFactory.CreateForDirectory(session.Generation.RootPath, settings,

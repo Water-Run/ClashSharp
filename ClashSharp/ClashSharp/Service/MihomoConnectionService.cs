@@ -45,6 +45,9 @@ public sealed class MihomoConnectionService
         return await _controllerClient.GetActiveConnectionsAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    internal Task<int> GetActiveConnectionCountAsync(CancellationToken cancellationToken) =>
+        _controllerClient.GetActiveConnectionCountAsync(cancellationToken);
+
     /// <summary>Reads cumulative counters including traffic from completed connections.</summary>
     internal Task<MihomoTrafficSnapshot> GetTrafficSnapshotAsync(CancellationToken cancellationToken)
     {

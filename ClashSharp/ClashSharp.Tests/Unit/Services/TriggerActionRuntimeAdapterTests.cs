@@ -33,6 +33,14 @@ public sealed class TriggerActionRuntimeAdapterTests
         Guid.Parse("11111111-2222-3333-4444-555555555555");
 
     [Fact]
+    public async Task ProbeCloseConnections_OmittedDetailsUseTrustedTotalInsteadOfReturningUnknown()
+    {
+        FakeServiceBroker broker = new(ServiceOwnedStatus()) { OmittedCount = 2049 };
+        TriggerActionProbeResult result = await CreateRuntime(broker).ProbeAsync(CloseConnectionsAction(), CancellationToken.None);
+        Assert.Equal(TriggerActionProbeStatus.NotDesired, result.Status);
+    }
+
+    [Fact]
     public async Task ProbeCloseConnections_ServiceOwnerWithActiveConnection_ReturnsNotDesired()
     {
         FakeServiceBroker broker = new(ServiceOwnedStatus())
@@ -229,6 +237,8 @@ public sealed class TriggerActionRuntimeAdapterTests
 
         public List<MihomoServiceIpcCommand> Commands { get; } = [];
 
+        public int? OmittedCount { get; init; }
+
         public MihomoServiceStatus GetLatestStatus()
         {
             return status;
@@ -267,7 +277,7 @@ public sealed class TriggerActionRuntimeAdapterTests
                 RequestId = Guid.NewGuid(),
                 Succeeded = true,
                 ConnectionSnapshot = command == MihomoServiceIpcCommand.GetConnections
-                    ? new MihomoServiceIpcConnectionSnapshot { Connections = Connections }
+                    ? new MihomoServiceIpcConnectionSnapshot { Connections = Connections, TotalConnectionCount = OmittedCount, ConnectionsComplete = OmittedCount is null, TrafficEpoch = OmittedCount is null ? null : Guid.NewGuid(), UploadTotalBytes = OmittedCount is null ? null : 0, DownloadTotalBytes = OmittedCount is null ? null : 0 }
                     : null,
             });
         }

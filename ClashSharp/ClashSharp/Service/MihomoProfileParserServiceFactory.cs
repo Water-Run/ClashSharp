@@ -17,19 +17,19 @@ internal static class MihomoProfileParserServiceFactory
     public static MihomoProfileParserService CreateDefault()
     {
         return new MihomoProfileParserService(
-            new MihomoProfileTextSource(AppSettingsService.Instance, RuntimeDataServices.Configuration),
+            new MihomoProfileTextSource(RuntimeDataServices.Configuration),
             RegionDisplayService.Instance.Resolve,
             LocalizationService.Instance.GetString);
     }
 }
 
 internal sealed class MihomoProfileTextSource(
-    AppSettingsService settings,
     ICoreConfigurationStore coreConfiguration) : IMihomoProfileTextSource
 {
     public string? TryReadActiveProfileText()
     {
-        string activeProfileId = settings.ActiveProfileId;
+        string activeProfileId = coreConfiguration.ObserveRuntimeConfigurationIntegrity() is { IsKnown: true, AppliedPlan: { } plan }
+            ? plan.ProfileId : string.Empty;
         if (string.IsNullOrWhiteSpace(activeProfileId) || StringComparer.Ordinal.Equals(activeProfileId, ProfileCatalogIds.BuiltInDirect))
         {
             return null;

@@ -147,7 +147,7 @@ public sealed partial class MasterControlViewModelTests
 
         settings.ActiveProfileId = "local-456";
         await viewModel.LoadAsync(CancellationToken.None);
-        Assert.Equal("local-456", viewModel.InfoTiles.Single(tile => tile.Id == "active-profile").Value);
+        Assert.Equal("Office profile", viewModel.InfoTiles.Single(tile => tile.Id == "active-profile").Value);
     }
 
     [Fact]
@@ -657,7 +657,7 @@ public sealed partial class MasterControlViewModelTests
         Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "startup-launch" && tile.Value == "On");
         Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "connection-sampling" && tile.Value == "On");
         Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "blocked-url" && tile.Value == "On");
-        Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "active-profile" && tile.Value == "profile-a");
+        Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "active-profile" && tile.Value == "Unavailable");
         Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "port" && tile.Value == "12000");
         Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "app-name" && tile.Value == "Clash#");
         Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "app-version" && tile.Value == "Version 1.0.0");

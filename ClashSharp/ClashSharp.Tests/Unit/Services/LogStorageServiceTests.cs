@@ -9,6 +9,34 @@ namespace ClashSharp.Tests.Unit.Services;
 public sealed partial class LogStorageServiceTests
 {
     [Fact]
+    public async Task CounterIntervalAcrossConfigurationChange_HasUnknownProfileRatherThanTheNewTarget()
+    {
+        using TempDatabase database = new();
+        await using LogStorageService storage = new(database.Path, () => "failed-target");
+        Guid epoch = Guid.NewGuid();
+        storage.AppendTrafficSnapshot(new(epoch, 10, 20, [], ProfileId: "a", ConfigurationIdentity: "generation-a"));
+        storage.AppendTrafficSnapshot(new(epoch, 30, 60, [], ProfileId: "b", ConfigurationIdentity: "generation-b"));
+        storage.AppendTrafficSnapshot(new(epoch, 40, 80, [], ProfileId: "b", ConfigurationIdentity: "generation-b"));
+        Assert.Equal(20, Assert.Single(storage.GetProfileTrafficRows(10), row => row.Label == "unknown").UploadBytes);
+        Assert.Equal(10, Assert.Single(storage.GetProfileTrafficRows(10), row => row.Label == "b").UploadBytes);
+    }
+
+    [Fact]
+    public async Task TrafficIdentity_UsesSampleIdentityAndPersistsDetailGaps()
+    {
+        using TempDatabase database = new();
+        await using LogStorageService storage = new(database.Path, () => "failed-target");
+        storage.AppendTrafficSnapshot(new(Guid.NewGuid(), 100, 200, [], ConnectionsComplete: false,
+            TotalConnectionCount: 2049, ProfileId: "installed-a"));
+        TrafficStatisticRow row = Assert.Single(storage.GetProfileTrafficRows(10));
+        Assert.Equal("installed-a", row.Label);
+        Assert.Equal(100, row.UploadBytes);
+        Assert.Equal(1, storage.GetTrafficStatisticsSummary().IncompleteSampleCount);
+        storage.ClearAll();
+        Assert.Equal(0, storage.GetTrafficStatisticsSummary().IncompleteSampleCount);
+    }
+
+    [Fact]
     public async Task IncompleteConnections_UpdateTotalsWithoutRetiringConnectionBaselines()
     {
         using TempDatabase database = new();

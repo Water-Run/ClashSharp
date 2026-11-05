@@ -74,6 +74,7 @@ internal static class RuntimeFailureDiagnostics
     internal const string MixedPortOccupied = "mixed.port_occupied";
     internal const string RouteConflict = "route.conflict.active_tun_interface";
     internal const string DnsConflict = "dns.conflict.active_tun_interface";
+    internal const string TunPolicyUnsupported = "configuration.tun_policy_unsupported";
     internal const string TunDnsListenerUnsupported = "configuration.tun_dns_listener_unsupported";
 
     /// <summary>Returns a typed descriptor for a stable bounded code.</summary>
@@ -90,6 +91,8 @@ internal static class RuntimeFailureDiagnostics
             area,
             code == "service.ipc.endpoint_occupied"
                 ? "RuntimeFailure.EndpointOccupied"
+                : code == TunPolicyUnsupported
+                    ? "RuntimeFailure.TunPolicy"
                 : code == TunDnsListenerUnsupported
                     ? "RuntimeFailure.TunDnsListener"
                 : area switch

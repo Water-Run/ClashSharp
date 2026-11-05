@@ -17,7 +17,8 @@ internal static class ProfilesPageComposition
             context.Localization.GetString,
             new ProfileManagementCatalogAdapter(context.Profiles),
             new PageLogAdapter(context.LogStorage),
-            () => context.Settings.ActiveProfileId,
+            () => context.CoreConfiguration.ObserveRuntimeConfigurationIntegrity() is { IsKnown: true, AppliedPlan: { } plan }
+                ? plan.ProfileId : context.Localization.GetString("Master.Status.Unavailable"),
             context.ErrorSink,
             new ModelDisplayMapper(context.MainlandChinaTextDisplay.Apply, context.CreateDisplayFormatter(),
                 profileStatusLocalizer: ProfileStatusText.Localize),

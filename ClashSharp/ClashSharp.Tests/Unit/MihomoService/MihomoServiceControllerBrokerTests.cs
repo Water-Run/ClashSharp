@@ -11,6 +11,7 @@ public sealed class MihomoServiceControllerBrokerTests
     [Theory]
     [InlineData(2048, true)]
     [InlineData(2049, false)]
+    [InlineData(25000, false)]
     public async Task LargeConnectionSets_RetainTotalsAndDeclareOmittedDetails(int count, bool complete)
     {
         FakeMihomoChildProcess process = new("broker", 501);

@@ -8,6 +8,7 @@ namespace ClashSharp.Model;
 /// <param name="ProfileCount">Number of profile traffic aggregation rows.</param>
 /// <param name="NodeCount">Number of node traffic aggregation rows.</param>
 /// <param name="NodeHealthCount">Number of node health rows.</param>
+/// <param name="IncompleteSampleCount">Retained samples whose connection details were omitted.</param>
 /// <param name="RuleCount">Number of rule hit aggregation rows.</param>
 /// <remarks>
 /// Invariants: Count and byte values are non-negative and reflect the database state at query time.
@@ -22,4 +23,5 @@ public readonly record struct TrafficStatisticsSummary(
     long ProfileCount,
     long NodeCount,
     long NodeHealthCount,
-    long RuleCount);
+    long RuleCount,
+    long IncompleteSampleCount = 0);

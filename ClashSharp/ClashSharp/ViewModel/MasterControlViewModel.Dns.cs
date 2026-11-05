@@ -16,7 +16,7 @@ internal sealed partial class MasterControlViewModel
     private void RefreshDnsTiles()
     {
         bool current = _runtimeSnapshot.IsAvailable && RuntimeOwnershipMatchesNetwork
-            && StringComparer.Ordinal.Equals(_runtimeSnapshot.ActiveProfileId, _settings.ActiveProfileId);
+            && !string.IsNullOrEmpty(_runtimeSnapshot.ActiveProfileId);
         RuntimeDnsConfiguration? dns = current && _runtimeSnapshot.EffectiveOwner != MihomoCoreOwner.None
             ? _runtimeSnapshot.Dns : null;
         if (dns is null || !dns.Enabled)

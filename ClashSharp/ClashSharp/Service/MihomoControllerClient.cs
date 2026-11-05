@@ -239,6 +239,21 @@ public sealed class MihomoControllerClient
         return ParseActiveConnections(document.RootElement);
     }
 
+    /// <summary>Reads the total independently from omitted detail rows.</summary>
+    internal async Task<int> GetActiveConnectionCountAsync(CancellationToken cancellationToken)
+    {
+        ControllerRoute route = await ResolveRouteAsync(cancellationToken).ConfigureAwait(false);
+        if (route.ServiceBinding is not null)
+        {
+            MihomoServiceIpcResponse response = await SendServiceCommandAsync(route.ServiceBinding,
+                MihomoServiceIpcCommand.GetConnections, cancellationToken: cancellationToken).ConfigureAwait(false);
+            MihomoServiceIpcConnectionSnapshot snapshot = RequireSuccessful(response).ConnectionSnapshot!;
+            return snapshot.TotalConnectionCount ?? snapshot.Connections.Count;
+        }
+        using JsonDocument document = await GetJsonAsync("connections", cancellationToken).ConfigureAwait(false);
+        return ParseActiveConnections(document.RootElement).Count;
+    }
+
     /// <summary>Reads cumulative counters bound to one authenticated core process.</summary>
     internal async Task<MihomoTrafficSnapshot> GetTrafficSnapshotAsync(CancellationToken cancellationToken)
     {
@@ -1027,7 +1042,7 @@ public sealed class MihomoControllerClient
     {
         if (requireComplete && !snapshot.ConnectionsComplete)
         {
-            throw new InvalidDataException("The active connection details exceed the supported snapshot limit.");
+            throw new IncompleteConnectionSnapshotException(snapshot.TotalConnectionCount!.Value);
         }
         List<ActiveConnection> connections = new(snapshot.Connections.Count);
         foreach (MihomoServiceIpcConnection connection in snapshot.Connections)

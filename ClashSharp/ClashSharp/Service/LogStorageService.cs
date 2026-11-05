@@ -125,7 +125,8 @@ public sealed partial class LogStorageService : ILogStorage, IAsyncDisposable
                 profileCount,
                 nodeCount,
                 nodeHealthCount,
-                ruleCount);
+                ruleCount,
+                ExecuteScalarLong(connection, "SELECT COALESCE(SUM(SampleCount), 0) FROM TrafficDetailGaps;"));
         }
     }
 
@@ -981,6 +982,7 @@ public sealed partial class LogStorageService : ILogStorage, IAsyncDisposable
             ExecuteNonQuery(connection, transaction, "DELETE FROM Logs;");
             ExecuteNonQuery(connection, transaction, "DELETE FROM Connections;");
             ExecuteNonQuery(connection, transaction, "DELETE FROM TrafficSnapshots;");
+            ExecuteNonQuery(connection, transaction, "DELETE FROM TrafficDetailGaps;");
             ExecuteNonQuery(connection, transaction, "DELETE FROM ProfileTrafficStats;");
             ExecuteNonQuery(connection, transaction, "DELETE FROM NodeTrafficStats;");
             ExecuteNonQuery(connection, transaction, "DELETE FROM NodeHealthStats;");

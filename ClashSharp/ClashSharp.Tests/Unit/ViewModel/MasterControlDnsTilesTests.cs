@@ -58,7 +58,7 @@ public sealed partial class MasterControlViewModelTests
             "network" => runtime.Snapshot with { NetworkState = null },
             "disagreement" => runtime.Snapshot with { NetworkState = ObservedNetwork(ClashSharpMode.Standby).NetworkState },
             "stopped" => runtime.Snapshot with { EffectiveOwner = MihomoCoreOwner.None, NetworkState = ObservedNetwork(ClashSharpMode.Disabled).NetworkState },
-            _ => runtime.Snapshot with { ActiveProfileId = "profile-b" },
+            _ => runtime.Snapshot with { ActiveProfileId = "profile-b", RuntimeOwnershipKnown = false },
         };
         viewModel.InvalidateAfterAction();
         await viewModel.LoadAsync(CancellationToken.None);

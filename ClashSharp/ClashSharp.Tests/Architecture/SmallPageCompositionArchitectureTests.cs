@@ -107,7 +107,7 @@ public sealed class SmallPageCompositionArchitectureTests
         string viewModel = ReadApplicationSource("ViewModel/ProfilesViewModel.cs");
 
         Assert.Contains(
-            "() => context.Settings.ActiveProfileId",
+            "context.CoreConfiguration.ObserveRuntimeConfigurationIntegrity()",
             composition,
             StringComparison.Ordinal);
         Assert.Contains("_getActiveProfileId()", viewModel, StringComparison.Ordinal);

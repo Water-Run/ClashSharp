@@ -8,6 +8,7 @@ namespace ClashSharp.ViewModel;
 /// <param name="ProfileCount">Profile aggregation row count.</param>
 /// <param name="NodeCount">Node aggregation row count.</param>
 /// <param name="NodeHealthCount">Node health row count.</param>
+/// <param name="IncompleteSampleCount">Samples with omitted connection details since history was cleared.</param>
 /// <param name="RuleCount">Rule row count.</param>
 /// <remarks>
 /// Invariants: Count and byte values are non-negative snapshots.
@@ -22,4 +23,5 @@ internal readonly record struct StatisticsSummary(
     long ProfileCount,
     long NodeCount,
     long NodeHealthCount,
-    long RuleCount);
+    long RuleCount,
+    long IncompleteSampleCount = 0);

@@ -1,7 +1,13 @@
+using System;
 using System.Buffers;
+using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
+using System.IO;
+using System.Linq;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 using ClashSharp.ServiceProtocol;
 using YamlDotNet.Core;
 using YamlDotNet.RepresentationModel;
@@ -182,6 +188,13 @@ internal static class MihomoServiceConfigurationTrustValidator
     {
         ArgumentNullException.ThrowIfNull(configurationText);
         _ = ValidateRuntimeDirectory(runtimeDirectory);
+        ValidatePolicyText(configurationText);
+    }
+
+    /// <summary>Checks source policy without requiring a service-owned runtime directory.</summary>
+    internal static void ValidatePolicyText(string configurationText)
+    {
+        ArgumentNullException.ThrowIfNull(configurationText);
         YamlMappingNode root = LoadUniqueRoot(configurationText);
         RejectMergeKeys(root);
         RejectKnownLocalSystemSurfaces(root);

@@ -11,6 +11,20 @@ namespace ClashSharp.Tests.Unit.ViewModel;
 public sealed partial class ConnectionsViewModelTests
 {
     [Fact]
+    public async Task OmittedDetails_KeepCloseAllAvailableAndRecoverAfterClosing()
+    {
+        FakeConnectionClient client = new() { ExceptionToThrow = new IncompleteConnectionSnapshotException(2049), Connections = [] };
+        ConnectionsViewModel page = new(new FakeConnectionsLocalization(), client, new FakeConnectionLog(), new TestApplicationErrorSink());
+        await page.RefreshConnectionsAsync(CancellationToken.None);
+        Assert.True(page.CanCloseConnections);
+        Assert.Empty(page.Connections);
+        client.ExceptionToThrow = null;
+        await page.CloseAllConnectionsAsync(CancellationToken.None);
+        Assert.True(client.CloseAllCalled);
+        Assert.False(page.CanCloseConnections);
+    }
+
+    [Fact]
     public async Task VerifiedStoppedCore_ShowsOneNormalEmptyExplanationWithoutWarning()
     {
         FakeConnectionClient client = new() { ExceptionToThrow = new HttpRequestException("Controller stopped.") };

@@ -1308,7 +1308,7 @@ internal sealed partial class MasterControlViewModel : ObservableObject, ILocali
         SetTile("memory-usage", FormatBytes(_runtimeSnapshot.AppWorkingSetBytes), _localization.GetString("Master.Tile.Detail.AppProcess"));
         SetTile("profile-count", FormatNumber(_runtimeSnapshot.ProfileCount), GetActiveProfileDisplayName());
         SetTile("subscription-count", FormatNumber(_runtimeSnapshot.SubscriptionCount), string.Empty);
-        bool currentProfile = StringComparer.Ordinal.Equals(_runtimeSnapshot.ActiveProfileId, _settings.ActiveProfileId);
+        bool currentProfile = !string.IsNullOrEmpty(_runtimeSnapshot.ActiveProfileId);
         SetTile("proxy-node-count", currentProfile ? FormatNumber(_runtimeSnapshot.ProxyNodeCount)
             : _localization.GetString("Master.Status.Unavailable"), string.Empty);
         SetTile("rule-count", currentProfile ? FormatNumber(_runtimeSnapshot.RuleCount)
@@ -1336,7 +1336,7 @@ internal sealed partial class MasterControlViewModel : ObservableObject, ILocali
 
     private void RefreshSubscriptionTiles()
     {
-        bool current = StringComparer.Ordinal.Equals(_runtimeSnapshot.ActiveProfileId, _settings.ActiveProfileId);
+        bool current = !string.IsNullOrEmpty(_runtimeSnapshot.ActiveProfileId);
         if (!_runtimeSnapshot.IsAvailable || !current)
         {
             string unavailable = _localization.GetString("Master.Status.Unavailable");
@@ -1484,12 +1484,12 @@ internal sealed partial class MasterControlViewModel : ObservableObject, ILocali
 
     private string GetActiveProfileDisplayName()
     {
-        if (StringComparer.Ordinal.Equals(_settings.ActiveProfileId, ProfileIdentifiers.BuiltInDirect))
+        if (StringComparer.Ordinal.Equals(_runtimeSnapshot.ActiveProfileId, ProfileIdentifiers.BuiltInDirect))
         { return _localization.GetString("ProfileCatalog.BuiltInDirect.Name"); }
-        return StringComparer.Ordinal.Equals(_runtimeSnapshot.ActiveProfileId, _settings.ActiveProfileId)
+        return !string.IsNullOrEmpty(_runtimeSnapshot.ActiveProfileId)
             && !string.IsNullOrWhiteSpace(_runtimeSnapshot.ActiveProfileName)
             ? _runtimeSnapshot.ActiveProfileName
-            : _settings.ActiveProfileId;
+            : string.IsNullOrEmpty(_runtimeSnapshot.ActiveProfileId) ? _localization.GetString("Master.Status.Unavailable") : _runtimeSnapshot.ActiveProfileId;
     }
 
     private string TileDescription(string key)

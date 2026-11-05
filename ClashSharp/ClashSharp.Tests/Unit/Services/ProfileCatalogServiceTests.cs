@@ -47,6 +47,7 @@ public sealed class ProfileCatalogServiceTests
             Guid.NewGuid(), null, "Active", original, null, () => false, CancellationToken.None);
         settings.ActiveProfileId = "failed-target";
         runtime.ObservedActiveProfileId = active.ProfileId;
+        Assert.Equal(active.ProfileId, Assert.Single(catalog.GetProfiles(), row => row.IsActive).Id);
 
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => catalog.SaveAgentSourceAsync(
             Guid.NewGuid(), active.ProfileId, "Edit", "rules: ['MATCH,REJECT']\n",
@@ -1465,6 +1466,8 @@ public sealed class ProfileCatalogServiceTests
     private sealed class FakeProfileCatalogRuntime : IProfileCatalogRuntime
     {
         public string? ObservedActiveProfileId { get; set; }
+
+        public string ReadInstalledProfileId(string configuredProfileId) => ObservedActiveProfileId ?? configuredProfileId;
 
         public Task<string> ReadActiveProfileIdAsync(string configuredProfileId, CancellationToken cancellationToken) =>
             Task.FromResult(ObservedActiveProfileId ?? configuredProfileId);

@@ -41,11 +41,22 @@ internal sealed class ConnectionSamplingSettingsAdapter(AppSettingsService setti
     public int IntervalSeconds => settings.ConnectionSamplingIntervalSeconds;
 }
 
-internal sealed class ConnectionSamplingSourceAdapter(MihomoConnectionService connections) : IConnectionSamplingSource
+internal sealed class ConnectionSamplingSourceAdapter(MihomoConnectionService connections, ICoreConfigurationStore? configuration = null) : IConnectionSamplingSource
 {
-    public Task<MihomoTrafficSnapshot?> GetTrafficSnapshotAsync(CancellationToken cancellationToken)
+    public async Task<MihomoTrafficSnapshot?> GetTrafficSnapshotAsync(CancellationToken cancellationToken)
     {
-        return connections.TryGetTrafficSnapshotAsync(cancellationToken);
+        ICoreConfigurationStore store = configuration ?? RuntimeDataServices.Configuration;
+        RuntimeConfigurationIntegrityObservation before = store.ObserveRuntimeConfigurationIntegrity();
+        MihomoTrafficSnapshot? sample = await connections.TryGetTrafficSnapshotAsync(cancellationToken).ConfigureAwait(false);
+        RuntimeConfigurationIntegrityObservation after = store.ObserveRuntimeConfigurationIntegrity();
+        // Never assign bytes to a preference or to a configuration installed during this request.
+        return sample is null ? null : sample with
+        {
+            ConfigurationIdentity = before.IsKnown && before == after
+                ? $"{before.AppliedGeneration}:{before.AppliedContentHash}" : "unknown",
+            ProfileId = before.IsKnown && before == after && before.AppliedPlan is { } plan
+                ? plan.ProfileId : "unknown",
+        };
     }
 }
 

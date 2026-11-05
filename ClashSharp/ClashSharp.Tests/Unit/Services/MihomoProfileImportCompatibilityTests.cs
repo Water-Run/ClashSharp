@@ -6,6 +6,29 @@ namespace ClashSharp.Tests.Unit.Services;
 
 public sealed class MihomoProfileImportCompatibilityTests
 {
+    [Theory]
+    [InlineData("../outside.yaml")]
+    [InlineData("cache/../outside.yaml")]
+    [InlineData("C:/outside.yaml")]
+    public void ServicePolicy_PreflightsUnsafeProviderPaths(string path)
+    {
+        string source = $"rules: ['MATCH,DIRECT']\nproxy-providers: {{nodes: {{type: http, url: 'https://example.invalid/nodes', path: '{path}'}}}}\n";
+        StableRuntimeDiagnosticException failure = Assert.Throws<StableRuntimeDiagnosticException>(() =>
+            MihomoRuntimeConfigurationBuilder.OverrideRuntimeKeys(source, 7890, ClashSharpMode.RuleTakeover, true, new string('a', 64)));
+        Assert.Equal(RuntimeFailureDiagnostics.TunPolicyUnsupported, failure.DiagnosticCode);
+    }
+
+    [Fact]
+    public void ServicePolicy_PreflightsGeoxUrlBeforeTunPromotion()
+    {
+        const string source = "rules: ['MATCH,DIRECT']\ngeox-url: {geoip: 'https://example.invalid/geoip.dat'}\n";
+        _ = MihomoRuntimeConfigurationBuilder.OverrideRuntimeKeys(source, 7890, ClashSharpMode.RuleTakeover, false, new string('a', 64));
+        StableRuntimeDiagnosticException failure = Assert.Throws<StableRuntimeDiagnosticException>(() =>
+            MihomoRuntimeConfigurationBuilder.OverrideRuntimeKeys(source, 7890, ClashSharpMode.RuleTakeover, true, new string('a', 64)));
+        Assert.Equal(RuntimeFailureDiagnostics.TunPolicyUnsupported, failure.DiagnosticCode);
+        Assert.Contains("geox-url", failure.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void DnsListener_RemainsUsableForSystemProxyAndGetsAnActionableTunPreflight()
     {

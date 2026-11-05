@@ -67,6 +67,9 @@ internal sealed class ProfileCatalogRuntimeAdapter(
     NetworkTakeoverService takeover,
     WindowsProxyService proxy) : IProfileCatalogRuntime
 {
+    public string ReadInstalledProfileId(string configuredProfileId) =>
+        configuration.ObserveRuntimeConfigurationIntegrity() is { IsKnown: true, AppliedPlan: { } plan } ? plan.ProfileId : string.Empty;
+
     public async Task<string> ReadActiveProfileIdAsync(string configuredProfileId, CancellationToken cancellationToken) =>
         (await takeover.ObserveNetworkSettingsAsync(configuration.ObserveRuntimeConfigurationIntegrity,
             proxy.ObserveOwnership, cancellationToken).ConfigureAwait(false)).ProfileId;

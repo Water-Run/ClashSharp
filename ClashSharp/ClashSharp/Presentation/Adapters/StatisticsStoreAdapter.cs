@@ -38,7 +38,7 @@ internal sealed class StatisticsStoreAdapter : IStatisticsStore
             summary.ProfileCount,
             summary.NodeCount,
             summary.NodeHealthCount,
-            summary.RuleCount);
+            summary.RuleCount, summary.IncompleteSampleCount);
     }
 
     /// <summary>Gets profile traffic rows.</summary>

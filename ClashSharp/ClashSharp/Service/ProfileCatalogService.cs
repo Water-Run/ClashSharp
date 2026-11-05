@@ -69,6 +69,8 @@ internal interface IProfileCatalogLog
 internal interface IProfileCatalogRuntime
 {
     /// <summary>Reads the independently installed profile identity; isolated adapters can supply their configured identity.</summary>
+    string ReadInstalledProfileId(string configuredProfileId) => configuredProfileId;
+
     Task<string> ReadActiveProfileIdAsync(string configuredProfileId, CancellationToken cancellationToken) =>
         Task.FromResult(configuredProfileId);
 
@@ -266,7 +268,7 @@ public sealed partial class ProfileCatalogService : IProfileCatalog, IAsyncDispo
         lock (_syncLock)
         {
             ProfileCatalogDocument document = LoadDocument();
-            string activeProfileId = GetActiveProfileId();
+            string activeProfileId = _runtime.ReadInstalledProfileId(GetActiveProfileId());
             List<ConfigurationProfile> profiles = [];
 
             foreach (ConfigurationProfile profile in document.Profiles)

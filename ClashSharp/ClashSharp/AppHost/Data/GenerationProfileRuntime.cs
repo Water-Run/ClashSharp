@@ -29,6 +29,9 @@ internal sealed class GenerationProfileRuntime(SettingsAuthoritySession session,
     private NetworkTakeoverService Takeover => Volatile.Read(ref _takeover)
         ?? throw new InvalidOperationException("The profile runtime has not been composed with its generation.");
 
+    public string ReadInstalledProfileId(string configuredProfileId) =>
+        configuration.ObserveRuntimeConfigurationIntegrity() is { IsKnown: true, AppliedPlan: { } plan } ? plan.ProfileId : string.Empty;
+
     public async Task<string> ReadActiveProfileIdAsync(string configuredProfileId, CancellationToken cancellationToken) =>
         (await Takeover.ObserveNetworkSettingsAsync(configuration.ObserveRuntimeConfigurationIntegrity,
             proxy.ObserveOwnership, cancellationToken).ConfigureAwait(false)).ProfileId;

@@ -48,7 +48,7 @@ public sealed partial class MasterControlViewModelTests
         Assert.Equal("Unknown", Tile(viewModel, "mihomo-service").Value);
         Assert.Equal("Unavailable", viewModel.TransparentProxyStatusText);
         Assert.Equal("Unavailable", viewModel.HeroStatusItems[0].Value);
-        Assert.Equal(settings.ActiveProfileId, Tile(viewModel, "active-profile").Value);
+        Assert.Equal("Unavailable", Tile(viewModel, "active-profile").Value);
     }
 
     [Fact]
@@ -118,7 +118,7 @@ public sealed partial class MasterControlViewModelTests
         Assert.Equal("1 KB/s", Tile(viewModel, "upload-rate").Value);
         Assert.Equal("3", Tile(viewModel, "active-connections").Value);
         Assert.Equal("12 KB", Tile(viewModel, "session-traffic").Value);
-        Assert.Equal("profile-a", Tile(viewModel, "active-profile").Value);
+        Assert.Equal("Unavailable", Tile(viewModel, "active-profile").Value);
 
         runtime.GetSnapshotAsyncHandler = null;
         runtime.Snapshot = runtime.Snapshot with { ProfileCount = 5, ActiveProfileName = "Recovered profile" };
@@ -153,7 +153,7 @@ public sealed partial class MasterControlViewModelTests
     }
 
     [Fact]
-    public async Task SubscriptionTiles_ProfileChangeWaitsForMatchingSummaryBeforeClaimingALocalProfile()
+    public async Task SubscriptionTiles_FailedDesiredChangeKeepsTheObservedSubscription()
     {
         FakeMasterSettings settings = new() { ActiveProfileId = "profile-a" };
         FakeMasterRuntime runtime = new() { Snapshot = CreateAvailableSummaryForTiles() };
@@ -164,12 +164,8 @@ public sealed partial class MasterControlViewModelTests
         settings.ActiveProfileId = "profile-b";
         await viewModel.LoadAsync(CancellationToken.None);
 
-        foreach (string id in SummaryTileIds.TakeLast(3))
-        {
-            Assert.Equal("Unavailable", Tile(viewModel, id).Value);
-            Assert.Empty(Tile(viewModel, id).Detail);
-        }
-        Assert.Equal("profile-b", Tile(viewModel, "active-profile").Value);
+        Assert.Equal("3 KB / 8 KB", Tile(viewModel, "subscription-usage").Value);
+        Assert.Equal("Profile A", Tile(viewModel, "active-profile").Value);
 
         runtime.Snapshot = runtime.Snapshot with { ActiveProfileId = "profile-b", ActiveProfileName = "Local B", ActiveSubscription = null };
         viewModel.InvalidateAfterAction();
@@ -191,7 +187,7 @@ public sealed partial class MasterControlViewModelTests
     [Theory]
     [InlineData("proxy-node-count", "5", "2")]
     [InlineData("rule-count", "6", "3")]
-    public async Task RuntimeSummaryTiles_ProfileChangeDoesNotAttachPreviousProfileCountsToTheNewSelection(
+    public async Task RuntimeSummaryTiles_FailedDesiredChangeKeepsTheObservedProfileCounts(
         string tileId, string originalCount, string refreshedCount)
     {
         FakeMasterSettings settings = new() { ActiveProfileId = "profile-a" };
@@ -203,7 +199,7 @@ public sealed partial class MasterControlViewModelTests
         settings.ActiveProfileId = "profile-b";
         await viewModel.LoadAsync(CancellationToken.None);
 
-        Assert.Equal("Unavailable", Tile(viewModel, tileId).Value);
+        Assert.Equal(originalCount, Tile(viewModel, tileId).Value);
         Assert.Equal("4", Tile(viewModel, "profile-count").Value);
 
         runtime.Snapshot = runtime.Snapshot with { ActiveProfileId = "profile-b", ProxyNodeCount = 2, RuleCount = 3 };

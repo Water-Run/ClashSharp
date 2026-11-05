@@ -153,7 +153,7 @@ public sealed partial class MasterControlViewModelTests
         Assert.DoesNotContain("Remaining:", Tile(viewModel, "subscription-usage").Detail);
         settings.ActiveProfileId = "builtin-direct";
         await viewModel.LoadAsync(CancellationToken.None);
-        Assert.Equal("Unavailable", Tile(viewModel, "subscription-usage").Value);
+        Assert.Equal("Links.Metadata.NotProvided / Links.Metadata.NotProvided", Tile(viewModel, "subscription-usage").Value);
     }
 
     private static MasterControlInfoTileViewModel Tile(MasterControlViewModel viewModel, string id) => viewModel.InfoTiles.Single(tile => tile.Id == id);

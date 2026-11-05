@@ -51,7 +51,7 @@ internal sealed class AppDataGenerationRuntimeComposer(
         repositories.OwnSettingsParticipant(new AppearanceSettingsParticipant(generation, admission, SettingsRegistry.Default, dispatcher, appearance));
         repositories.OwnSettingsParticipant(new StartupTaskSettingsParticipant(generation, admission, startup));
         ConnectionSamplingService sampling = repositories.OwnProducer(new ConnectionSamplingService(
-            new SamplingPreferences(repositories.Session), new ConnectionSamplingSourceAdapter(connections),
+            new SamplingPreferences(repositories.Session), new ConnectionSamplingSourceAdapter(connections, repositories.Configuration),
             new ConnectionSamplingStorageAdapter(repositories.Logs), getString, producerClock));
         repositories.OwnSettingsParticipant(new SamplingSettingsParticipant(generation, admission, sampling));
         NetworkTakeoverService scopedTakeover = takeover.BindDataScope(repositories.Configuration,

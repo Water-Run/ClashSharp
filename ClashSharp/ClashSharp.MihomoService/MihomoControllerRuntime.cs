@@ -205,7 +205,8 @@ internal sealed record MihomoRuntimeConfigurationPlan(
 /// <summary>Bounded bytes returned by one service-private controller request.</summary>
 internal sealed record MihomoControllerHttpResponse(
     HttpStatusCode StatusCode,
-    ReadOnlyMemory<byte> Content);
+    ReadOnlyMemory<byte> Content,
+    int? OmittedConnectionCount = null);
 
 /// <summary>Low-level HTTP-over-pipe transport used only by typed service operations.</summary>
 internal interface IMihomoControllerTransport : IAsyncDisposable
@@ -335,6 +336,12 @@ internal sealed class MihomoNamedPipeControllerTransport : IMihomoControllerTran
             throw new InvalidDataException("Encoded controller responses are not accepted.");
         }
 
+        if (method == HttpMethod.Get && relativePath == "/connections" && response.StatusCode == HttpStatusCode.OK)
+        {
+            await using Stream stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+            var projected = await MihomoConnectionResponseReader.ReadAsync(stream, cancellationToken).ConfigureAwait(false);
+            return new(response.StatusCode, projected.Content, projected.OmittedCount);
+        }
         long? contentLength = response.Content.Headers.ContentLength;
         if (contentLength is < 0 || contentLength > maximumResponseBytes)
         {

@@ -126,6 +126,14 @@ internal static class MihomoRuntimeConfigurationBuilder
             mode,
             transparentProxyEnabled,
             controllerSecret);
+        if (transparentProxyEnabled)
+        {
+            try { ClashSharp.MihomoService.MihomoServiceConfigurationTrustValidator.ValidatePolicyText(managedConfigurationText); }
+            catch (ClashSharp.MihomoService.MihomoServiceConfigurationTrustException failure)
+            {
+                throw new StableRuntimeDiagnosticException(RuntimeFailureDiagnostics.TunPolicyUnsupported, failure.Message);
+            }
+        }
         return managedConfigurationText;
     }
 
