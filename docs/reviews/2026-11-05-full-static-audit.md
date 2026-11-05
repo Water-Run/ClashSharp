@@ -17,7 +17,7 @@
 
 v4 的明细完整性标记需要配套的应用和服务。旧版服务会通过协议版本检查请求配套更新。
 
-实施阶段已完成 19 项目 Release x64 构建，零警告、零错误。主程序一轮全套 4943 项通过，后续定稿的针对性回归 476 项通过，安装器 Core 1141 项及展示层 240 项通过。精确提交的隔离 Windows 全套结果随 CI 收尾补录。
+最终产品提交为 `31d693a`。完整 CI 的 Release 构建、格式检查、服务及 watchdog 独立发布、离线安装包和四套测试均通过。原始 TRX 的 SHA-256 与证据摘要逐份一致，共 7728 项通过，零失败、零跳过，其中主程序 4944、安装器 Core 1141、展示层 240、Windows 适配 1403。 [最终产品 CI](https://github.com/Water-Run/ClashSharp/actions/runs/41982201532)
 
 修复入口为锁内配置写入、两阶段订阅变更、协议完整性和原子状态快照。 [配置写入](../../ClashSharp/ClashSharp/Service/NetworkTakeoverService.ObservedProfiles.cs) · [订阅准入](../../ClashSharp/ClashSharp/Service/ProfileCatalogMutationCoordinator.cs) · [完整性协议](../../ClashSharp/ClashSharp.Core/ServiceProtocol/MihomoServiceIpcProtocol.cs) · [故障注入回归](../../ClashSharp/ClashSharp.Tests/Unit/Services/NetworkSettingsRuntimeTests.cs)
 
