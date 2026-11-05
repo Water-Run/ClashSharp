@@ -612,7 +612,7 @@ internal static partial class LocalizationResources
             ["Master.Preset.NameInvalid"] = "Введите имя шаблона длиной от 1 до 40 символов.",
             ["Master.Preset.EmptySelection"] = "Выберите хотя бы одну плитку.",
             ["Master.Preset.TooMany.Format"] = "Можно сохранить не более {0} шаблонов. Сначала удалите ненужный.",
-            ["About.BuildTime.Title"] = "Время сборки",
+            ["About.BuildTime.Title"] = "Время сборки (UTC)",
             ["Settings.StartupRestoreFallback.Checking"] = "Проверка…",
             ["Settings.StartupRestoreFallback.CheckResult.Format"] = "Проверка завершена: {0}",
             ["Settings.Mcp.Show"] = "Показать конфигурацию",

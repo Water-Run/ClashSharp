@@ -612,7 +612,7 @@ internal static partial class LocalizationResources
             ["Master.Preset.NameInvalid"] = "Saisissez un nom de modèle de 1 à 40 caractères.",
             ["Master.Preset.EmptySelection"] = "Sélectionnez au moins une vignette.",
             ["Master.Preset.TooMany.Format"] = "Vous pouvez enregistrer jusqu'à {0} modèles. Supprimez d'abord un modèle inutile.",
-            ["About.BuildTime.Title"] = "Date de compilation",
+            ["About.BuildTime.Title"] = "Date de compilation (UTC)",
             ["Settings.StartupRestoreFallback.Checking"] = "Vérification…",
             ["Settings.StartupRestoreFallback.CheckResult.Format"] = "Vérification terminée : {0}",
             ["Settings.Mcp.Show"] = "Afficher la configuration",

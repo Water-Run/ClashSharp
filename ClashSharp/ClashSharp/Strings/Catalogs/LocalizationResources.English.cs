@@ -612,7 +612,7 @@ internal static partial class LocalizationResources
             ["Master.Preset.NameInvalid"] = "Enter a template name of 1 to 40 characters.",
             ["Master.Preset.EmptySelection"] = "Select at least one tile.",
             ["Master.Preset.TooMany.Format"] = "Up to {0} templates can be saved. Delete one you no longer need first.",
-            ["About.BuildTime.Title"] = "Build time",
+            ["About.BuildTime.Title"] = "Build time (UTC)",
             ["Settings.StartupRestoreFallback.Checking"] = "Checking…",
             ["Settings.StartupRestoreFallback.CheckResult.Format"] = "Check complete: {0}",
             ["Settings.Mcp.Show"] = "Show configuration",

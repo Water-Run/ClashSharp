@@ -60,6 +60,12 @@ public sealed class DisplayFormatter
     public string Timestamp(DateTimeOffset timestamp, bool includeSeconds = true) =>
         timestamp.ToLocalTime().ToString(includeSeconds ? "G" : "g", ClockCulture());
 
+    /// <summary>Formats a timestamp in UTC with the selected clock and regional date pattern.</summary>
+    /// <param name="timestamp">Canonical timestamp; its offset is discarded after conversion to UTC.</param>
+    /// <param name="includeSeconds">Whether to retain seconds.</param>
+    public string UtcTimestamp(DateTimeOffset timestamp, bool includeSeconds = true) =>
+        timestamp.UtcDateTime.ToString(includeSeconds ? "G" : "g", ClockCulture());
+
     /// <summary>Formats an optional timestamp while preserving an absent observation.</summary>
     /// <param name="timestamp">Optional canonical timestamp.</param>
     /// <param name="includeSeconds">Whether to retain seconds.</param>

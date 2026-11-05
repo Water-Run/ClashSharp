@@ -612,7 +612,7 @@ internal static partial class LocalizationResources
             ["Master.Preset.NameInvalid"] = "请输入 1–40 个字符的模板名称。",
             ["Master.Preset.EmptySelection"] = "请至少选择一个磁贴。",
             ["Master.Preset.TooMany.Format"] = "最多保存 {0} 个模板，请先删除不需要的模板。",
-            ["About.BuildTime.Title"] = "编译时间",
+            ["About.BuildTime.Title"] = "编译时间 (UTC)",
             ["Settings.StartupRestoreFallback.Checking"] = "正在检测…",
             ["Settings.StartupRestoreFallback.CheckResult.Format"] = "检测完成：{0}",
             ["Settings.Mcp.Show"] = "显示配置",

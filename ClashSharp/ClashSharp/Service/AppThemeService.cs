@@ -77,13 +77,22 @@ internal static class AppThemeService
         "ListViewItemSelectionIndicatorBrush",
         "ProgressBarForeground",
         "ProgressRingForegroundThemeBrush",
+        "AccentFillColorSelectedTextBackgroundBrush",
+        "TextOnAccentFillColorSecondaryBrush",
     ];
+
+    /// <summary>Every key the accent runtime overrides and restores, including control aliases.</summary>
+    internal static IReadOnlyList<string> ManagedResourceKeys { get; } = AccentColorResourceKeys
+        .Concat(AccentBrushResourceKeys)
+        .Concat(AccentControlResourceAliases.Map.Keys)
+        .Distinct(StringComparer.Ordinal)
+        .ToArray();
 
     private static readonly AccentColorRuntime AccentRuntime = CreateAccentRuntime(new WinUiAccentResourceStore());
 
     /// <summary>Composes the complete application palette with the resource dictionary boundary.</summary>
     internal static AccentColorRuntime CreateAccentRuntime(IAccentResourceStore resources) =>
-        new(resources, AccentColorResourceKeys.Concat(AccentBrushResourceKeys), CreateAccentPalette);
+        new(resources, ManagedResourceKeys, CreateAccentPalette);
 
     /// <summary>Applies <paramref name="mode"/> to the main window root when available.</summary>
     public static void Apply(AppThemeMode mode)
@@ -227,6 +236,21 @@ internal static class AppThemeService
         resources["ProgressRingForegroundThemeBrush"] = accentText;
         resources["ComboBoxItemPillFillBrush"] = accentBrush;
         resources["ListViewItemSelectionIndicatorBrush"] = accentBrush;
+        resources["AccentFillColorSelectedTextBackgroundBrush"] = accentBrush;
+        resources["TextOnAccentFillColorSecondaryBrush"] = foreground with
+        {
+            Argb = (foreground.Argb & 0x00FFFFFF) | 0xB3000000,
+            LightArgb = foreground.LightArgb is uint lightForeground ? (lightForeground & 0x00FFFFFF) | 0xB3000000 : null,
+        };
+        // Control resources (check boxes, radio buttons, sliders, hyperlinks, selection marks...) alias the
+        // base accent resources inside the framework dictionaries; mirror each alias onto the app palette.
+        foreach ((string control, string source) in AccentControlResourceAliases.Map)
+        {
+            if (!resources.ContainsKey(control) && resources.TryGetValue(source, out AccentResourceValue value))
+            {
+                resources[control] = value;
+            }
+        }
         return resources;
     }
 

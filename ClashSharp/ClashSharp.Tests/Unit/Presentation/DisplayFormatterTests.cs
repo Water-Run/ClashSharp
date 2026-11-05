@@ -127,6 +127,22 @@ public sealed class DisplayFormatterTests
     }
 
     [Fact]
+    public void UtcTimestampIgnoresTheOffsetAndKeepsTheClockChoice()
+    {
+        CultureInfo regional = (CultureInfo)CultureInfo.GetCultureInfo("en-US").Clone();
+        DisplayFormatter formatter = new(() => new(ClockFormat: ClockFormat.TwentyFourHour), () => regional);
+        DateTimeOffset shanghai = new(2026, 11, 5, 9, 10, 0, TimeSpan.FromHours(8));
+
+        string text = formatter.UtcTimestamp(shanghai);
+
+        Assert.Contains("11/5/2026", text, StringComparison.Ordinal);
+        Assert.Contains("1:10:00", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("9:10", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("AM", text, StringComparison.Ordinal);
+        Assert.Equal(text, formatter.UtcTimestamp(shanghai.ToUniversalTime()));
+    }
+
+    [Fact]
     public void LargeRateCannotOverflowAndAbsentTimeStaysAbsent()
     {
         DisplayFormatter formatter = new(() => new(RateUnit: RateUnit.Bits), () => CultureInfo.InvariantCulture);

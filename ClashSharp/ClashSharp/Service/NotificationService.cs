@@ -366,15 +366,17 @@ internal sealed class NotificationService :
         Volatile.Write(ref _isApplicationInForeground, isApplicationInForeground);
     }
 
+    // Mode and transparent-proxy changes switch how the whole machine reaches the network, so they are
+    // announced even while the window is in front; the user's level and master switch still apply.
     public void NotifyProxyModeChanged(ClashSharpMode mode)
     {
-        ShowUnlessVisibleInWindow(
+        Show(
             NotificationLevel.Default,
             GetString("Notification.ProxyMode.Title"),
             string.Format(CultureInfo.CurrentCulture, GetString("Notification.ProxyMode.Message.Format"), GetModeLabel(mode)));
     }
 
-    public void NotifyTransparentProxyChanged(bool enabled, bool effective) => ShowUnlessVisibleInWindow(NotificationLevel.Default,
+    public void NotifyTransparentProxyChanged(bool enabled, bool effective) => Show(NotificationLevel.Default,
         GetString("Notification.TransparentProxy.Title"), GetString(!enabled ? "Notification.TransparentProxy.Disabled"
             : effective ? "Notification.TransparentProxy.Enabled" : "Notification.TransparentProxy.Pending"));
 

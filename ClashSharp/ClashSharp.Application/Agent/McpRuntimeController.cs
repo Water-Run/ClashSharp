@@ -9,7 +9,9 @@ namespace ClashSharp.ApplicationModel.Agent;
 /// <summary>Owns endpoint configuration, protected credential readback, and awaited lifecycle changes.</summary>
 public sealed class McpRuntimeController : IAsyncDisposable
 {
-    private static readonly JsonSerializerOptions ClientJsonOptions = new() { WriteIndented = true };
+    // One line: many client settings fields and single-line text boxes keep only the first line of pasted text,
+    // which left users with a bare "{". JSON needs no line breaks to stay valid and readable when wrapped.
+    private static readonly JsonSerializerOptions ClientJsonOptions = new() { WriteIndented = false };
     private readonly MutationAdmissionBarrier _admission;
     private readonly IMcpCredentialStore _credentials;
     private readonly IMcpServerHost _host;

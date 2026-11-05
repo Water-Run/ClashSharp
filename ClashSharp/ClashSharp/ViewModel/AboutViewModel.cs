@@ -264,9 +264,9 @@ internal sealed class AboutViewModel : ObservableObject, ILocalizedPresentation
     /// <summary>Gets the label for the build-time row.</summary>
     public string BuildTimeTitleText => _localization.GetString("About.BuildTime.Title");
 
-    /// <summary>Gets the local build time in the user's selected time format, or a dash when the build carried no stamp.</summary>
+    /// <summary>Gets the build time in UTC (as labelled) in the user's selected time format, or a dash when the build carried no stamp.</summary>
     public string BuildTimeValueText => _buildTimestamp is DateTimeOffset timestamp
-        ? _localization.Formatter.Timestamp(timestamp)
+        ? _localization.Formatter.UtcTimestamp(timestamp)
         : "—";
 
     /// <summary>Gets the label for the bundled core row in the application information card.</summary>

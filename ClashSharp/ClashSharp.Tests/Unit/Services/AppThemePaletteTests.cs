@@ -2,6 +2,7 @@ extern alias ClashSharpUi;
 
 using ClashSharp.ApplicationModel.Settings;
 using ClashSharp.Model;
+using AccentControlResourceAliases = ClashSharpUi::ClashSharp.Service.AccentControlResourceAliases;
 using AppThemeService = ClashSharpUi::ClashSharp.Service.AppThemeService;
 
 namespace ClashSharp.Tests.Unit.Services;
@@ -124,10 +125,9 @@ public sealed class AppThemePaletteTests
         runtime.Apply(custom);
 
         Assert.Equal(custom, runtime.CaptureConfiguration());
-        Assert.Equal(57, resources.Local.Count);
-        Assert.Equal(57, resources.WriteCount);
+        Assert.Equal(AppThemeService.ManagedResourceKeys.Order(StringComparer.Ordinal), resources.Local.Keys.Order(StringComparer.Ordinal));
+        Assert.Equal(AppThemeService.ManagedResourceKeys.Count, resources.WriteCount);
         Assert.Equal(7, resources.Local.Count(pair => !pair.Value.IsBrush));
-        Assert.Equal(50, resources.Local.Count(pair => pair.Value.IsBrush));
         Assert.Equal(new(0x804477AA, false), resources.Local["SystemAccentColor"]);
         Assert.Equal(new(0x807CA0C4, false), resources.Local["SystemAccentColorLight1"]);
         Assert.Equal(new(0x80A2BBD4, false), resources.Local["SystemAccentColorLight2"]);
@@ -165,9 +165,32 @@ public sealed class AppThemePaletteTests
         Assert.Equal(followSystem, runtime.CaptureConfiguration());
         Assert.Equal(new KeyValuePair<string, AccentResourceValue>("UnrelatedResource", unrelated), Assert.Single(resources.Local));
         Assert.Equal(new KeyValuePair<string, AccentResourceValue>("SystemAccentColor", systemAccent), Assert.Single(resources.Merged));
-        Assert.Equal(57, resources.Removed.Count);
-        Assert.Equal(57, resources.Removed.Distinct(StringComparer.Ordinal).Count());
-        Assert.DoesNotContain("UnrelatedResource", resources.Removed);
+        Assert.Equal(AppThemeService.ManagedResourceKeys.Order(StringComparer.Ordinal), resources.Removed.Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void CustomAccentReachesCheckBoxesRadioButtonsSlidersAndHyperlinks()
+    {
+        ResourceStore resources = new();
+        AccentColorRuntime runtime = AppThemeService.CreateAccentRuntime(resources);
+        runtime.Apply(new(AppAccentColorMode.Custom, "#FF2EB82E"));
+
+        AccentResourceValue fill = resources.Local["AccentFillColorDefaultBrush"];
+        foreach (string key in new[] { "CheckBoxCheckBackgroundFillChecked", "CheckBoxCheckBackgroundStrokeChecked",
+            "CheckBoxCheckBackgroundFillIndeterminate", "RadioButtonOuterEllipseCheckedFill", "SliderTrackValueFill",
+            "SliderThumbBackground", "ListViewItemCheckBoxSelectedBrush", "SelectorBarItemPillFill" })
+        {
+            Assert.Equal(fill, resources.Local[key]);
+        }
+        Assert.Equal(resources.Local["AccentTextFillColorPrimaryBrush"], resources.Local["HyperlinkButtonForeground"]);
+        Assert.Equal(resources.Local["TextOnAccentFillColorPrimaryBrush"], resources.Local["CheckBoxCheckGlyphForegroundChecked"]);
+        Assert.All(AccentControlResourceAliases.Map, alias => Assert.True(resources.Local.ContainsKey(alias.Key), alias.Key));
+        Assert.Equal(AppThemeService.ManagedResourceKeys.Count, resources.Local.Count);
+
+        runtime.Apply(new(AppAccentColorMode.FollowSystem, "#FF2EB82E"));
+
+        Assert.Empty(resources.Local);
+        Assert.Contains("CheckBoxCheckBackgroundFillChecked", resources.Removed);
     }
 
     private sealed class ResourceStore : IAccentResourceStore

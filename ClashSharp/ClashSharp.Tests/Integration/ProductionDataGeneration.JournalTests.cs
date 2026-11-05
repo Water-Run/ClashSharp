@@ -83,6 +83,38 @@ public sealed partial class ProductionDataGenerationTests
     }
 
     [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task RelocatedDataRoot_IgnoresCompletedHistoryButStillRejectsPendingRecovery(bool completed)
+    {
+        await using DataGenerationTestDirectory directory = new();
+        await using DataGenerationTestDirectory relocated = new();
+        await using Fixture fixture = new(directory);
+        _ = await StartReplacementFixtureAsync(fixture, new NetworkSurface());
+        UiData.FileGenerationReplacementJournal journal = new(directory.RootPath);
+        await using (var lease = await fixture.Admission.CloseAndDrainAsync(MutationAdmissionClosure.Destructive, CancellationToken.None))
+        {
+            Guid operation = Guid.NewGuid();
+            await journal.BeginAsync(operation, fixture.Manager.CurrentManifest,
+                await RuntimeOf(fixture).ExternalState.CaptureAdmittedAsync(lease, CancellationToken.None), CancellationToken.None);
+            if (completed) { await journal.CompleteAsync(operation, CancellationToken.None); }
+        }
+        // The data root moved (for example a new package family): the checkpoint still names the old root.
+        UiData.FileGenerationReplacementJournal moved = new(relocated.RootPath);
+        Directory.CreateDirectory(Path.GetDirectoryName(moved.Path)!);
+        File.Copy(journal.Path, moved.Path);
+
+        if (completed)
+        {
+            Assert.Null(await moved.ReadPendingAsync(CancellationToken.None));
+        }
+        else
+        {
+            await Assert.ThrowsAnyAsync<Exception>(() => moved.ReadPendingAsync(CancellationToken.None));
+        }
+    }
+
+    [Theory]
     [InlineData(false, "before-promotion")]
     [InlineData(false, "after-promotion")]
     [InlineData(true, "before-promotion")]

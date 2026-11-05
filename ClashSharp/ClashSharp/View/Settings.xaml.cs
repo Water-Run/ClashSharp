@@ -1228,12 +1228,13 @@ public sealed partial class Settings : Page, ILocalizedPresentation
     /// <param name="cancellationToken">Page operation lifetime; leaving the page closes the dialog.</param>
     private async Task ShowMcpConfigurationAsync(string configuration, CancellationToken cancellationToken)
     {
+        // AcceptsReturn must be set before Text: a single-line TextBox truncates assigned text at its first line break.
         TextBox configurationText = new()
         {
-            Text = configuration,
-            IsReadOnly = true,
             AcceptsReturn = true,
             TextWrapping = TextWrapping.Wrap,
+            IsReadOnly = true,
+            Text = configuration,
             FontFamily = new FontFamily("Cascadia Mono, Consolas"),
             MinHeight = 160,
             MaxHeight = 320,

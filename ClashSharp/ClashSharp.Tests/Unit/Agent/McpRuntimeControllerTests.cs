@@ -176,6 +176,8 @@ public sealed class McpRuntimeControllerTests
         await using Fixture fixture = new();
         await using MutationAdmissionLease lease = await fixture.ExclusiveAsync();
         string connection = await fixture.Controller.GetClientConfigurationAdmittedAsync(lease, CancellationToken.None);
+        Assert.DoesNotContain('\n', connection);
+        Assert.DoesNotContain('\r', connection);
         using JsonDocument document = JsonDocument.Parse(connection);
         Assert.Equal("Bearer " + fixture.Store.Secret, document.RootElement.GetProperty("headers").GetProperty("Authorization").GetString());
         Assert.Equal(new McpServerConfiguration(McpServerConfiguration.DefaultPort, McpAccessPolicy.Default).Endpoint.AbsoluteUri,

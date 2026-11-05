@@ -612,7 +612,7 @@ internal static partial class LocalizationResources
             ["Master.Preset.NameInvalid"] = "Geben Sie einen Vorlagennamen mit 1 bis 40 Zeichen ein.",
             ["Master.Preset.EmptySelection"] = "Wählen Sie mindestens eine Kachel aus.",
             ["Master.Preset.TooMany.Format"] = "Es können höchstens {0} Vorlagen gespeichert werden. Löschen Sie zuerst eine nicht benötigte.",
-            ["About.BuildTime.Title"] = "Erstellungszeit",
+            ["About.BuildTime.Title"] = "Erstellungszeit (UTC)",
             ["Settings.StartupRestoreFallback.Checking"] = "Wird geprüft…",
             ["Settings.StartupRestoreFallback.CheckResult.Format"] = "Prüfung abgeschlossen: {0}",
             ["Settings.Mcp.Show"] = "Konfiguration anzeigen",

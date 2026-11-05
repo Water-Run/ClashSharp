@@ -657,7 +657,7 @@ public sealed class NotificationServiceTests
     [Theory]
     [InlineData(NotificationLevel.CriticalOnly, 0)]
     [InlineData(NotificationLevel.Default, 0)]
-    [InlineData(NotificationLevel.More, 4)]
+    [InlineData(NotificationLevel.More, 3)]
     public void ForegroundWindowSkipsStandardResultsItAlreadyShows(NotificationLevel level, int expected)
     {
         FakeWin11NotificationPlatform platform = new();
@@ -665,7 +665,6 @@ public sealed class NotificationServiceTests
         service.SetForegroundProbe(static () => true);
 
         service.ReportOperation("Title", "Failed", true);
-        service.NotifyProxyModeChanged(ClashSharp.Model.ClashSharpMode.Standby);
         service.NotifyConnectionTestTimeout("First target");
         service.ReportAvailability("Title", "Recovered", false);
 
@@ -687,6 +686,23 @@ public sealed class NotificationServiceTests
         service.ReportOperation("Title", "Notification.Startup.Attention", true);
 
         Assert.Equal(3, platform.Requests.Count);
+    }
+
+    [Theory]
+    [InlineData(NotificationLevel.CriticalOnly, 0)]
+    [InlineData(NotificationLevel.Default, 3)]
+    [InlineData(NotificationLevel.More, 3)]
+    public void ForegroundWindowStillAnnouncesConnectivityChanges(NotificationLevel level, int expected)
+    {
+        FakeWin11NotificationPlatform platform = new();
+        NotificationService service = CreateService(true, level, platform, new(), new());
+        service.SetForegroundProbe(static () => true);
+
+        service.NotifyProxyModeChanged(ClashSharp.Model.ClashSharpMode.RuleTakeover);
+        service.NotifyTransparentProxyChanged(true, true);
+        service.NotifyTransparentProxyChanged(false, false);
+
+        Assert.Equal(expected, platform.Requests.Count);
     }
 
     [Fact]

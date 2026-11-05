@@ -612,7 +612,7 @@ internal static partial class LocalizationResources
             ["Master.Preset.NameInvalid"] = "1~40자의 템플릿 이름을 입력하세요.",
             ["Master.Preset.EmptySelection"] = "타일을 하나 이상 선택하세요.",
             ["Master.Preset.TooMany.Format"] = "템플릿은 최대 {0}개까지 저장할 수 있습니다. 필요 없는 템플릿을 먼저 삭제하세요.",
-            ["About.BuildTime.Title"] = "빌드 시간",
+            ["About.BuildTime.Title"] = "빌드 시간 (UTC)",
             ["Settings.StartupRestoreFallback.Checking"] = "확인 중…",
             ["Settings.StartupRestoreFallback.CheckResult.Format"] = "확인 완료: {0}",
             ["Settings.Mcp.Show"] = "구성 표시",

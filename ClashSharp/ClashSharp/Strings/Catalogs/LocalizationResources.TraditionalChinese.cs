@@ -612,7 +612,7 @@ internal static partial class LocalizationResources
             ["Master.Preset.NameInvalid"] = "請輸入 1–40 個字元的範本名稱。",
             ["Master.Preset.EmptySelection"] = "請至少選擇一個磚貼。",
             ["Master.Preset.TooMany.Format"] = "最多儲存 {0} 個範本，請先刪除不需要的範本。",
-            ["About.BuildTime.Title"] = "編譯時間",
+            ["About.BuildTime.Title"] = "編譯時間 (UTC)",
             ["Settings.StartupRestoreFallback.Checking"] = "正在檢測…",
             ["Settings.StartupRestoreFallback.CheckResult.Format"] = "檢測完成：{0}",
             ["Settings.Mcp.Show"] = "顯示設定",

@@ -612,7 +612,7 @@ internal static partial class LocalizationResources
             ["Master.Preset.NameInvalid"] = "نام الگو را با ۱ تا ۴۰ نویسه وارد کنید.",
             ["Master.Preset.EmptySelection"] = "دست‌کم یک کاشی را انتخاب کنید.",
             ["Master.Preset.TooMany.Format"] = "حداکثر {0} الگو قابل ذخیره است. ابتدا یک الگوی غیرضروری را حذف کنید.",
-            ["About.BuildTime.Title"] = "زمان ساخت",
+            ["About.BuildTime.Title"] = "زمان ساخت (UTC)",
             ["Settings.StartupRestoreFallback.Checking"] = "در حال بررسی…",
             ["Settings.StartupRestoreFallback.CheckResult.Format"] = "بررسی کامل شد: {0}",
             ["Settings.Mcp.Show"] = "نمایش پیکربندی",

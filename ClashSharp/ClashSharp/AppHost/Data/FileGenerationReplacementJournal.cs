@@ -150,14 +150,25 @@ internal sealed class FileGenerationReplacementJournal : IGenerationReplacementJ
         {
             throw new InvalidDataException("The replacement checkpoint identity is invalid.");
         }
-        _paths.ValidateDescriptor(record.Baseline.Descriptor);
+        // A completed checkpoint is history: it carries no recovery duty and nothing reads its
+        // paths. Its descriptors were canonical when written, but the data root can move (a new
+        // package family after a publisher change, a relocated profile), and requiring them to
+        // exist under the current root would turn that history into a startup failure. A pending
+        // checkpoint must still name canonical, existing generations.
+        if (!record.Completed)
+        {
+            _paths.ValidateDescriptor(record.Baseline.Descriptor);
+        }
         if (!record.Baseline.Descriptor.IsSameGeneration(record.External.Generation) || record.External.Appearance is null || record.External.Network is null)
         {
             throw new InvalidDataException("The saved external state does not belong to the baseline.");
         }
         if (record.Candidate is { } candidate)
         {
-            _paths.ValidateDescriptor(candidate);
+            if (!record.Completed)
+            {
+                _paths.ValidateDescriptor(candidate);
+            }
             if (candidate.GenerationId == record.Baseline.Descriptor.GenerationId
                 || record.Baseline.HighestGenerationNumber == long.MaxValue
                 || candidate.GenerationNumber != record.Baseline.HighestGenerationNumber + 1)
