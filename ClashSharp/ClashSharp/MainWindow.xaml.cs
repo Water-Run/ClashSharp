@@ -56,7 +56,7 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
     /// <summary>Registered shell message broadcast after Explorer recreates the taskbar.</summary>
     private const string TaskbarCreatedMessageName = "TaskbarCreated";
 
-    /// <summary>Maximum age of the authenticated service readiness used by the tray indicator.</summary>
+    /// <summary>Tray status polling interval when no network or tray setting changes.</summary>
     private static readonly TimeSpan MihomoServiceStatusProbeInterval =
         TimeSpan.FromSeconds(5);
 
@@ -122,6 +122,7 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
     private bool _runtimeReady;
 
     private readonly CancellationTokenSource _windowLifetime = new();
+    private readonly SemaphoreSlim _trayStatusProbeWake = new(0, 1);
     /// <summary>Retains the live root so Closed can fence callbacks without querying a destroyed view.</summary>
     private XamlRoot? _dialogXamlRoot;
     internal CancellationToken WindowLifetime => _windowLifetime.Token;
@@ -638,19 +639,19 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
             }
 
             _ = StartupShellSetupPolicy.TryRun(_windowLifetime.Dispose);
+            _ = StartupShellSetupPolicy.TryRun(_trayStatusProbeWake.Dispose);
         }
     }
 
     private async Task MonitorMihomoServiceStatusForTrayAsync(CancellationToken cancellationToken)
     {
-        using PeriodicTimer timer = new(MihomoServiceStatusProbeInterval);
         while (true)
         {
             try
             {
                 if (!_dataMaintenanceActive)
                 {
-                    await Runtime.RefreshMihomoStatusAsync(cancellationToken);
+                    await Runtime.RefreshTrayRuntimeStatusAsync(cancellationToken);
                 }
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -672,10 +673,7 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
 
             try
             {
-                if (!await timer.WaitForNextTickAsync(cancellationToken))
-                {
-                    return;
-                }
+                await _trayStatusProbeWake.WaitAsync(MihomoServiceStatusProbeInterval, cancellationToken);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -957,6 +955,10 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
                 if (!_windowLifetime.IsCancellationRequested)
                 {
                     RefreshTrayMenuPreservingReachability();
+                    if (_trayStatusProbeWake.CurrentCount == 0)
+                    {
+                        _trayStatusProbeWake.Release();
+                    }
                 }
             }))
         {

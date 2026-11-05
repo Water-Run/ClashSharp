@@ -218,13 +218,12 @@ public sealed class AppResourcePackagingTests
         string monitorBoundary = mainWindowCode[methodStart..methodEnd];
 
         Assert.Contains("TimeSpan.FromSeconds(5)", mainWindowCode, StringComparison.Ordinal);
-        Assert.Contains("using PeriodicTimer timer", monitorBoundary, StringComparison.Ordinal);
         Assert.Contains("while (true)", monitorBoundary, StringComparison.Ordinal);
         int probeIndex = monitorBoundary.IndexOf(
-            "await Runtime.RefreshMihomoStatusAsync(cancellationToken)",
+            "await Runtime.RefreshTrayRuntimeStatusAsync(cancellationToken)",
             StringComparison.Ordinal);
         int waitIndex = monitorBoundary.IndexOf(
-            "await timer.WaitForNextTickAsync(cancellationToken)",
+            "await _trayStatusProbeWake.WaitAsync(MihomoServiceStatusProbeInterval, cancellationToken)",
             StringComparison.Ordinal);
         Assert.True(probeIndex >= 0, "The service status probe is missing.");
         Assert.True(waitIndex > probeIndex, "The first service probe must run before the periodic wait.");

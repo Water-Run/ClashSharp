@@ -106,12 +106,12 @@ internal sealed class MainWindowComposition
     /// <summary>Runtime operations exposed to the WinUI shell after startup readiness.</summary>
     internal sealed class Runtime : IDisposable
     {
-        private static readonly HashSet<string> TrayRelevantSettingKeys = new(StringComparer.Ordinal)
+        private static readonly HashSet<string> TrayNetworkSettingKeys = new(StringComparer.Ordinal)
         {
             SettingsRegistry.Keys.CurrentMode.Value,
             SettingsRegistry.Keys.TransparentProxyEnabled.Value,
-            SettingsRegistry.Keys.TrayUseMonochromeInactiveIcon.Value,
-            SettingsRegistry.Keys.TrayVisibleFeatureIds.Value,
+            SettingsRegistry.Keys.ActiveProfileId.Value,
+            SettingsRegistry.Keys.MixedPort.Value,
         };
 
         private readonly AppSettingsService _settings;
@@ -119,6 +119,7 @@ internal sealed class MainWindowComposition
         private readonly MihomoCoreService _mihomoCore;
         private readonly MihomoServiceManager _mihomoService;
         private readonly NetworkStateCoordinator _networkState;
+        private readonly INetworkStateObserver _networkObserver;
         private readonly ILogStorage _logs;
         private readonly TrayStatusService _trayStatus;
         private readonly IStartupGuidePresenter _startupGuide;
@@ -126,6 +127,8 @@ internal sealed class MainWindowComposition
         private readonly IWindowPlacementStore _windowPlacementStore;
         private readonly InstallationPinningService _installationPins = new();
         private readonly NotificationService? _notifications;
+        private TrayNetworkObservation? _trayNetworkObservation;
+        private int _trayNetworkRevision;
         private bool _observedTunRequirement;
         private bool _serviceFailureReported;
         private int _disposed;
@@ -136,6 +139,7 @@ internal sealed class MainWindowComposition
             MihomoCoreService mihomoCore,
             MihomoServiceManager mihomoService,
             NetworkStateCoordinator networkState,
+            INetworkStateObserver networkObserver,
             ILogStorage logs,
             TrayStatusService trayStatus,
             RestartRequiredStateService restartState,
@@ -151,6 +155,7 @@ internal sealed class MainWindowComposition
             _mihomoCore = mihomoCore ?? throw new ArgumentNullException(nameof(mihomoCore));
             _mihomoService = mihomoService ?? throw new ArgumentNullException(nameof(mihomoService));
             _networkState = networkState ?? throw new ArgumentNullException(nameof(networkState));
+            _networkObserver = networkObserver ?? throw new ArgumentNullException(nameof(networkObserver));
             _logs = logs ?? throw new ArgumentNullException(nameof(logs));
             _trayStatus = trayStatus ?? throw new ArgumentNullException(nameof(trayStatus));
             ArgumentNullException.ThrowIfNull(restartState);
@@ -169,6 +174,7 @@ internal sealed class MainWindowComposition
                 new ShellLocalizationAdapter(_localization),
                 new ShellRestartStateAdapter(restartState));
             _settings.SettingChanged += Settings_SettingChanged;
+            _settings.DataGenerationChanged += Settings_DataGenerationChanged;
             _networkState.VerifiedStateChanged += NetworkState_VerifiedStateChanged;
             _mihomoCore.UnexpectedExit += MihomoCore_UnexpectedExit;
         }
@@ -237,15 +243,45 @@ internal sealed class MainWindowComposition
             return _startupGuide.ShowAsync(xamlRoot, cancellationToken);
         }
 
-        /// <summary>Refreshes the cached Mihomo status used by the tray menu.</summary>
-        public async Task RefreshMihomoStatusAsync(CancellationToken cancellationToken)
+        /// <summary>Refreshes the live network and service observations used by the tray.</summary>
+        public async Task RefreshTrayRuntimeStatusAsync(CancellationToken cancellationToken)
         {
-            MihomoServiceStatus status = await _mihomoService.GetStatusAsync(cancellationToken).ConfigureAwait(false);
-            cancellationToken.ThrowIfCancellationRequested();
+            int revision = Volatile.Read(ref _trayNetworkRevision);
+            NetworkStateSnapshot? observed = null;
+            try
+            {
+                MihomoServiceStatus status = await _mihomoService.GetStatusAsync(cancellationToken).ConfigureAwait(false);
+                cancellationToken.ThrowIfCancellationRequested();
+                ReportMihomoAvailability(status);
+                if (!IsProxyTakeoverActive()) { return; }
+
+                // Settings transactions use the generation's runtime directly. Read the same live
+                // observer as Master Control rather than the legacy transition coordinator's cache.
+                using CancellationTokenSource deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                deadline.CancelAfter(TimeSpan.FromSeconds(2));
+                try
+                {
+                    NetworkStateSnapshot state = await _networkObserver.ObserveAsync(deadline.Token).ConfigureAwait(false);
+                    deadline.Token.ThrowIfCancellationRequested();
+                    observed = state.IsKnown ? state : null;
+                }
+                catch (OperationCanceledException) when (deadline.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+                {
+                    // Leave the tray neutral until a later observation can establish the state.
+                }
+            }
+            finally
+            {
+                Volatile.Write(ref _trayNetworkObservation, observed is null ? null : new(revision, observed));
+            }
+        }
+
+        private void ReportMihomoAvailability(MihomoServiceStatus status)
+        {
             bool intended = _settings.CurrentMode is ClashSharpMode.RuleTakeover or ClashSharpMode.FullTakeover
                 && _settings.TransparentProxyEnabled;
             if (!intended) { _observedTunRequirement = false; _serviceFailureReported = false; return; }
-            _observedTunRequirement |= status.IsReady || _networkState.GetLatestVerifiedState()?.TransparentProxyEnabled == true;
+            _observedTunRequirement |= status.IsReady || GetLatestTrayNetworkState()?.TransparentProxyEnabled == true;
             if (!_observedTunRequirement) { return; }
             if (!status.IsReady && !_serviceFailureReported)
             {
@@ -279,10 +315,11 @@ internal sealed class MainWindowComposition
         public TrayMenuState BuildTrayMenuState()
         {
             MihomoServiceStatus serviceStatus = _mihomoService.GetLatestStatus();
-            NetworkTransitionResult? networkState = _networkState.GetLatestVerifiedState();
-            bool runtimeKnown = networkState is not null && networkState.Mode == CurrentMode;
+            NetworkStateSnapshot? networkState = GetLatestTrayNetworkState();
+            ClashSharpMode mode = CurrentMode;
+            bool runtimeKnown = networkState is not null && networkState.Mode == mode;
             return TrayMenuStateBuilder.Build(
-                CurrentMode,
+                mode,
                 TransparentProxyEnabled,
                 serviceStatus.IsInstalled,
                 runtimeKnown,
@@ -297,6 +334,14 @@ internal sealed class MainWindowComposition
                     ',',
                     StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
                 _localization.GetString);
+        }
+
+        private NetworkStateSnapshot? GetLatestTrayNetworkState()
+        {
+            TrayNetworkObservation? observation = Volatile.Read(ref _trayNetworkObservation);
+            return observation is not null && observation.Revision == Volatile.Read(ref _trayNetworkRevision)
+                ? observation.State
+                : null;
         }
 
         /// <summary>Creates the native tray adapter for this window.</summary>
@@ -327,6 +372,7 @@ internal sealed class MainWindowComposition
             }
 
             _settings.SettingChanged -= Settings_SettingChanged;
+            _settings.DataGenerationChanged -= Settings_DataGenerationChanged;
             _networkState.VerifiedStateChanged -= NetworkState_VerifiedStateChanged;
             _mihomoCore.UnexpectedExit -= MihomoCore_UnexpectedExit;
             ViewModel.Dispose();
@@ -335,24 +381,37 @@ internal sealed class MainWindowComposition
 
         private void Settings_SettingChanged(object? sender, AppSettingChangedEventArgs e)
         {
-            if (!TrayRelevantSettingKeys.Contains(e.Key))
+            if (TrayNetworkSettingKeys.Contains(e.Key))
             {
-                return;
+                InvalidateTrayNetworkState();
             }
-
-            TrayStateChanged?.Invoke(this, EventArgs.Empty);
+            else if (e.Key == SettingsRegistry.Keys.TrayUseMonochromeInactiveIcon.Value
+                || e.Key == SettingsRegistry.Keys.TrayVisibleFeatureIds.Value)
+            {
+                TrayStateChanged?.Invoke(this, EventArgs.Empty);
+            }
         }
+
+        private void Settings_DataGenerationChanged(object? sender, EventArgs e) => InvalidateTrayNetworkState();
 
         private void NetworkState_VerifiedStateChanged(object? sender, EventArgs e)
         {
-            TrayStateChanged?.Invoke(this, EventArgs.Empty);
+            InvalidateTrayNetworkState();
         }
 
         private void MihomoCore_UnexpectedExit(object? sender, MihomoCoreUnexpectedExitEventArgs e)
         {
             _notifications?.NotifyRuntimeFailure();
+            InvalidateTrayNetworkState();
+        }
+
+        private void InvalidateTrayNetworkState()
+        {
+            Interlocked.Increment(ref _trayNetworkRevision);
             TrayStateChanged?.Invoke(this, EventArgs.Empty);
         }
+
+        private sealed record TrayNetworkObservation(int Revision, NetworkStateSnapshot State);
     }
 
     /// <summary>Narrow native-tray contract required by the window message shell.</summary>

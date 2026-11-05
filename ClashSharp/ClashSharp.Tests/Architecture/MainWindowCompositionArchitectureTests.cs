@@ -204,7 +204,10 @@ public sealed class MainWindowCompositionArchitectureTests
             StringComparison.Ordinal);
         Assert.Contains("_mihomoCore.UnexpectedExit += MihomoCore_UnexpectedExit", composition, StringComparison.Ordinal);
         Assert.Contains("_mihomoCore.UnexpectedExit -= MihomoCore_UnexpectedExit", composition, StringComparison.Ordinal);
-        Assert.Contains("TrayRelevantSettingKeys.Contains(e.Key)", settingsHandler, StringComparison.Ordinal);
+        Assert.Contains("TrayNetworkSettingKeys.Contains(e.Key)", settingsHandler, StringComparison.Ordinal);
+        Assert.Contains("InvalidateTrayNetworkState()", settingsHandler, StringComparison.Ordinal);
+        Assert.Contains("_settings.DataGenerationChanged += Settings_DataGenerationChanged", composition, StringComparison.Ordinal);
+        Assert.Contains("_settings.DataGenerationChanged -= Settings_DataGenerationChanged", composition, StringComparison.Ordinal);
         Assert.Contains("SettingsRegistry.Keys.CurrentMode.Value", composition, StringComparison.Ordinal);
         Assert.Contains("SettingsRegistry.Keys.TransparentProxyEnabled.Value", composition, StringComparison.Ordinal);
         Assert.Contains("SettingsRegistry.Keys.TrayUseMonochromeInactiveIcon.Value", composition, StringComparison.Ordinal);
@@ -215,6 +218,10 @@ public sealed class MainWindowCompositionArchitectureTests
         Assert.Contains("Interlocked.Exchange(ref _trayRefreshQueued, 0)", trayHandler, StringComparison.Ordinal);
         Assert.Contains("DispatcherQueue.TryEnqueue", trayHandler, StringComparison.Ordinal);
         Assert.Contains("RefreshTrayMenuPreservingReachability()", trayHandler, StringComparison.Ordinal);
+        Assert.Contains("_trayStatusProbeWake.Release()", trayHandler, StringComparison.Ordinal);
+        Assert.Contains("await _networkObserver.ObserveAsync(deadline.Token)", composition, StringComparison.Ordinal);
+        Assert.Contains("NetworkStateSnapshot? networkState = GetLatestTrayNetworkState()", composition, StringComparison.Ordinal);
+        Assert.DoesNotContain("_networkState.GetLatestVerifiedState()", composition, StringComparison.Ordinal);
         Assert.Contains("_mihomoCore.IsRunning", composition, StringComparison.Ordinal);
         Assert.Contains("serviceStatus.IsReady", composition, StringComparison.Ordinal);
     }
