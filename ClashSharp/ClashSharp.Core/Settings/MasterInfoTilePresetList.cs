@@ -22,7 +22,7 @@ public static class MasterInfoTilePresetList
     private const string CustomPrefix = "custom:";
 
     /// <summary>Gets the built-in templates offered by this build, in their default order.</summary>
-    public static IReadOnlyList<string> BuiltInIds { get; } = Array.AsReadOnly(["daily", "traffic", "subscriptions", "diagnostics", "minimal"]);
+    public static IReadOnlyList<string> BuiltInIds { get; } = Array.AsReadOnly(["default", "extended", "minimal", "technical", "general", "complete"]);
 
     /// <summary>Gets the canonical text of the default template list.</summary>
     public static string DefaultCanonicalText { get; } = Format(BuiltInIds.Select(MasterInfoTilePresetEntry.BuiltIn));

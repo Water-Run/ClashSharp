@@ -5,6 +5,8 @@ namespace ClashSharp.Tests.Unit.Services;
 
 public sealed class MasterInfoTileLayoutServiceTests
 {
+    private const string PreviousDefaultPresets = "@daily;@traffic;@subscriptions;@diagnostics;@minimal";
+
     private static readonly IReadOnlyList<string> AvailableTileIds =
     [
         "core",
@@ -90,6 +92,29 @@ public sealed class MasterInfoTileLayoutServiceTests
         IReadOnlyList<MasterInfoTilePresetEntry> presets = service.GetPresets();
 
         Assert.Equal(MasterInfoTilePresetList.BuiltInIds, presets.Select(static entry => entry.BuiltInId));
+    }
+
+    [Fact]
+    public void GetPresets_DisplaysNewDefaultsWithoutRewritingThePreviousDefaultValue()
+    {
+        FakeInfoTileLayoutSettings settings = new() { MasterInfoTilePresets = PreviousDefaultPresets };
+        MasterInfoTileLayoutService service = new(settings);
+
+        Assert.Equal(MasterInfoTilePresetList.BuiltInIds, service.GetPresets().Select(static entry => entry.BuiltInId));
+        Assert.Equal(PreviousDefaultPresets, settings.MasterInfoTilePresets);
+    }
+
+    [Theory]
+    [InlineData(PreviousDefaultPresets + ";custom:Work:core")]
+    [InlineData("@minimal;@diagnostics;@subscriptions;@traffic;@daily")]
+    [InlineData("")]
+    public void GetPresets_PreservesCustomizedLists(string saved)
+    {
+        FakeInfoTileLayoutSettings settings = new() { MasterInfoTilePresets = saved };
+        MasterInfoTileLayoutService service = new(settings);
+
+        Assert.Equal(saved, MasterInfoTilePresetList.Format(service.GetPresets()));
+        Assert.Equal(saved, settings.MasterInfoTilePresets);
     }
 
     [Fact]

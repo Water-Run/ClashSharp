@@ -905,7 +905,11 @@ public sealed partial class MasterControl : Page
             applyingTemplate = true;
             try
             {
-                presets = MasterInfoTilePresetCatalog.Create(_getString, _viewModel.RecommendedInfoTileIds, templateEntries);
+                presets = MasterInfoTilePresetCatalog.Create(
+                    _getString,
+                    _viewModel.RecommendedInfoTileIds,
+                    _viewModel.InfoTiles.Select(static tile => tile.Id).ToArray(),
+                    templateEntries);
                 templatePicker.Items.Clear();
                 foreach (MasterInfoTilePreset preset in presets)
                 {

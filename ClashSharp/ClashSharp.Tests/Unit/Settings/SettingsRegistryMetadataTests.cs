@@ -281,7 +281,7 @@ public sealed class SettingsRegistryMetadataTests
         Internal(
             "MasterInfoTilePresets",
             typeof(string),
-            "@daily;@traffic;@subscriptions;@diagnostics;@minimal",
+            "@default;@extended;@minimal;@technical;@general;@complete",
             SettingCategory.Appearance,
             SettingsResetScope.MasterControl,
             SettingApplicationKind.Appearance,

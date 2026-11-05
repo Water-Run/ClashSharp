@@ -451,12 +451,15 @@ public sealed class LocalizationResourcesTests
         Assert.Equal("Choose custom color", LocalizationResources.Translations[AppLanguage.English]["Settings.AppAccentColor.Pick"]);
     }
 
-    /// <summary>Verifies Simplified Chinese settings copy consistently uses the standard default-value wording.</summary>
+    /// <summary>Verifies Simplified Chinese uses the requested template title and standard wording elsewhere.</summary>
     [Fact]
     public void Translations_SimplifiedChinese_DoesNotUseLegacyDefaultWording()
     {
-        string[] legacyValues = LocalizationResources.Translations[AppLanguage.SimplifiedChinese]
-            .Where(pair => pair.Value.Contains("缺省", StringComparison.Ordinal))
+        IReadOnlyDictionary<string, string> translations = LocalizationResources.Translations[AppLanguage.SimplifiedChinese];
+        const string presetTitle = "Master.Preset.Default.Title";
+        Assert.Equal("缺省", translations[presetTitle]);
+        string[] legacyValues = translations
+            .Where(pair => pair.Key != presetTitle && pair.Value.Contains("缺省", StringComparison.Ordinal))
             .Select(pair => $"{pair.Key}={pair.Value}")
             .Order(StringComparer.Ordinal)
             .ToArray();

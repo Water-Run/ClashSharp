@@ -69,7 +69,7 @@ public sealed class SettingsRegistryTests
                 "CoreStatus,SystemProxy,TransparentProxy,CurrentNode,UploadRate,DownloadRate,TotalTraffic,Availability",
             ["MasterInfoTileLayout"] =
                 "upload-rate,download-rate,session-traffic,current-node,latency,active-connections,active-profile,subscription-usage,subscription-expiry,system-proxy,transparent-proxy,connection-test",
-            ["MasterInfoTilePresets"] = "@daily;@traffic;@subscriptions;@diagnostics;@minimal",
+            ["MasterInfoTilePresets"] = "@default;@extended;@minimal;@technical;@general;@complete",
             ["ConnectionTestProxyUrl1"] = "https://www.google.com",
             ["ConnectionTestProxyUrl2"] = "https://github.com",
             ["ConnectionTestDirectUrl"] = "https://www.baidu.com",

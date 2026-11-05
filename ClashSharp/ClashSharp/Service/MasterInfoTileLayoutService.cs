@@ -21,6 +21,8 @@ internal interface IMasterInfoTileLayoutSettings
 
 internal sealed class MasterInfoTileLayoutService : IMasterInfoTileLayoutService
 {
+    private const string PreviousDefaultPresets = "@daily;@traffic;@subscriptions;@diagnostics;@minimal";
+
     private readonly IMasterInfoTileLayoutSettings _settings;
 
     public static IReadOnlyList<string> DefaultLayout { get; } = SettingsRegistry.Default
@@ -65,11 +67,15 @@ internal sealed class MasterInfoTileLayoutService : IMasterInfoTileLayoutService
     public IReadOnlyList<string> GetRecommendedLayout(IReadOnlyCollection<string> availableTileIds) =>
         Normalize(DefaultLayout, availableTileIds);
 
-    /// <summary>Reads the saved template list; an unreadable value falls back to the built-in list.</summary>
-    public IReadOnlyList<MasterInfoTilePresetEntry> GetPresets() =>
-        MasterInfoTilePresetList.TryParse(_settings.MasterInfoTilePresets, out IReadOnlyList<MasterInfoTilePresetEntry> entries, out _)
+    /// <summary>Reads the saved list, displaying the current defaults for the exact previous default list or an unreadable value.</summary>
+    public IReadOnlyList<MasterInfoTilePresetEntry> GetPresets()
+    {
+        string saved = _settings.MasterInfoTilePresets;
+        return saved != PreviousDefaultPresets
+            && MasterInfoTilePresetList.TryParse(saved, out IReadOnlyList<MasterInfoTilePresetEntry> entries, out _)
             ? entries
             : DefaultPresets();
+    }
 
     /// <summary>Persists the template list in the given order and returns the stored entries.</summary>
     public async Task<IReadOnlyList<MasterInfoTilePresetEntry>> SavePresetsAsync(
