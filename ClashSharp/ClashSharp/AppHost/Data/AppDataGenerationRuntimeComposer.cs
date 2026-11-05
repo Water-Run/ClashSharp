@@ -61,7 +61,7 @@ internal sealed class AppDataGenerationRuntimeComposer(
             ?? new NetworkSettingsRuntime(repositories.Configuration, scopedTakeover, proxy);
         repositories.OwnSettingsParticipant(new NetworkSettingsParticipant(generation, admission, network));
         GenerationExternalStateRecovery recovery = new(repositories.Session, admission, dispatcher, appearance, startup, network);
-        INetworkStateObserver observer = new NetworkObserver(network, proxy);
+        INetworkStateObserver observer = new NetworkObserver(network);
         TriggerDefinitionStore definitions = new(repositories.Triggers, time);
         TriggerSettingsState triggerState = new(generation);
         GenerationPublicationGate publication = new();
@@ -109,16 +109,9 @@ internal sealed class AppDataGenerationRuntimeComposer(
         public int IntervalSeconds => session.Snapshot.Desired[SettingsRegistry.Keys.ConnectionSamplingIntervalSeconds].Value.Get<int>();
     }
 
-    private sealed class NetworkObserver(INetworkSettingsRuntime runtime, WindowsProxyService proxy) : INetworkStateObserver
+    private sealed class NetworkObserver(INetworkSettingsRuntime runtime) : INetworkStateObserver
     {
-        public async Task<NetworkStateSnapshot> ObserveAsync(CancellationToken cancellationToken)
-        {
-            // The runtime read independently validates the owner, controller and complete
-            // configuration. Preserve the separately observed Windows proxy flag as well.
-            NetworkSettingsConfiguration actual = await runtime.ReadConfigurationAsync(cancellationToken).ConfigureAwait(false);
-            WindowsProxyState windows = proxy.GetCurrentState();
-            return new(actual.Mode, actual.Mode != ClashSharpMode.Disabled, windows.IsEnabled, actual.EffectiveTunEnabled,
-                actual.MixedPort, $"{actual.Mode}:{actual.ProfileId}:{actual.MixedPort}:{actual.EffectiveTunEnabled}:{windows.IsEnabled}");
-        }
+        public Task<NetworkStateSnapshot> ObserveAsync(CancellationToken cancellationToken) =>
+            runtime.ReadStateAsync(cancellationToken);
     }
 }

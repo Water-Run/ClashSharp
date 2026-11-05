@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using ClashSharp.ApplicationModel.Network;
 using ClashSharp.Hosting.Settings;
 using ClashSharp.Model;
 using ClashSharp.Settings;
@@ -51,56 +52,82 @@ public sealed partial class NetworkTakeoverService
         await _transitionGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            RuntimeConfigurationIntegrityObservation integrity = readIntegrity();
-            if (!integrity.IsKnown) { throw new InvalidOperationException("The runtime configuration is not independently known."); }
-            MihomoServiceStatus service = await _mihomoService.GetStatusAsync(cancellationToken).ConfigureAwait(false);
-            RuntimeConfigurationActivationPlan? plan = integrity.AppliedPlan;
-            if (plan is null)
-            {
-                if (integrity.AppliedGeneration is not null || integrity.AppliedContentHash is not null
-                    || !_core.IsOwnershipKnown || _core.IsRunning || !service.HasReleasedChildOwnership || !readProxy().HasReleasedOwnership
-                    || readIntegrity() != integrity)
-                {
-                    throw new InvalidOperationException("An empty runtime cannot claim a clean inactive network baseline.");
-                }
-                return new(ClashSharpMode.Disabled, SettingsRegistry.Default.Get(SettingsRegistry.Keys.ActiveProfileId.Value).DefaultValue.Get<string>(),
-                    false, SettingsRegistry.Default.Get(SettingsRegistry.Keys.MixedPort.Value).SafeFallback.Get<int>());
-            }
-            if (integrity.AppliedGeneration is not long generation || generation < 1 || integrity.AppliedContentHash is null)
-            {
-                throw new InvalidOperationException("The stored configuration has no verified generation identity.");
-            }
-            // A saved active configuration may outlive its process (for example after a reboot).
-            // Independently released owners establish an inactive baseline without rewriting preferences
-            // or pretending the stopped core is still applying the saved activation plan.
-            if (plan.Mode != ClashSharpMode.Disabled && NetworkSettingsOwnersReleased(service) && readProxy().HasReleasedOwnership)
-            {
-                service = await _mihomoService.GetStatusAsync(cancellationToken).ConfigureAwait(false);
-                if (!NetworkSettingsOwnersReleased(service) || !readProxy().HasReleasedOwnership || readIntegrity() != integrity)
-                {
-                    throw new InvalidOperationException("The inactive network baseline changed during startup observation.");
-                }
-                return new(ClashSharpMode.Disabled, plan.ProfileId, false, plan.MixedPort);
-            }
-            if (!NetworkSettingsOwnerMatches(integrity, service)
-                || plan.Mode != ClashSharpMode.Disabled && !await _readiness.MatchesRuntimeConfigurationAsync(plan,
-                    generation, integrity.AppliedContentHash, service, cancellationToken).ConfigureAwait(false))
-            {
-                throw new InvalidOperationException("The runtime owner or authenticated controller does not match the verified configuration.");
-            }
-            Guid? readinessSession = service.ServiceSessionId;
-            service = await _mihomoService.GetStatusAsync(cancellationToken).ConfigureAwait(false);
-            WindowsProxyOwnershipObservation proxy = readProxy();
-            bool needsProxy = plan.Mode is ClashSharpMode.RuleTakeover or ClashSharpMode.FullTakeover && !plan.TunEnabled;
-            if (!NetworkSettingsOwnerMatches(integrity, service) || plan.TunEnabled && service.ServiceSessionId != readinessSession
-                || !(needsProxy ? proxy.MatchesOwnedProxy(_proxyRecovery.BuildLoopbackProxyServer(plan.MixedPort)) : proxy.HasReleasedOwnership)
-                || readIntegrity() != integrity)
-            {
-                throw new InvalidOperationException("The system proxy or configuration changed during network observation.");
-            }
-            return new(plan.Mode, plan.ProfileId, plan.TunEnabled, plan.MixedPort);
+            return await ObserveNetworkSettingsCoreAsync(readIntegrity, readProxy, cancellationToken).ConfigureAwait(false);
         }
         finally { _transitionGate.Release(); }
+    }
+
+    /// <summary>Returns mode and Windows proxy flags from the same native observation.</summary>
+    internal async Task<NetworkStateSnapshot> ObserveNetworkStateAsync(
+        Func<RuntimeConfigurationIntegrityObservation> readIntegrity, Func<WindowsProxyOwnershipObservation> readProxy,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(readIntegrity);
+        ArgumentNullException.ThrowIfNull(readProxy);
+        await _transitionGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            WindowsProxyOwnershipObservation? proxy = null;
+            NetworkSettingsConfiguration configuration = await ObserveNetworkSettingsCoreAsync(
+                readIntegrity, () => proxy = readProxy(), cancellationToken).ConfigureAwait(false);
+            return configuration.ToSnapshot(proxy!.Current.ProxyEnable is { Exists: true, Value: not 0 });
+        }
+        finally { _transitionGate.Release(); }
+    }
+
+    // The caller retains the native transition gate through observation and any resulting mutation.
+    private async Task<NetworkSettingsConfiguration> ObserveNetworkSettingsCoreAsync(
+        Func<RuntimeConfigurationIntegrityObservation> readIntegrity, Func<WindowsProxyOwnershipObservation> readProxy,
+        CancellationToken cancellationToken)
+    {
+        RuntimeConfigurationIntegrityObservation integrity = readIntegrity();
+        if (!integrity.IsKnown) { throw new InvalidOperationException("The runtime configuration is not independently known."); }
+        MihomoServiceStatus service = await _mihomoService.GetStatusAsync(cancellationToken).ConfigureAwait(false);
+        RuntimeConfigurationActivationPlan? plan = integrity.AppliedPlan;
+        if (plan is null)
+        {
+            if (integrity.AppliedGeneration is not null || integrity.AppliedContentHash is not null
+                || !_core.IsOwnershipKnown || _core.IsRunning || !service.HasReleasedChildOwnership || !readProxy().HasReleasedOwnership
+                || readIntegrity() != integrity)
+            {
+                throw new InvalidOperationException("An empty runtime cannot claim a clean inactive network baseline.");
+            }
+            return new(ClashSharpMode.Disabled, SettingsRegistry.Default.Get(SettingsRegistry.Keys.ActiveProfileId.Value).DefaultValue.Get<string>(),
+                false, SettingsRegistry.Default.Get(SettingsRegistry.Keys.MixedPort.Value).SafeFallback.Get<int>());
+        }
+        if (integrity.AppliedGeneration is not long generation || generation < 1 || integrity.AppliedContentHash is null)
+        {
+            throw new InvalidOperationException("The stored configuration has no verified generation identity.");
+        }
+        // A saved active configuration may outlive its process (for example after a reboot).
+        // Independently released owners establish an inactive baseline without rewriting preferences
+        // or pretending the stopped core is still applying the saved activation plan.
+        if (plan.Mode != ClashSharpMode.Disabled && NetworkSettingsOwnersReleased(service) && readProxy().HasReleasedOwnership)
+        {
+            service = await _mihomoService.GetStatusAsync(cancellationToken).ConfigureAwait(false);
+            if (!NetworkSettingsOwnersReleased(service) || !readProxy().HasReleasedOwnership || readIntegrity() != integrity)
+            {
+                throw new InvalidOperationException("The inactive network baseline changed during startup observation.");
+            }
+            return new(ClashSharpMode.Disabled, plan.ProfileId, false, plan.MixedPort);
+        }
+        if (!NetworkSettingsOwnerMatches(integrity, service)
+            || plan.Mode != ClashSharpMode.Disabled && !await _readiness.MatchesRuntimeConfigurationAsync(plan,
+                generation, integrity.AppliedContentHash, service, cancellationToken).ConfigureAwait(false))
+        {
+            throw new InvalidOperationException("The runtime owner or authenticated controller does not match the verified configuration.");
+        }
+        Guid? readinessSession = service.ServiceSessionId;
+        service = await _mihomoService.GetStatusAsync(cancellationToken).ConfigureAwait(false);
+        WindowsProxyOwnershipObservation proxy = readProxy();
+        bool needsProxy = plan.Mode is ClashSharpMode.RuleTakeover or ClashSharpMode.FullTakeover && !plan.TunEnabled;
+        if (!NetworkSettingsOwnerMatches(integrity, service) || plan.TunEnabled && service.ServiceSessionId != readinessSession
+            || !(needsProxy ? proxy.MatchesOwnedProxy(_proxyRecovery.BuildLoopbackProxyServer(plan.MixedPort)) : proxy.HasReleasedOwnership)
+            || readIntegrity() != integrity)
+        {
+            throw new InvalidOperationException("The system proxy or configuration changed during network observation.");
+        }
+        return new(plan.Mode, plan.ProfileId, plan.TunEnabled, plan.MixedPort);
     }
 
     private bool NetworkSettingsOwnerMatches(RuntimeConfigurationIntegrityObservation integrity, MihomoServiceStatus service)

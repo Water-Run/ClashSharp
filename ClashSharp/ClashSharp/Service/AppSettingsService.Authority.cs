@@ -18,6 +18,27 @@ public sealed partial class AppSettingsService
     /// <summary>Raised after a different data directory is published, even if preference values are identical.</summary>
     internal event EventHandler? DataGenerationChanged;
     internal event EventHandler? SettingsApplicationStateChanged;
+    private static readonly SettingKey[] NetworkApplicationKeys =
+    [
+        SettingsRegistry.Keys.CurrentMode, SettingsRegistry.Keys.ActiveProfileId,
+        SettingsRegistry.Keys.TransparentProxyEnabled, SettingsRegistry.Keys.MixedPort,
+    ];
+
+    /// <summary>Identifies effective network evidence so unrelated settings reads cannot repeatedly invalidate the tray.</summary>
+    internal string? CaptureNetworkApplicationIdentity()
+    {
+        lock (_syncLock)
+        {
+            SettingsEnvelope? envelope = _publishedAuthority?.Envelope;
+            if (envelope is null) { return null; }
+            string evidence = string.Join('\n', NetworkApplicationKeys.Select(key =>
+                $"{envelope.Applied[key].Kind}:{envelope.Applied[key].Value?.CanonicalText}"));
+            string attempts = string.Join('\n', envelope.PendingApplications
+                .Where(batch => batch.ApplicationKind == SettingApplicationKind.Network)
+                .Select(batch => $"{batch.BatchId}:{batch.AttemptId}:{batch.State}"));
+            return evidence + "\n" + attempts;
+        }
+    }
 
     internal bool HasFailedSettingsApplications
     {

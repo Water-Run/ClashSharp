@@ -83,6 +83,10 @@ internal sealed class GitHubReleaseUpdateChecker : IApplicationUpdateChecker
 
     private async Task<ApplicationUpdateCheckResult> CheckCoreAsync(CancellationToken cancellationToken)
     {
+        using CancellationTokenSource deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        TimeSpan timeout = _httpClient.Timeout;
+        deadline.CancelAfter(timeout == Timeout.InfiniteTimeSpan || timeout > TimeSpan.FromSeconds(5)
+            ? TimeSpan.FromSeconds(5) : timeout);
         try
         {
             using HttpRequestMessage request = new(HttpMethod.Get, LatestReleaseApiUri);
@@ -97,7 +101,7 @@ internal sealed class GitHubReleaseUpdateChecker : IApplicationUpdateChecker
             using HttpResponseMessage response = await _httpClient.SendAsync(
                 request,
                 HttpCompletionOption.ResponseHeadersRead,
-                cancellationToken).ConfigureAwait(false);
+                deadline.Token).ConfigureAwait(false);
 
             if (response.StatusCode == HttpStatusCode.NotModified && _cachedResult is not null)
             {
@@ -110,7 +114,7 @@ internal sealed class GitHubReleaseUpdateChecker : IApplicationUpdateChecker
                 return _cachedResult ?? ApplicationUpdateCheckResult.Unavailable();
             }
 
-            byte[] payload = await ReadBoundedAsync(response.Content, cancellationToken).ConfigureAwait(false);
+            byte[] payload = await ReadBoundedAsync(response.Content, deadline.Token).ConfigureAwait(false);
             ApplicationUpdateCheckResult result = ParseResponse(payload);
             if (result.Availability == ApplicationUpdateAvailability.Unavailable)
             {

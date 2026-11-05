@@ -1100,6 +1100,7 @@ internal static partial class LocalizationResources
             ["RuntimeFailure.EndpointOccupied"] = "Ein anderer Prozess belegt den Dienst-Steuerendpunkt. Schließen Sie die kollidierende Clash#-Instanz oder einen ähnlichen Client und versuchen Sie es erneut; es wurden keine Anmeldedaten gesendet.",
             ["RuntimeFailure.Tun"] = "Der transparente Proxy konnte nicht gestartet werden. Schließen Sie andere TUN/VPN-Software und versuchen Sie es erneut.",
             ["RuntimeFailure.Configuration"] = "Die Konfiguration wurde abgelehnt. Prüfen Sie sie oder stellen Sie die letzte funktionierende Version wieder her.",
+            ["RuntimeFailure.TunDnsListener"] = "Diese Konfiguration enthält einen DNS-Listener (dns.listen), den der transparente Proxy-Dienst nicht bereitstellen kann. Entfernen Sie den Eintrag oder verwenden Sie den Systemproxy.",
             ["RuntimeFailure.Provider"] = "Die Provider-Aktualisierung ist fehlgeschlagen. Prüfen Sie Adresse und Netzwerkverbindung und versuchen Sie es erneut.",
             ["RuntimeFailure.GeoData"] = "GeoIP/GeoSite/ASN-Ressourcen fehlen oder sind beschädigt. Führen Sie im Installer Reparieren aus.",
             ["RuntimeFailure.Controller"] = "Der Core-Controller ist nicht verfügbar. Starten Sie den Proxymodus neu; bleibt der Fehler bestehen, führen Sie im Installer Reparieren aus.",

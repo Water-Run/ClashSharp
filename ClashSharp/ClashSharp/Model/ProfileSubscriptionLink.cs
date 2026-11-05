@@ -28,4 +28,16 @@ public readonly record struct ProfileSubscriptionLink(
     string Status,
     long Revision = 0,
     SubscriptionUsage? Usage = null,
-    bool? UseProviderName = null);
+    bool? UseProviderName = null)
+{
+    /// <summary>Compares canonical HTTP request addresses, retaining user information and path/query case.</summary>
+    /// <param name="first">First saved or entered address.</param>
+    /// <param name="second">Second saved or entered address.</param>
+    /// <returns>Whether both addresses identify the same request, excluding fragments.</returns>
+    public static bool HasSameUri(string first, string second) =>
+        System.Uri.TryCreate(first, UriKind.Absolute, out System.Uri? left)
+        && System.Uri.TryCreate(second, UriKind.Absolute, out System.Uri? right)
+        && StringComparer.Ordinal.Equals(
+            left.GetComponents(UriComponents.AbsoluteUri & ~UriComponents.Fragment, UriFormat.UriEscaped),
+            right.GetComponents(UriComponents.AbsoluteUri & ~UriComponents.Fragment, UriFormat.UriEscaped));
+}

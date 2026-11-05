@@ -272,8 +272,8 @@ public sealed class MihomoControllerClient
                 throw new InvalidDataException("The service did not return cumulative traffic counters.");
             }
 
-            return new MihomoTrafficSnapshot(epoch, upload, download, MapConnections(snapshot),
-                snapshot.MemoryBytes, snapshot.CoreStartedAt);
+            return new MihomoTrafficSnapshot(epoch, upload, download, MapConnections(snapshot, requireComplete: false),
+                snapshot.MemoryBytes, snapshot.CoreStartedAt, snapshot.ConnectionsComplete, snapshot.TotalConnectionCount);
         }
 
         MihomoAppProcessIdentity? identity = _appControllerTransport?.Capture();
@@ -1023,8 +1023,12 @@ public sealed class MihomoControllerClient
     }
 
     private static IReadOnlyList<ActiveConnection> MapConnections(
-        MihomoServiceIpcConnectionSnapshot snapshot)
+        MihomoServiceIpcConnectionSnapshot snapshot, bool requireComplete = true)
     {
+        if (requireComplete && !snapshot.ConnectionsComplete)
+        {
+            throw new InvalidDataException("The active connection details exceed the supported snapshot limit.");
+        }
         List<ActiveConnection> connections = new(snapshot.Connections.Count);
         foreach (MihomoServiceIpcConnection connection in snapshot.Connections)
         {

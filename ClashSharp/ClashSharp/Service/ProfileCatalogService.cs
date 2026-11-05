@@ -21,7 +21,7 @@ namespace ClashSharp.Service;
 /// <summary>Provides active profile settings for profile catalog rows.</summary>
 internal interface IProfileCatalogSettings
 {
-    /// <summary>Gets the active profile identifier from the last verified settings snapshot.</summary>
+    /// <summary>Gets the configured selection for catalog metadata; mutations independently observe the installed profile.</summary>
     string ActiveProfileId { get; }
 
     /// <summary>Awaits durable publication of an active profile identifier.</summary>
@@ -68,6 +68,10 @@ internal interface IProfileCatalogLog
 /// <summary>Applies explicit profile candidates through the sole live runtime owner.</summary>
 internal interface IProfileCatalogRuntime
 {
+    /// <summary>Reads the independently installed profile identity; isolated adapters can supply their configured identity.</summary>
+    Task<string> ReadActiveProfileIdAsync(string configuredProfileId, CancellationToken cancellationToken) =>
+        Task.FromResult(configuredProfileId);
+
     Task<bool> ApplyProfileAsync(string profileId, CancellationToken cancellationToken);
 
     Task<ProfileCatalogRuntimeImportResult> ImportAndApplyProfileAsync(
@@ -77,12 +81,30 @@ internal interface IProfileCatalogRuntime
         CancellationToken cancellationToken);
 
     Task<bool> DeleteImportedProfileAsync(string profileId, CancellationToken cancellationToken);
+
+    /// <summary>Checks live-edit permission while the runtime owns source promotion and any live application.</summary>
+    async Task<ProfileCatalogRuntimeImportResult> ImportProfileContentAsync(
+        string profileId, string profileName, string content, bool expectedActive,
+        Func<bool>? mayEditActive, Func<CancellationToken, Task<ProfileImportResult>> importInactive,
+        CancellationToken cancellationToken)
+    {
+        if (expectedActive && mayEditActive is not null && !mayEditActive())
+        {
+            throw new UnauthorizedAccessException("Active profile editing requires proxy control.");
+        }
+        return expectedActive
+            ? (await ImportAndApplyProfileAsync(profileId, profileName, content, cancellationToken).ConfigureAwait(false)) with { WasActive = true }
+            : new(await importInactive(cancellationToken).ConfigureAwait(false), true);
+    }
 }
 
 /// <summary>Combined active-profile source import and live-apply outcome.</summary>
 internal readonly record struct ProfileCatalogRuntimeImportResult(
     ProfileImportResult Profile,
-    bool IsApplied);
+    bool IsApplied)
+{
+    public bool WasActive { get; init; }
+}
 
 /// <summary>Localized fallback text captured before background profile-catalog aggregation.</summary>
 internal readonly record struct ProfileCatalogFallbackStrings(
@@ -395,7 +417,7 @@ public sealed partial class ProfileCatalogService : IProfileCatalog, IAsyncDispo
             ProfileCatalogDocument document = CloneDocument(LoadDocument());
             foreach (ProfileSubscriptionLink existingLink in document.Links)
             {
-                if (StringComparer.OrdinalIgnoreCase.Equals(existingLink.Uri, parsedUri.ToString()))
+                if (ProfileSubscriptionLink.HasSameUri(existingLink.Uri, parsedUri.ToString()))
                 {
                     throw new ArgumentException("Subscription link URI already exists.", nameof(uri));
                 }
@@ -474,14 +496,14 @@ public sealed partial class ProfileCatalogService : IProfileCatalog, IAsyncDispo
             foreach (ProfileSubscriptionLink link in document.Links)
             {
                 if (!StringComparer.Ordinal.Equals(link.Id, linkId)
-                    && StringComparer.OrdinalIgnoreCase.Equals(link.Uri, parsedUri.ToString()))
+                    && ProfileSubscriptionLink.HasSameUri(link.Uri, parsedUri.ToString()))
                 {
                     throw new ArgumentException("Subscription link URI already exists.", nameof(uri));
                 }
             }
 
             ProfileSubscriptionLink existingLink = document.Links[targetIndex];
-            bool uriChanged = !StringComparer.OrdinalIgnoreCase.Equals(
+            bool uriChanged = !ProfileSubscriptionLink.HasSameUri(
                 existingLink.Uri,
                 parsedUri.ToString());
             document.Links[targetIndex] = existingLink with
@@ -514,7 +536,7 @@ public sealed partial class ProfileCatalogService : IProfileCatalog, IAsyncDispo
         }
     }
 
-    /// <summary>Serializes subscription edits against manual and scheduled imports for the same link.</summary>
+    /// <summary>Commits a new subscription revision so any older in-flight download is discarded.</summary>
     internal async Task<bool> TryUpdateSubscriptionLinkAsync(
         string linkId,
         string name,
@@ -526,17 +548,12 @@ public sealed partial class ProfileCatalogService : IProfileCatalog, IAsyncDispo
         using IDisposable operation = _operations.Enter();
         return await _mutationCoordinator.ExecuteAsync(
             Guid.NewGuid(),
-            async (_, token) =>
-            {
-                using IDisposable updateLease = await _subscriptionUpdateGates
-                    .EnterAsync(linkId, token).ConfigureAwait(false);
-                return TryUpdateSubscriptionLinkCore(
+            (_, token) => Task.FromResult(TryUpdateSubscriptionLinkCore(
                     linkId,
                     name,
                     uri,
                     isEnabled,
-                    updateIntervalHours);
-            },
+                    updateIntervalHours)),
             cancellationToken).ConfigureAwait(false);
     }
 
@@ -560,7 +577,7 @@ public sealed partial class ProfileCatalogService : IProfileCatalog, IAsyncDispo
         }
     }
 
-    /// <summary>Serializes subscription deletion against manual and scheduled imports for the same link.</summary>
+    /// <summary>Deletes the subscription while in-flight downloads retain a detached snapshot.</summary>
     internal async Task<bool> TryDeleteSubscriptionLinkAsync(
         string linkId,
         CancellationToken cancellationToken)
@@ -568,12 +585,7 @@ public sealed partial class ProfileCatalogService : IProfileCatalog, IAsyncDispo
         using IDisposable operation = _operations.Enter();
         return await _mutationCoordinator.ExecuteAsync(
             Guid.NewGuid(),
-            async (_, token) =>
-            {
-                using IDisposable updateLease = await _subscriptionUpdateGates
-                    .EnterAsync(linkId, token).ConfigureAwait(false);
-                return TryDeleteSubscriptionLinkCore(linkId);
-            },
+            (_, token) => Task.FromResult(TryDeleteSubscriptionLinkCore(linkId)),
             cancellationToken).ConfigureAwait(false);
     }
 
@@ -665,7 +677,7 @@ public sealed partial class ProfileCatalogService : IProfileCatalog, IAsyncDispo
         try
         {
             bool isActive;
-            string previousActiveProfileId;
+            string previousActiveProfileId = await ReadObservedActiveProfileIdAsync(cancellationToken).ConfigureAwait(false);
             ProfileCatalogDocument updatedDocument;
             lock (_syncLock)
             {
@@ -675,7 +687,6 @@ public sealed partial class ProfileCatalogService : IProfileCatalog, IAsyncDispo
                     return false;
                 }
 
-                previousActiveProfileId = GetActiveProfileId();
                 isActive = StringComparer.Ordinal.Equals(previousActiveProfileId, profileId);
                 updatedDocument = CloneDocument(document);
                 updatedDocument.Profiles.RemoveAll(profile => StringComparer.Ordinal.Equals(profile.Id, profileId));
@@ -889,44 +900,23 @@ public sealed partial class ProfileCatalogService : IProfileCatalog, IAsyncDispo
     public async Task<string> CheckSubscriptionLinkAsync(ProfileSubscriptionLink link, CancellationToken cancellationToken)
     {
         using IDisposable operation = _operations.Enter();
-        return await _mutationCoordinator.ExecuteAsync(
-            Guid.NewGuid(),
-            (_, token) => CheckSubscriptionLinkCoordinatedAsync(link, token),
-            cancellationToken).ConfigureAwait(false);
-    }
-
-    private async Task<string> CheckSubscriptionLinkCoordinatedAsync(
-        ProfileSubscriptionLink link,
-        CancellationToken cancellationToken)
-    {
-        using IDisposable updateLease = await _subscriptionUpdateGates
-            .EnterAsync(link.Id, cancellationToken).ConfigureAwait(false);
-        ProfileSubscriptionLink currentLink = ResolveCurrentSubscriptionLink(
-            link,
-            requireEnabled: false);
-        try
-        {
-            EnsureLinkHasHttpUri(currentLink);
-            using HttpRequestMessage request = new(HttpMethod.Head, currentLink.Uri);
-            using HttpResponseMessage response = await SendWithGetFallbackAsync(request, cancellationToken).ConfigureAwait(false);
-            response.EnsureSuccessStatusCode();
-
-            string status = SubscriptionStatusText.CheckSucceeded((int)response.StatusCode);
-            SubscriptionUsage? usage = ReadSubscriptionUsage(response);
-            TryUpdateSubscriptionLinkStatus(currentLink.Id, status, usage, updateUsage: usage is not null);
-            return SubscriptionStatusText.Localize(status, GetString);
-        }
-        catch (OperationCanceledException exception) when (
-            cancellationToken.IsCancellationRequested && !ExceptionGraphClassifier.IsProcessFatal(exception))
-        {
-            TryRecordSubscriptionCancellation(currentLink.Id);
-            throw;
-        }
-        catch (Exception exception) when (exception is ArgumentException or HttpRequestException or OperationCanceledException or InvalidOperationException)
-        {
-            TryUpdateSubscriptionLinkStatus(currentLink.Id, GetString("ProfileCatalog.Subscription.CheckFailed"));
-            throw;
-        }
+        using IDisposable updateLease = await _subscriptionUpdateGates.EnterAsync(link.Id, cancellationToken).ConfigureAwait(false);
+        return await _mutationCoordinator.ExecutePreparedAsync(
+                Guid.NewGuid(), async token =>
+                {
+                    ProfileSubscriptionLink current = ResolveCurrentSubscriptionLink(link, requireEnabled: false);
+                    EnsureLinkHasHttpUri(current);
+                    using HttpRequestMessage request = new(HttpMethod.Head, current.Uri);
+                    using HttpResponseMessage response = await SendWithGetFallbackAsync(request, token).ConfigureAwait(false);
+                    response.EnsureSuccessStatusCode();
+                    return (Status: SubscriptionStatusText.CheckSucceeded((int)response.StatusCode), Usage: ReadSubscriptionUsage(response));
+                },
+                (checkedLink, _, token) =>
+                {
+                    ResolveCurrentSubscriptionLink(link, requireEnabled: false);
+                    TryUpdateSubscriptionLinkStatus(link.Id, checkedLink.Status, checkedLink.Usage, updateUsage: checkedLink.Usage is not null);
+                    return Task.FromResult(SubscriptionStatusText.Localize(checkedLink.Status, GetString));
+                }, cancellationToken, failure => RecordSubscriptionFailure(link, failure, cancellationToken, checkOnly: true)).ConfigureAwait(false);
     }
 
     /// <summary>Downloads, validates, and imports the selected subscription link into the local profile catalog.</summary>
@@ -939,14 +929,7 @@ public sealed partial class ProfileCatalogService : IProfileCatalog, IAsyncDispo
     public async Task<ProfileImportResult> ImportSubscriptionLinkAsync(ProfileSubscriptionLink link, CancellationToken cancellationToken)
     {
         using IDisposable operation = _operations.Enter();
-        ProfileImportResult? result = await _mutationCoordinator.ExecuteAsync(
-            Guid.NewGuid(),
-            (_, token) => ImportSubscriptionLinkCoordinatedAsync(
-                link,
-                requireDue: false,
-                now: DateTimeOffset.MinValue,
-                cancellationToken: token),
-            cancellationToken).ConfigureAwait(false);
+        ProfileImportResult? result = await ImportSubscriptionAsync(link, false, DateTimeOffset.MinValue, cancellationToken).ConfigureAwait(false);
         return result
             ?? throw new InvalidOperationException("The subscription link is no longer eligible for import.");
     }
@@ -958,24 +941,47 @@ public sealed partial class ProfileCatalogService : IProfileCatalog, IAsyncDispo
         CancellationToken cancellationToken)
     {
         using IDisposable operation = _operations.Enter();
-        return await _mutationCoordinator.ExecuteAsync(
-            Guid.NewGuid(),
-            (_, token) => ImportSubscriptionLinkCoordinatedAsync(
-                link,
-                requireDue: true,
-                now: now,
-                cancellationToken: token),
-            cancellationToken).ConfigureAwait(false);
+        return await ImportSubscriptionAsync(link, true, now, cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task<ProfileImportResult?> ImportSubscriptionLinkCoordinatedAsync(
+    private async Task<ProfileImportResult?> ImportSubscriptionAsync(
+        ProfileSubscriptionLink link, bool requireDue, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        using IDisposable updateLease = await _subscriptionUpdateGates.EnterAsync(link.Id, cancellationToken).ConfigureAwait(false);
+        return await _mutationCoordinator.ExecutePreparedAsync<DownloadedSubscription?, ProfileImportResult?>(
+                Guid.NewGuid(), token => PrepareSubscriptionAsync(link, requireDue, now, token),
+                async (downloaded, _, token) =>
+                {
+                    if (downloaded is null) { return null; }
+                    try { ResolveCurrentSubscriptionLink(downloaded.Link, requireDue); }
+                    catch (InvalidOperationException) when (requireDue) { return null; }
+                    if (requireDue && !IsSubscriptionLinkDue(downloaded.Link, now)) { return null; }
+                    return await ImportSubscriptionLinkCoreAsync(downloaded, token).ConfigureAwait(false);
+                }, cancellationToken, failure => RecordSubscriptionFailure(link, failure, cancellationToken)).ConfigureAwait(false);
+    }
+
+    // The coordinator invokes this before releasing admission, including cancellation while waiting for the fair gate.
+    private void RecordSubscriptionFailure(ProfileSubscriptionLink link, Exception failure, CancellationToken caller,
+        bool checkOnly = false)
+    {
+        if (failure is OperationCanceledException && (caller.IsCancellationRequested || failure is ProfileCatalogMutationCanceledException))
+        {
+            TryRecordSubscriptionCancellation(link);
+        }
+        else if (failure is ArgumentException or HttpRequestException or InvalidOperationException or IOException
+            or UnauthorizedAccessException or SecurityException or OperationCanceledException or AggregateException)
+        {
+            if (checkOnly) { TryRecordSubscriptionStatus(link, GetString("ProfileCatalog.Subscription.CheckFailed")); }
+            else { TryRecordSubscriptionFailure(link, GetString("ProfileCatalog.Subscription.UpdateFailed"), DateTimeOffset.Now); }
+        }
+    }
+
+    private async Task<DownloadedSubscription?> PrepareSubscriptionAsync(
         ProfileSubscriptionLink link,
         bool requireDue,
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
-        using IDisposable updateLease = await _subscriptionUpdateGates
-            .EnterAsync(link.Id, cancellationToken).ConfigureAwait(false);
         ProfileSubscriptionLink currentLink;
         try
         {
@@ -991,17 +997,27 @@ public sealed partial class ProfileCatalogService : IProfileCatalog, IAsyncDispo
             return null;
         }
 
-        return await ImportSubscriptionLinkCoreAsync(currentLink, cancellationToken).ConfigureAwait(false);
+        EnsureLinkHasHttpUri(currentLink);
+        lock (_syncLock)
+        {
+            ProfileCatalogDocument document = CloneDocument(LoadDocument());
+            if (!MatchesSubscriptionSnapshot(document, currentLink)) { return null; }
+            UpdateLinkStatus(document, currentLink.Id, GetString("ProfileCatalog.Subscription.Downloading"));
+            SaveDocument(document);
+        }
+        (string text, SubscriptionUsage? usage, string? providerName) = await ReadSubscriptionConfigurationAsync(
+            new Uri(currentLink.Uri), cancellationToken).ConfigureAwait(false);
+        return new(currentLink, text, usage, providerName);
     }
 
     private async Task<ProfileImportResult> ImportSubscriptionLinkCoreAsync(
-        ProfileSubscriptionLink link,
+        DownloadedSubscription downloaded,
         CancellationToken cancellationToken)
     {
         await _profileMutationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            return await ImportSubscriptionLinkTransactionAsync(link, cancellationToken).ConfigureAwait(false);
+            return await ImportSubscriptionLinkTransactionAsync(downloaded, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -1010,157 +1026,130 @@ public sealed partial class ProfileCatalogService : IProfileCatalog, IAsyncDispo
     }
 
     private async Task<ProfileImportResult> ImportSubscriptionLinkTransactionAsync(
-        ProfileSubscriptionLink link,
+        DownloadedSubscription downloaded,
         CancellationToken cancellationToken)
     {
+        ProfileSubscriptionLink link = downloaded.Link;
+        string configurationText = downloaded.Content;
+        SubscriptionUsage? usage = downloaded.Usage;
+        string? providerName = downloaded.ProviderName;
+        bool automaticName = link.UseProviderName ?? string.Equals(link.Name, new Uri(link.Uri).Host, StringComparison.OrdinalIgnoreCase);
+        string resolvedName = automaticName && providerName is not null ? providerName : link.Name;
+        string profileId = $"subscription-{link.Id}";
+        bool isActive = StringComparer.Ordinal.Equals(
+            await ReadObservedActiveProfileIdAsync(cancellationToken).ConfigureAwait(false), profileId);
+        string? previousConfiguration = await _coreConfiguration
+            .ReadImportedProfileConfigurationAsync(profileId, cancellationToken)
+            .ConfigureAwait(false);
+        if (isActive && previousConfiguration is null)
+        {
+            previousConfiguration = ReadLatestVerifiedHistoryContent(profileId)
+                ?? throw new InvalidOperationException(
+                    "Active subscription cannot be updated without a recoverable source baseline.");
+        }
+
+        PendingProfileHistory pendingHistory = StageProfileHistory(profileId, configurationText);
+        ProfileImportResult importResult;
         try
         {
-            EnsureLinkHasHttpUri(link);
-            TryUpdateSubscriptionLinkStatus(link.Id, GetString("ProfileCatalog.Subscription.Downloading"));
+            ProfileCatalogRuntimeImportResult runtimeResult = await _runtime.ImportProfileContentAsync(
+                profileId, resolvedName, configurationText, isActive, null,
+                token => _coreConfiguration.ImportProfileConfigurationAsync(profileId, resolvedName, configurationText, token),
+                cancellationToken).ConfigureAwait(false);
+            if (!runtimeResult.IsApplied)
+            {
+                throw new InvalidOperationException("Subscription candidate did not become verified.");
+            }
+            isActive = runtimeResult.WasActive;
+            importResult = runtimeResult.Profile;
+        }
+        catch
+        {
+            DeletePendingHistory(pendingHistory);
+            throw;
+        }
 
-            (string configurationText, SubscriptionUsage? usage, string? providerName) = await ReadSubscriptionConfigurationAsync(
-                new Uri(link.Uri), cancellationToken).ConfigureAwait(false);
-            bool automaticName = link.UseProviderName ?? string.Equals(link.Name, new Uri(link.Uri).Host, StringComparison.OrdinalIgnoreCase);
-            string resolvedName = automaticName && providerName is not null ? providerName : link.Name;
-            string profileId = $"subscription-{link.Id}";
-            bool isActive = StringComparer.Ordinal.Equals(GetActiveProfileId(), profileId);
-            string? previousConfiguration = await _coreConfiguration
-                .ReadImportedProfileConfigurationAsync(profileId, cancellationToken)
+        try
+        {
+            lock (_syncLock)
+            {
+                ProfileCatalogDocument document = CloneDocument(LoadDocument());
+                UpsertImportedProfile(document, importResult, resolvedName);
+                int linkIndex = document.Links.FindIndex(candidate => candidate.Id == link.Id);
+                if (linkIndex >= 0)
+                {
+                    document.Links[linkIndex] = document.Links[linkIndex] with { Name = resolvedName, UseProviderName = automaticName };
+                }
+                ProfileHistoryCommit historyCommit = FinalizeProfileHistory(
+                    document,
+                    pendingHistory,
+                    importResult,
+                    resolvedName,
+                    isActive ? ProfileHistoryApplyOutcome.Applied : ProfileHistoryApplyOutcome.Stored);
+                UpdateLinkStatus(
+                    document,
+                    link.Id,
+                    GetString("ProfileCatalog.Subscription.Updated"),
+                    markSuccessfulUpdate: true,
+                    usage: usage);
+                RecordSubscriptionUpdateOutcome(document, link.Id, succeeded: true, DateTimeOffset.Now);
+                try
+                {
+                    SaveDocument(document);
+                }
+                catch
+                {
+                    RollbackProfileHistoryCommit(historyCommit);
+                    throw;
+                }
+
+                CompleteProfileHistoryCommit(historyCommit);
+            }
+        }
+        catch (Exception catalogFailure) when (!ExceptionGraphClassifier.IsProcessFatal(catalogFailure))
+        {
+            await CompensateImportedConfigurationAsync(
+                profileId,
+                link.Name,
+                previousConfiguration,
+                isActive,
+                catalogFailure,
+                "Subscription catalog persistence failed and its previous source could not be restored.")
                 .ConfigureAwait(false);
-            if (isActive && previousConfiguration is null)
-            {
-                previousConfiguration = ReadLatestVerifiedHistoryContent(profileId)
-                    ?? throw new InvalidOperationException(
-                        "Active subscription cannot be updated without a recoverable source baseline.");
-            }
 
-            PendingProfileHistory pendingHistory = StageProfileHistory(profileId, configurationText);
-            ProfileImportResult importResult;
-            try
-            {
-                if (isActive)
-                {
-                    ProfileCatalogRuntimeImportResult runtimeResult = await _runtime
-                        .ImportAndApplyProfileAsync(
-                            profileId,
-                            resolvedName,
-                            configurationText,
-                            cancellationToken)
-                        .ConfigureAwait(false);
-                    if (!runtimeResult.IsApplied)
-                    {
-                        throw new InvalidOperationException(
-                            "Active subscription candidate did not become the verified runtime configuration.");
-                    }
-
-                    importResult = runtimeResult.Profile;
-                }
-                else
-                {
-                    importResult = await _coreConfiguration
-                        .ImportProfileConfigurationAsync(profileId, resolvedName, configurationText, cancellationToken)
-                        .ConfigureAwait(false);
-                }
-            }
-            catch
-            {
-                DeletePendingHistory(pendingHistory);
-                throw;
-            }
-
-            try
-            {
-                lock (_syncLock)
-                {
-                    ProfileCatalogDocument document = CloneDocument(LoadDocument());
-                    UpsertImportedProfile(document, importResult, resolvedName);
-                    int linkIndex = document.Links.FindIndex(candidate => candidate.Id == link.Id);
-                    if (linkIndex >= 0)
-                    {
-                        document.Links[linkIndex] = document.Links[linkIndex] with { Name = resolvedName, UseProviderName = automaticName };
-                    }
-                    ProfileHistoryCommit historyCommit = FinalizeProfileHistory(
-                        document,
-                        pendingHistory,
-                        importResult,
-                        resolvedName,
-                        isActive ? ProfileHistoryApplyOutcome.Applied : ProfileHistoryApplyOutcome.Stored);
-                    UpdateLinkStatus(
-                        document,
-                        link.Id,
-                        GetString("ProfileCatalog.Subscription.Updated"),
-                        markSuccessfulUpdate: true,
-                        usage: usage);
-                    RecordSubscriptionUpdateOutcome(document, link.Id, succeeded: true, DateTimeOffset.Now);
-                    try
-                    {
-                        SaveDocument(document);
-                    }
-                    catch
-                    {
-                        RollbackProfileHistoryCommit(historyCommit);
-                        throw;
-                    }
-
-                    CompleteProfileHistoryCommit(historyCommit);
-                }
-            }
-            catch (Exception catalogFailure) when (!ExceptionGraphClassifier.IsProcessFatal(catalogFailure))
-            {
-                await CompensateImportedConfigurationAsync(
-                    profileId,
-                    link.Name,
-                    previousConfiguration,
-                    isActive,
-                    catalogFailure,
-                    "Subscription catalog persistence failed and its previous source could not be restored.")
-                    .ConfigureAwait(false);
-
-                throw;
-            }
-
-            return importResult;
-        }
-        catch (OperationCanceledException exception) when (
-            cancellationToken.IsCancellationRequested && !ExceptionGraphClassifier.IsProcessFatal(exception))
-        {
-            TryRecordSubscriptionCancellation(link.Id);
             throw;
         }
-        catch (Exception exception) when (
-            exception is ArgumentException
-                or HttpRequestException
-                or InvalidOperationException
-                or IOException
-                or UnauthorizedAccessException
-                or SecurityException
-                or OperationCanceledException
-                or AggregateException
-            && !ExceptionGraphClassifier.IsProcessFatal(exception))
-        {
-            TryRecordSubscriptionFailure(
-                link.Id,
-                GetString("ProfileCatalog.Subscription.UpdateFailed"),
-                DateTimeOffset.Now);
-            throw;
-        }
+
+        return importResult;
     }
 
+    private sealed record DownloadedSubscription(ProfileSubscriptionLink Link, string Content,
+        SubscriptionUsage? Usage, string? ProviderName);
+
     /// <summary>Records a canceled status without changing the last completed attempt or retry backoff.</summary>
-    private void TryRecordSubscriptionCancellation(string linkId)
+    private void TryRecordSubscriptionCancellation(ProfileSubscriptionLink link)
+        => TryRecordSubscriptionStatus(link, GetString("ProfileCatalog.Status.Canceled"));
+
+    private void TryRecordSubscriptionStatus(ProfileSubscriptionLink link, string status)
     {
         try
         {
-            TryUpdateSubscriptionLinkStatus(linkId, GetString("ProfileCatalog.Status.Canceled"));
+            lock (_syncLock)
+            {
+                ProfileCatalogDocument document = CloneDocument(LoadDocument());
+                if (!MatchesSubscriptionSnapshot(document, link)) { return; }
+                UpdateLinkStatus(document, link.Id, status);
+                SaveDocument(document);
+            }
         }
         catch (Exception maintenanceFailure) when (!ExceptionGraphClassifier.IsProcessFatal(maintenanceFailure))
         {
-            TryAppendMaintenanceWarning("Subscription cancellation status could not be persisted.", maintenanceFailure);
+            TryAppendMaintenanceWarning("Subscription status could not be persisted.", maintenanceFailure);
         }
     }
 
     private void TryRecordSubscriptionFailure(
-        string linkId,
+        ProfileSubscriptionLink link,
         string status,
         DateTimeOffset attemptedAt)
     {
@@ -1169,8 +1158,9 @@ public sealed partial class ProfileCatalogService : IProfileCatalog, IAsyncDispo
             lock (_syncLock)
             {
                 ProfileCatalogDocument document = CloneDocument(LoadDocument());
-                UpdateLinkStatus(document, linkId, status);
-                RecordSubscriptionUpdateOutcome(document, linkId, succeeded: false, attemptedAt);
+                if (!MatchesSubscriptionSnapshot(document, link)) { return; }
+                UpdateLinkStatus(document, link.Id, status);
+                RecordSubscriptionUpdateOutcome(document, link.Id, succeeded: false, attemptedAt);
                 SaveDocument(document);
             }
         }
@@ -1181,6 +1171,10 @@ public sealed partial class ProfileCatalogService : IProfileCatalog, IAsyncDispo
                 maintenanceFailure);
         }
     }
+
+    private static bool MatchesSubscriptionSnapshot(ProfileCatalogDocument document, ProfileSubscriptionLink link) =>
+        document.Links.Any(current => current.Id == link.Id && current.Revision == link.Revision
+            && StringComparer.Ordinal.Equals(current.Uri, link.Uri));
 
     /// <summary>Imports a local mihomo-compatible configuration file into the profile catalog.</summary>
     /// <param name="filePath">Absolute local configuration file path. Must not be null or whitespace.</param>
@@ -1328,7 +1322,8 @@ public sealed partial class ProfileCatalogService : IProfileCatalog, IAsyncDispo
         {
             throw new InvalidDataException("Profile history content hash does not match its catalog entry.");
         }
-        bool isActive = StringComparer.Ordinal.Equals(GetActiveProfileId(), profile.Id);
+        bool isActive = StringComparer.Ordinal.Equals(
+            await ReadObservedActiveProfileIdAsync(cancellationToken).ConfigureAwait(false), profile.Id);
         string? previousConfiguration = await _coreConfiguration
             .ReadImportedProfileConfigurationAsync(profile.Id, cancellationToken)
             .ConfigureAwait(false);
@@ -1346,35 +1341,26 @@ public sealed partial class ProfileCatalogService : IProfileCatalog, IAsyncDispo
     // The caller holds the profile mutation gate and the shared mutation coordinator through compensation.
     private async Task<ProfileImportResult> CommitProfileContentAsync(string profileId, string profileName, string sourceName,
         string configurationText, string? previousConfiguration, bool isActive, ProfileHistoryApplyOutcome outcome,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, Func<bool>? mayEditActive = null)
     {
         PendingProfileHistory pendingHistory = StageProfileHistory(profileId, configurationText);
         ProfileImportResult importResult;
         try
         {
-            if (isActive)
+            ProfileCatalogRuntimeImportResult runtimeResult = await _runtime.ImportProfileContentAsync(
+                profileId, profileName, configurationText, isActive, mayEditActive,
+                token => _coreConfiguration.ImportProfileConfigurationAsync(profileId, profileName, configurationText, token),
+                cancellationToken).ConfigureAwait(false);
+            if (!runtimeResult.IsApplied)
             {
-                ProfileCatalogRuntimeImportResult runtimeResult = await _runtime
-                    .ImportAndApplyProfileAsync(
-                        profileId,
-                        profileName,
-                        configurationText,
-                        cancellationToken)
-                    .ConfigureAwait(false);
-                if (!runtimeResult.IsApplied)
-                {
-                    throw new InvalidOperationException(
-                        "Profile candidate did not become the verified runtime configuration.");
-                }
-
-                importResult = runtimeResult.Profile;
+                throw new InvalidOperationException("Profile candidate did not become the verified runtime configuration.");
             }
-            else
+            isActive = runtimeResult.WasActive;
+            if (outcome is ProfileHistoryApplyOutcome.Applied or ProfileHistoryApplyOutcome.Stored)
             {
-                importResult = await _coreConfiguration
-                    .ImportProfileConfigurationAsync(profileId, profileName, configurationText, cancellationToken)
-                    .ConfigureAwait(false);
+                outcome = isActive ? ProfileHistoryApplyOutcome.Applied : ProfileHistoryApplyOutcome.Stored;
             }
+            importResult = runtimeResult.Profile;
         }
         catch
         {
@@ -1498,7 +1484,7 @@ public sealed partial class ProfileCatalogService : IProfileCatalog, IAsyncDispo
         await _profileMutationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            string previousActiveProfileId;
+            string previousActiveProfileId = await ReadObservedActiveProfileIdAsync(cancellationToken).ConfigureAwait(false);
             lock (_syncLock)
             {
                 if (!TryFindProfile(LoadDocument(), profileId, out _))
@@ -1506,7 +1492,6 @@ public sealed partial class ProfileCatalogService : IProfileCatalog, IAsyncDispo
                     return false;
                 }
 
-                previousActiveProfileId = GetActiveProfileId();
             }
 
             bool applied = await _runtime.ApplyProfileAsync(profileId, cancellationToken).ConfigureAwait(false);
@@ -1816,31 +1801,14 @@ public sealed partial class ProfileCatalogService : IProfileCatalog, IAsyncDispo
                 return;
             }
 
-            if (applyRuntime)
+            ProfileCatalogRuntimeImportResult restored = await _runtime.ImportProfileContentAsync(
+                profileId, profileName, previousConfiguration, applyRuntime, null,
+                token => _coreConfiguration.ImportProfileConfigurationAsync(profileId, profileName, previousConfiguration, token),
+                CancellationToken.None).ConfigureAwait(false);
+            if (!restored.IsApplied)
             {
-                ProfileCatalogRuntimeImportResult restoreResult = await _runtime
-                    .ImportAndApplyProfileAsync(
-                        profileId,
-                        profileName,
-                        previousConfiguration,
-                        CancellationToken.None)
-                    .ConfigureAwait(false);
-                if (!restoreResult.IsApplied)
-                {
-                    throw new InvalidOperationException(
-                        "The previous profile source did not become the verified runtime configuration.");
-                }
-
-                return;
+                throw new InvalidOperationException("The previous profile source could not be restored.");
             }
-
-            await _coreConfiguration
-                .ImportProfileConfigurationAsync(
-                    profileId,
-                    profileName,
-                    previousConfiguration,
-                    CancellationToken.None)
-                .ConfigureAwait(false);
         }
         catch (Exception compensationFailure) when (!ExceptionGraphClassifier.IsProcessFatal(compensationFailure))
         {
@@ -2279,6 +2247,9 @@ public sealed partial class ProfileCatalogService : IProfileCatalog, IAsyncDispo
         string activeProfileId = _settings.ActiveProfileId;
         return string.IsNullOrWhiteSpace(activeProfileId) ? ProfileCatalogIds.BuiltInDirect : activeProfileId;
     }
+
+    private Task<string> ReadObservedActiveProfileIdAsync(CancellationToken cancellationToken) =>
+        _runtime.ReadActiveProfileIdAsync(GetActiveProfileId(), cancellationToken);
 
     /// <summary>Loads the profile catalog document from disk, creating a default document when needed.</summary>
     /// <returns>Loaded profile catalog document; never null.</returns>

@@ -9,6 +9,41 @@ namespace ClashSharp.Tests.Unit.Services;
 /// <summary>Tests the bounded, read-only GitHub release checker.</summary>
 public sealed class GitHubReleaseUpdateCheckerTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task StalledResponseBody_UsesTheRequestDeadlineAndReleasesTheQueue(bool useCache)
+    {
+        int calls = 0;
+        using StubHandler handler = new(_ =>
+        {
+            ++calls;
+            return calls == (useCache ? 2 : 1)
+                ? new(HttpStatusCode.OK) { Content = new StreamContent(new StalledReadStream()) }
+                : JsonResponse("""{ "tag_name": "v2.0.0" }""");
+        });
+        using HttpClient client = new(handler) { Timeout = TimeSpan.FromMilliseconds(60) };
+        GitHubReleaseUpdateChecker checker = new(client, "1.0.0");
+        ApplicationUpdateCheckResult? cached = useCache ? await checker.CheckAsync(CancellationToken.None) : null;
+
+        ApplicationUpdateCheckResult timedOut = await checker.CheckAsync(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.Equal(cached?.Availability ?? ApplicationUpdateAvailability.Unavailable, timedOut.Availability);
+        Assert.Equal(ApplicationUpdateAvailability.UpdateAvailable,
+            (await checker.CheckAsync(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5))).Availability);
+    }
+
+    [Fact]
+    public async Task StalledResponseBody_PreservesCallerCancellation()
+    {
+        using StubHandler handler = new(_ => new(HttpStatusCode.OK) { Content = new StreamContent(new StalledReadStream()) });
+        using HttpClient client = new(handler);
+        GitHubReleaseUpdateChecker checker = new(client, "1.0.0");
+        using CancellationTokenSource caller = new(TimeSpan.FromMilliseconds(60));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => checker.CheckAsync(caller.Token).WaitAsync(TimeSpan.FromSeconds(5)));
+    }
+
     [Fact]
     public async Task CheckAsync_NewerStableTag_UsesOnlyFixedEndpointAndReportsUpdate()
     {
@@ -156,5 +191,24 @@ public sealed class GitHubReleaseUpdateCheckerTests
         {
             return Task.FromResult(responseFactory(request));
         }
+    }
+
+    private sealed class StalledReadStream : Stream
+    {
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            return 0;
+        }
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        public override void Flush() => throw new NotSupportedException();
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
     }
 }

@@ -25,9 +25,9 @@ internal static class ProfileCatalogServiceFactory
             new ProfileCatalogSettingsAdapter(AppSettingsService.Instance),
             new ProfileCatalogCoreConfigurationAdapter(RuntimeDataServices.Configuration),
             new ProfileCatalogRuntimeAdapter(
-                AppSettingsService.Instance,
                 RuntimeDataServices.Configuration,
-                NetworkTakeoverService.Instance),
+                NetworkTakeoverService.Instance,
+                WindowsProxyService.Instance),
             new ProfileCatalogLogAdapter(RuntimeDataServices.Logs),
             LocalizationService.Instance.GetString,
             LateBoundProfileCatalogMutationCoordinator.Instance);
@@ -63,18 +63,20 @@ internal static class ProfileCatalogServiceFactory
 }
 
 internal sealed class ProfileCatalogRuntimeAdapter(
-    AppSettingsService settings,
     ICoreConfigurationStore configuration,
-    NetworkTakeoverService takeover) : IProfileCatalogRuntime
+    NetworkTakeoverService takeover,
+    WindowsProxyService proxy) : IProfileCatalogRuntime
 {
+    public async Task<string> ReadActiveProfileIdAsync(string configuredProfileId, CancellationToken cancellationToken) =>
+        (await takeover.ObserveNetworkSettingsAsync(configuration.ObserveRuntimeConfigurationIntegrity,
+            proxy.ObserveOwnership, cancellationToken).ConfigureAwait(false)).ProfileId;
+
     public async Task<bool> ApplyProfileAsync(string profileId, CancellationToken cancellationToken)
     {
         RuntimeConfigurationTransactionResult result = await takeover.ApplyProfileConfigurationAsync(
             configuration,
             profileId,
-            settings.CurrentMode,
-            settings.TransparentProxyEnabled,
-            settings.MixedPort,
+            proxy.ObserveOwnership,
             cancellationToken).ConfigureAwait(false);
         return result.IsApplied;
     }
@@ -91,9 +93,7 @@ internal sealed class ProfileCatalogRuntimeAdapter(
                 profileId,
                 profileName,
                 configurationText,
-                settings.CurrentMode,
-                settings.TransparentProxyEnabled,
-                settings.MixedPort,
+                proxy.ObserveOwnership,
                 cancellationToken)
             .ConfigureAwait(false);
         return new ProfileCatalogRuntimeImportResult(result.Profile, result.IsApplied);
@@ -101,8 +101,14 @@ internal sealed class ProfileCatalogRuntimeAdapter(
 
     public Task<bool> DeleteImportedProfileAsync(string profileId, CancellationToken cancellationToken)
     {
-        return configuration.DeleteImportedProfileAsync(profileId, cancellationToken);
+        return takeover.DeleteObservedProfileAsync(configuration, profileId, proxy.ObserveOwnership, cancellationToken);
     }
+
+    public Task<ProfileCatalogRuntimeImportResult> ImportProfileContentAsync(string profileId, string profileName,
+        string content, bool expectedActive, Func<bool>? mayEditActive,
+        Func<CancellationToken, Task<ProfileImportResult>> importInactive, CancellationToken cancellationToken) =>
+        takeover.ImportObservedProfileContentAsync(configuration, profileId, profileName, content,
+            mayEditActive, proxy.ObserveOwnership, cancellationToken);
 }
 
 internal sealed class ProfileCatalogSettingsAdapter(AppSettingsService settings) :

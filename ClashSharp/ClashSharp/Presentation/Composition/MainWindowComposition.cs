@@ -129,6 +129,7 @@ internal sealed class MainWindowComposition
         private readonly NotificationService? _notifications;
         private TrayNetworkObservation? _trayNetworkObservation;
         private int _trayNetworkRevision;
+        private string? _networkApplicationIdentity;
         private bool _observedTunRequirement;
         private bool _serviceFailureReported;
         private int _disposed;
@@ -175,6 +176,8 @@ internal sealed class MainWindowComposition
                 new ShellRestartStateAdapter(restartState));
             _settings.SettingChanged += Settings_SettingChanged;
             _settings.DataGenerationChanged += Settings_DataGenerationChanged;
+            _networkApplicationIdentity = _settings.CaptureNetworkApplicationIdentity();
+            _settings.SettingsApplicationStateChanged += Settings_ApplicationStateChanged;
             _networkState.VerifiedStateChanged += NetworkState_VerifiedStateChanged;
             _mihomoCore.UnexpectedExit += MihomoCore_UnexpectedExit;
         }
@@ -373,6 +376,7 @@ internal sealed class MainWindowComposition
 
             _settings.SettingChanged -= Settings_SettingChanged;
             _settings.DataGenerationChanged -= Settings_DataGenerationChanged;
+            _settings.SettingsApplicationStateChanged -= Settings_ApplicationStateChanged;
             _networkState.VerifiedStateChanged -= NetworkState_VerifiedStateChanged;
             _mihomoCore.UnexpectedExit -= MihomoCore_UnexpectedExit;
             ViewModel.Dispose();
@@ -393,6 +397,15 @@ internal sealed class MainWindowComposition
         }
 
         private void Settings_DataGenerationChanged(object? sender, EventArgs e) => InvalidateTrayNetworkState();
+
+        private void Settings_ApplicationStateChanged(object? sender, EventArgs e)
+        {
+            string? current = _settings.CaptureNetworkApplicationIdentity();
+            if (!StringComparer.Ordinal.Equals(Interlocked.Exchange(ref _networkApplicationIdentity, current), current))
+            {
+                InvalidateTrayNetworkState();
+            }
+        }
 
         private void NetworkState_VerifiedStateChanged(object? sender, EventArgs e)
         {

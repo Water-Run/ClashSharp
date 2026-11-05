@@ -185,6 +185,9 @@
     <Compile Include="..\ClashSharp\Service\ProxySelectionStore.cs" Link="Service\ProxySelectionStore.cs" />
     <Compile Include="..\ClashSharp\Service\NetworkTakeoverServiceFactory.cs" Link="Service\NetworkTakeoverServiceFactory.cs" />
     <Compile Include="..\ClashSharp\Service\NetworkTakeoverService.ProfileTransactions.cs" Link="Service\NetworkTakeoverService.ProfileTransactions.cs" />
+    <Compile Include="..\ClashSharp\Service\NetworkTakeoverService.ObservedProfiles.cs" Link="Service\NetworkTakeoverService.ObservedProfiles.cs" />
+    <Compile Include="..\ClashSharp\Service\NetworkTakeoverService.NetworkSettings.cs" Link="Service\NetworkTakeoverService.NetworkSettings.cs" />
+    <Compile Include="..\ClashSharp\AppHost\Settings\INetworkSettingsRuntime.cs" Link="AppHost\Settings\INetworkSettingsRuntime.cs" />
     <Compile Include="..\ClashSharp\Service\ProfileCatalogIds.cs" Link="Service\ProfileCatalogIds.cs" />
     <Compile Include="..\ClashSharp\Service\ProfileCatalogMutationCoordinator.cs" Link="Service\ProfileCatalogMutationCoordinator.cs" />
     <Compile Include="..\ClashSharp\Service\ProfileCatalogMutationCanceledException.cs" Link="Service\ProfileCatalogMutationCanceledException.cs" />

@@ -221,7 +221,8 @@ public sealed partial class ProductionDataGenerationTests
         Assert.Equal(replacement.Repositories.Generation.GenerationId, replacement.Takeover.DataGenerationId);
         Assert.NotSame(original.Takeover, replacement.Takeover);
         Assert.NotEqual(original.Takeover.DataGenerationId, replacement.Takeover.DataGenerationId);
-        UiData.GenerationProfileRuntime profile = new(replacement.Repositories.Session, replacement.Repositories.Configuration);
+        UiData.GenerationProfileRuntime profile = new(replacement.Repositories.Session, replacement.Repositories.Configuration,
+            UnusedNative<UiService.WindowsProxyService>());
         Assert.Throws<InvalidOperationException>(() => profile.BindTakeover(original.Takeover));
         profile.BindTakeover(replacement.Takeover);
         Assert.Throws<InvalidOperationException>(() => profile.BindTakeover(replacement.Takeover));

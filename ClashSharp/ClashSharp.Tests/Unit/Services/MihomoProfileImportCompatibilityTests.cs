@@ -1,3 +1,4 @@
+using ClashSharp.Model;
 using ClashSharp.Service;
 using YamlDotNet.RepresentationModel;
 
@@ -5,6 +6,19 @@ namespace ClashSharp.Tests.Unit.Services;
 
 public sealed class MihomoProfileImportCompatibilityTests
 {
+    [Fact]
+    public void DnsListener_RemainsUsableForSystemProxyAndGetsAnActionableTunPreflight()
+    {
+        const string source = "proxies: []\nrules: ['MATCH,DIRECT']\ndns: {enable: true, listen: '127.0.0.1:1053'}\n";
+        string ordinary = MihomoRuntimeConfigurationBuilder.OverrideRuntimeKeys(
+            source, 7890, ClashSharpMode.RuleTakeover, false, new string('a', 64));
+        Assert.Contains("127.0.0.1:1053", ordinary, StringComparison.Ordinal);
+        StableRuntimeDiagnosticException error = Assert.Throws<StableRuntimeDiagnosticException>(() =>
+            MihomoRuntimeConfigurationBuilder.OverrideRuntimeKeys(
+                source, 7890, ClashSharpMode.RuleTakeover, true, new string('a', 64)));
+        Assert.Equal(RuntimeFailureDiagnostics.TunDnsListenerUnsupported, error.DiagnosticCode);
+        Assert.Equal("RuntimeFailure.TunDnsListener", RuntimeFailureDiagnostics.Describe(error.DiagnosticCode).MessageResourceKey);
+    }
     [Theory]
     [InlineData("proxies: []\n")]
     [InlineData("rules: ['MATCH,DIRECT']\n")]

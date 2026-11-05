@@ -7,6 +7,32 @@ namespace ClashSharp.Tests.Unit.ServiceProtocol;
 /// <summary>Verifies the bounded, versioned mihomo service IPC wire contract.</summary>
 public sealed class MihomoServiceIpcProtocolTests
 {
+    [Fact]
+    public async Task FrameRoundTrip_PreservesCountersWithoutCompleteConnectionDetails()
+    {
+        MihomoServiceIpcRequest request = CreateBrokerRequest(MihomoServiceIpcCommand.GetConnections);
+        MihomoServiceIpcResponse expected = CreateBrokerResponse(request) with
+        {
+            ConnectionSnapshot = new()
+            {
+                TrafficEpoch = Guid.NewGuid(),
+                UploadTotalBytes = 123,
+                DownloadTotalBytes = 456,
+                ConnectionsComplete = false,
+                TotalConnectionCount = 2049,
+            },
+        };
+        using MemoryStream bytes = new();
+        await MihomoServiceIpcFrameCodec.WriteResponseAsync(bytes, expected, CancellationToken.None);
+        bytes.Position = 0;
+        MihomoServiceIpcResponse actual = await MihomoServiceIpcFrameCodec.ReadResponseAsync(bytes, CancellationToken.None);
+        Assert.Null(actual.ValidateFor(request));
+        Assert.False(actual.ConnectionSnapshot!.ConnectionsComplete);
+        Assert.Equal(2049, actual.ConnectionSnapshot.TotalConnectionCount);
+        Assert.Equal(456, actual.ConnectionSnapshot.DownloadTotalBytes);
+        Assert.Empty(actual.ConnectionSnapshot.Connections);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

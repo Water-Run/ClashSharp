@@ -88,10 +88,12 @@ public sealed partial class ProductionDataGenerationTests
         List<string> changes = [];
         settings.SettingChanged += (_, change) => changes.Add(change.Key);
         SettingDefinition enabled = SettingsRegistry.Default.Get(SettingsRegistry.Keys.NotificationEnabled.Value);
+        string? networkIdentity = settings.CaptureNetworkApplicationIdentity();
 
         await settings.ApplyChangesAsync([new(enabled.Key, enabled.Normalize("false").Value!)], CancellationToken.None);
 
         Assert.False(settings.NotificationEnabled);
+        Assert.Equal(networkIdentity, settings.CaptureNetworkApplicationIdentity());
         Assert.Equal(["NotificationEnabled"], changes);
         Assert.Equal(true, legacy["NotificationEnabled"]);
         Assert.Throws<InvalidOperationException>(() => settings.NotificationEnabled = true);

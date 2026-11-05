@@ -1100,6 +1100,7 @@ internal static partial class LocalizationResources
             ["RuntimeFailure.EndpointOccupied"] = "Un autre processus occupe le point de contrôle du service. Fermez l'instance Clash# ou le client similaire en conflit, puis réessayez ; aucun identifiant ne lui a été envoyé.",
             ["RuntimeFailure.Tun"] = "Le proxy transparent n'a pas pu démarrer. Fermez les autres logiciels TUN/VPN, puis réessayez.",
             ["RuntimeFailure.Configuration"] = "La configuration a été refusée. Vérifiez-la ou restaurez la dernière version fonctionnelle.",
+            ["RuntimeFailure.TunDnsListener"] = "Cette configuration définit une écoute DNS (dns.listen) que le service de proxy transparent ne peut pas héberger. Supprimez cette entrée avant de l’activer ou utilisez le proxy système.",
             ["RuntimeFailure.Provider"] = "La mise à jour du fournisseur a échoué. Vérifiez son adresse et la connexion réseau, puis réessayez.",
             ["RuntimeFailure.GeoData"] = "Les ressources GeoIP/GeoSite/ASN sont absentes ou endommagées. Lancez Réparer dans l'installateur.",
             ["RuntimeFailure.Controller"] = "Le contrôleur du cœur est indisponible. Redémarrez le mode proxy ; si le problème persiste, lancez Réparer dans l'installateur.",

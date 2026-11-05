@@ -81,11 +81,11 @@ public sealed partial class ProfileCatalogService
                 {
                     throw new InvalidOperationException("The profile source changed; read it before editing.");
                 }
-                bool active = StringComparer.Ordinal.Equals(GetActiveProfileId(), id);
-                if (active && !mayEditActive()) { throw new UnauthorizedAccessException("Active profile editing requires proxy control."); }
+                bool active = StringComparer.Ordinal.Equals(
+                    await ReadObservedActiveProfileIdAsync(token).ConfigureAwait(false), id);
                 token.ThrowIfCancellationRequested();
                 return await CommitProfileContentAsync(id, name.Trim(), sourceName, content, previous, active,
-                    active ? ProfileHistoryApplyOutcome.Applied : ProfileHistoryApplyOutcome.Stored, token).ConfigureAwait(false);
+                    active ? ProfileHistoryApplyOutcome.Applied : ProfileHistoryApplyOutcome.Stored, token, mayEditActive).ConfigureAwait(false);
             }
             finally { _profileMutationGate.Release(); }
         }, cancellationToken).ConfigureAwait(false);

@@ -12,6 +12,107 @@ namespace ClashSharp.Tests.Unit.Services;
 /// <summary>Unit tests for profile catalog composition.</summary>
 public sealed class ProfileCatalogServiceTests
 {
+    [Fact]
+    public async Task PreparedMutation_FailureReportingRetainsAdmissionUntilItsStatusIsRecorded()
+    {
+        MutationAdmissionBarrier admission = new();
+        IProfileCatalogMutationCoordinator coordinator = new ProfileCatalogMutationCoordinator(admission, new FairAsyncMutationGate());
+        Task<MutationAdmissionLease>? drain = null;
+        int reports = 0;
+
+        await Assert.ThrowsAsync<IOException>(() => coordinator.ExecutePreparedAsync<bool, bool>(
+            Guid.NewGuid(), _ => Task.FromException<bool>(new IOException("Isolated download failure.")),
+            (_, _, _) => throw new InvalidOperationException("The mutation must not execute."), CancellationToken.None,
+            _ =>
+            {
+                ++reports;
+                drain = admission.CloseAndDrainAsync(MutationAdmissionClosure.Destructive, CancellationToken.None).AsTask();
+                Assert.False(drain.IsCompleted);
+            }));
+
+        Assert.Equal(1, reports);
+        await using MutationAdmissionLease closed = await drain!.WaitAsync(TimeSpan.FromSeconds(5));
+    }
+
+    [Fact]
+    public async Task AgentEdit_UsesTheObservedActiveProfileWhenTheDesiredTargetDiffers()
+    {
+        using TempFile file = new();
+        FakeProfileCatalogSettings settings = new();
+        FakeProfileCatalogCoreConfiguration core = new();
+        FakeProfileCatalogRuntime runtime = new();
+        await using ProfileCatalogService catalog = CreateService(file.Path, settings, core, runtime: runtime);
+        const string original = "rules: ['MATCH,DIRECT']\n";
+        ProfileImportResult active = await catalog.SaveAgentSourceAsync(
+            Guid.NewGuid(), null, "Active", original, null, () => false, CancellationToken.None);
+        settings.ActiveProfileId = "failed-target";
+        runtime.ObservedActiveProfileId = active.ProfileId;
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => catalog.SaveAgentSourceAsync(
+            Guid.NewGuid(), active.ProfileId, "Edit", "rules: ['MATCH,REJECT']\n",
+            ProfileCatalogService.AgentSourceHash(original), () => false, CancellationToken.None));
+
+        Assert.Single(core.Imports);
+        Assert.Single(catalog.GetProfileHistory(active.ProfileId));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SubscriptionDownload_AllowsOtherMutationsAndDiscardsAnEditedOrDeletedSnapshot(bool delete)
+    {
+        using TempFile file = new();
+        MutationAdmissionBarrier admission = new();
+        FairAsyncMutationGate gate = new();
+        FakeProfileCatalogCoreConfiguration core = new();
+        await using ProfileCatalogService catalog = CreateService(file.Path, new(), core,
+            coordinator: new ProfileCatalogMutationCoordinator(admission, gate));
+        using TcpListener listener = new(IPAddress.Loopback, 0);
+        listener.Start();
+        int port = ((IPEndPoint)listener.LocalEndpoint).Port;
+        ProfileSubscriptionLink link = await catalog.AddSubscriptionLinkAsync(
+            "Slow", $"http://127.0.0.1:{port}/profile", CancellationToken.None);
+        TaskCompletionSource headers = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        using CancellationTokenSource lifetime = new(TimeSpan.FromSeconds(10));
+        Task response = ServeSubscriptionAsync(listener, lifetime.Token, headersSent: headers, releaseBody: release.Task);
+        Task<ProfileImportResult> import = catalog.ImportSubscriptionLinkAsync(link, lifetime.Token);
+        try
+        {
+            await headers.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            bool changed = delete
+                ? await catalog.TryDeleteSubscriptionLinkAsync(link.Id, CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(2))
+                : await catalog.TryUpdateSubscriptionLinkAsync(link.Id, "Edited", link.Uri + "?revision=2",
+                    true, 24, CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(2));
+            Assert.True(changed);
+            await catalog.AddSubscriptionLinkAsync("Other", "https://other.invalid/profile", CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(2));
+            release.SetResult();
+            await Assert.ThrowsAsync<InvalidOperationException>(() => import);
+            Assert.Empty(core.Imports);
+            Assert.Empty(catalog.GetProfileHistory("subscription-" + link.Id));
+            if (!delete) { Assert.Equal("Edited", catalog.GetSubscriptionLinks().Single(item => item.Id == link.Id).Name); }
+        }
+        finally
+        {
+            release.TrySetResult();
+            await lifetime.CancelAsync();
+            try { await response; } catch (OperationCanceledException) { }
+            try { await import; } catch (Exception) { }
+        }
+    }
+
+    [Fact]
+    public async Task SubscriptionUrls_PreserveCaseSensitiveTokensAndReuseCanonicalHosts()
+    {
+        using TempFile file = new();
+        await using ProfileCatalogService catalog = CreateService(file.Path, new());
+        await catalog.AddSubscriptionLinkAsync("Upper", "https://example.invalid/profile?token=AbC", CancellationToken.None);
+        await catalog.AddSubscriptionLinkAsync("Lower", "https://example.invalid/profile?token=abc", CancellationToken.None);
+        await Assert.ThrowsAsync<ArgumentException>(() => catalog.AddSubscriptionLinkAsync(
+            "Duplicate", "https://EXAMPLE.invalid/profile?token=AbC", CancellationToken.None));
+        Assert.Equal(2, catalog.GetSubscriptionLinks().Count);
+    }
+
     [Theory]
     [InlineData("", "Provider", true)]
     [InlineData("My profile", "My profile", false)]
@@ -574,7 +675,7 @@ public sealed class ProfileCatalogServiceTests
 
     private static async Task ServeSubscriptionAsync(
         TcpListener listener, CancellationToken cancellationToken, string? userInfo = null, int statusCode = 200,
-        TaskCompletionSource? headersSent = null, string extraHeaders = "")
+        TaskCompletionSource? headersSent = null, string extraHeaders = "", Task? releaseBody = null)
     {
         using TcpClient client = await listener.AcceptTcpClientAsync(cancellationToken);
         await using NetworkStream stream = client.GetStream();
@@ -588,7 +689,12 @@ public sealed class ProfileCatalogServiceTests
         if (headersSent is not null)
         {
             headersSent.TrySetResult();
-            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            if (releaseBody is null) { await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken); }
+            else
+            {
+                await releaseBody.WaitAsync(cancellationToken);
+                await stream.WriteAsync(Encoding.UTF8.GetBytes(body), cancellationToken);
+            }
         }
     }
 
@@ -1353,6 +1459,11 @@ public sealed class ProfileCatalogServiceTests
 
     private sealed class FakeProfileCatalogRuntime : IProfileCatalogRuntime
     {
+        public string? ObservedActiveProfileId { get; set; }
+
+        public Task<string> ReadActiveProfileIdAsync(string configuredProfileId, CancellationToken cancellationToken) =>
+            Task.FromResult(ObservedActiveProfileId ?? configuredProfileId);
+
         public Func<Task<bool>>? ApplyAsync { get; init; }
 
         public bool ApplyResult { get; set; } = true;

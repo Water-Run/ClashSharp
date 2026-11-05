@@ -281,6 +281,12 @@ internal static class MihomoRuntimeConfigurationBuilder
             throw new ArgumentException("Transparent proxy DNS configuration must be a mapping.");
         }
 
+        if (TryGetScalarKeyValue(dns, "listen", out _))
+        {
+            throw new StableRuntimeDiagnosticException(RuntimeFailureDiagnostics.TunDnsListenerUnsupported,
+                "The selected configuration declares a DNS listener that the transparent proxy service cannot host.");
+        }
+
         if (!TryGetScalarKeyValue(dns, "enable", out _))
         {
             dns.Add(PlainScalar("enable"), PlainScalar("true"));

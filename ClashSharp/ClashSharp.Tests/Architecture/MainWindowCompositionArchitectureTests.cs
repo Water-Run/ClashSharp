@@ -208,6 +208,8 @@ public sealed class MainWindowCompositionArchitectureTests
         Assert.Contains("InvalidateTrayNetworkState()", settingsHandler, StringComparison.Ordinal);
         Assert.Contains("_settings.DataGenerationChanged += Settings_DataGenerationChanged", composition, StringComparison.Ordinal);
         Assert.Contains("_settings.DataGenerationChanged -= Settings_DataGenerationChanged", composition, StringComparison.Ordinal);
+        Assert.Contains("_settings.SettingsApplicationStateChanged += Settings_ApplicationStateChanged", composition, StringComparison.Ordinal);
+        Assert.Contains("_settings.SettingsApplicationStateChanged -= Settings_ApplicationStateChanged", composition, StringComparison.Ordinal);
         Assert.Contains("SettingsRegistry.Keys.CurrentMode.Value", composition, StringComparison.Ordinal);
         Assert.Contains("SettingsRegistry.Keys.TransparentProxyEnabled.Value", composition, StringComparison.Ordinal);
         Assert.Contains("SettingsRegistry.Keys.TrayUseMonochromeInactiveIcon.Value", composition, StringComparison.Ordinal);

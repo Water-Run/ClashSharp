@@ -10,4 +10,9 @@ internal sealed record MihomoTrafficSnapshot(
     long DownloadTotalBytes,
     IReadOnlyList<ActiveConnection> Connections,
     long? MemoryBytes = null,
-    DateTimeOffset? CoreStartedAt = null);
+    DateTimeOffset? CoreStartedAt = null,
+    bool ConnectionsComplete = true,
+    int? TotalConnectionCount = null)
+{
+    public int ActiveConnectionCount => TotalConnectionCount ?? Connections.Count;
+}

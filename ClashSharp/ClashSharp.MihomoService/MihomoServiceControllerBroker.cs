@@ -263,15 +263,15 @@ internal sealed class MihomoServiceControllerBroker
         using JsonDocument document = ParseStrictJson(response.Content);
         JsonElement root = RequireObject(document.RootElement, "connections response");
         if (!root.TryGetProperty("connections", out JsonElement rows)
-            || rows.ValueKind is not (JsonValueKind.Array or JsonValueKind.Null)
-            || rows.ValueKind == JsonValueKind.Array
-                && rows.GetArrayLength() > MihomoServiceIpcProtocol.MaximumControllerConnections)
+            || rows.ValueKind is not (JsonValueKind.Array or JsonValueKind.Null))
         {
             throw new InvalidDataException("The connections response is invalid.");
         }
 
         List<MihomoServiceIpcConnection> connections = [];
-        if (rows.ValueKind == JsonValueKind.Array)
+        int connectionCount = rows.ValueKind == JsonValueKind.Array ? rows.GetArrayLength() : 0;
+        bool complete = connectionCount <= MihomoServiceIpcProtocol.MaximumControllerConnections;
+        if (complete && rows.ValueKind == JsonValueKind.Array)
         {
             foreach (JsonElement row in rows.EnumerateArray())
             {
@@ -282,12 +282,20 @@ internal sealed class MihomoServiceControllerBroker
         MihomoServiceIpcConnectionSnapshot snapshot = new()
         {
             Connections = connections,
+            ConnectionsComplete = complete,
+            TotalConnectionCount = connectionCount,
             TrafficEpoch = trafficEpoch,
             UploadTotalBytes = ReadTrafficTotal(root, "uploadTotal"),
             DownloadTotalBytes = ReadTrafficTotal(root, "downloadTotal"),
             MemoryBytes = coreMemoryBytes,
             CoreStartedAt = coreStartedAt,
         };
+        if (snapshot.Validate() == "service.ipc.controller_aggregate_invalid"
+            || snapshot.ConnectionsComplete && JsonSerializer.SerializeToUtf8Bytes(snapshot).Length
+                > MihomoServiceIpcProtocol.MaximumFrameBytes - (64 * 1024))
+        {
+            snapshot = snapshot with { Connections = [], ConnectionsComplete = false };
+        }
         EnsureValid(snapshot.Validate());
         return snapshot;
     }

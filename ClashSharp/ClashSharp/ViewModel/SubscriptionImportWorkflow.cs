@@ -21,7 +21,7 @@ internal static class SubscriptionImportWorkflow
             throw new ArgumentException("A subscription requires an absolute HTTP or HTTPS URL.", nameof(uri));
         }
         ProfileSubscriptionLink? existing = catalog.GetSubscriptionLinks().Where(link =>
-            Uri.TryCreate(link.Uri, UriKind.Absolute, out Uri? saved) && saved.Equals(parsed))
+            ProfileSubscriptionLink.HasSameUri(link.Uri, parsed.AbsoluteUri))
             .Select(static link => (ProfileSubscriptionLink?)link).FirstOrDefault();
         ProfileSubscriptionLink link = existing ?? await catalog.AddSubscriptionLinkAsync(
             name.Trim(), input, cancellationToken);

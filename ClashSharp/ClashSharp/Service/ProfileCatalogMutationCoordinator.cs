@@ -13,6 +13,25 @@ internal interface IProfileCatalogMutationCoordinator
         Guid operationId,
         Func<MutationAdmissionLease?, CancellationToken, Task<T>> mutation,
         CancellationToken cancellationToken);
+
+    /// <summary>Retains admission during preparation and enters shared ordering only for the final mutation.</summary>
+    Task<TResult> ExecutePreparedAsync<TPrepared, TResult>(
+        Guid operationId, Func<CancellationToken, Task<TPrepared>> prepare,
+        Func<TPrepared, MutationAdmissionLease?, CancellationToken, Task<TResult>> mutation,
+        CancellationToken cancellationToken, Action<Exception>? onFailure = null) =>
+        ExecuteAsync(operationId, async (lease, token) =>
+        {
+            try
+            {
+                TPrepared prepared = await prepare(token).ConfigureAwait(false);
+                return await mutation(prepared, lease, token).ConfigureAwait(false);
+            }
+            catch (Exception failure) when (!ExceptionGraphClassifier.IsProcessFatal(failure))
+            {
+                onFailure?.Invoke(failure);
+                throw;
+            }
+        }, cancellationToken);
 }
 
 /// <summary>Shares network mutation admission and fair ordering without introducing another journal.</summary>
@@ -26,11 +45,22 @@ internal sealed class ProfileCatalogMutationCoordinator(
     private readonly FairAsyncMutationGate _mutationGate =
         mutationGate ?? throw new ArgumentNullException(nameof(mutationGate));
 
-    public async Task<T> ExecuteAsync<T>(
+    public Task<T> ExecuteAsync<T>(
         Guid operationId,
         Func<MutationAdmissionLease?, CancellationToken, Task<T>> mutation,
         CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(mutation);
+        return ExecutePreparedAsync(operationId, _ => Task.FromResult(true),
+            (_, lease, token) => mutation(lease, token), cancellationToken);
+    }
+
+    public async Task<TResult> ExecutePreparedAsync<TPrepared, TResult>(
+        Guid operationId, Func<CancellationToken, Task<TPrepared>> prepare,
+        Func<TPrepared, MutationAdmissionLease?, CancellationToken, Task<TResult>> mutation,
+        CancellationToken cancellationToken, Action<Exception>? onFailure = null)
+    {
+        ArgumentNullException.ThrowIfNull(prepare);
         ArgumentNullException.ThrowIfNull(mutation);
         if (operationId == Guid.Empty)
         {
@@ -48,10 +78,11 @@ internal sealed class ProfileCatalogMutationCoordinator(
                     admissionLease.RevocationToken);
             try
             {
+                TPrepared prepared = await prepare(admittedCancellation.Token).ConfigureAwait(false);
                 return await _mutationGate
                     .ExecuteAsync(
                         operationId,
-                        (_, gateToken) => mutation(admissionLease, gateToken),
+                        (_, gateToken) => mutation(prepared, admissionLease, gateToken),
                         admittedCancellation.Token)
                     .ConfigureAwait(false);
             }
@@ -60,7 +91,14 @@ internal sealed class ProfileCatalogMutationCoordinator(
             {
                 // The scheduler's own stop token can still be live while shutdown drains admission.
                 // Preserve the trusted cancellation cause without disguising independent HTTP timeouts.
-                throw new ProfileCatalogMutationCanceledException(exception, admittedCancellation.Token);
+                ProfileCatalogMutationCanceledException cancelled = new(exception, admittedCancellation.Token);
+                onFailure?.Invoke(cancelled);
+                throw cancelled;
+            }
+            catch (Exception failure) when (!ExceptionGraphClassifier.IsProcessFatal(failure))
+            {
+                onFailure?.Invoke(failure);
+                throw;
             }
         }
         finally
@@ -109,6 +147,20 @@ internal sealed class LateBoundProfileCatalogMutationCoordinator : IProfileCatal
         }
 
         return coordinator.ExecuteAsync(operationId, mutation, cancellationToken);
+    }
+
+    public Task<TResult> ExecutePreparedAsync<TPrepared, TResult>(
+        Guid operationId, Func<CancellationToken, Task<TPrepared>> prepare,
+        Func<TPrepared, MutationAdmissionLease?, CancellationToken, Task<TResult>> mutation,
+        CancellationToken cancellationToken, Action<Exception>? onFailure = null)
+    {
+        IProfileCatalogMutationCoordinator coordinator;
+        lock (_syncLock)
+        {
+            coordinator = _configured ?? throw new InvalidOperationException(
+                "Profile catalog mutations are unavailable before process-wide mutation admission is configured.");
+        }
+        return coordinator.ExecutePreparedAsync(operationId, prepare, mutation, cancellationToken, onFailure);
     }
 }
 

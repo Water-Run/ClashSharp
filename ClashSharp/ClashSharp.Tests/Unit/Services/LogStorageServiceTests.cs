@@ -9,6 +9,39 @@ namespace ClashSharp.Tests.Unit.Services;
 public sealed partial class LogStorageServiceTests
 {
     [Fact]
+    public async Task IncompleteConnections_UpdateTotalsWithoutRetiringConnectionBaselines()
+    {
+        using TempDatabase database = new();
+        await using LogStorageService storage = new(database.Path, () => "profile-a");
+        Guid epoch = Guid.NewGuid();
+        ActiveConnection first = TrafficConnection(100, 200);
+        storage.AppendTrafficSnapshot(new(epoch, 100, 200, [first]));
+        storage.AppendTrafficSnapshot(new(epoch, 150, 260, [], ConnectionsComplete: false, TotalConnectionCount: 2049));
+        storage.AppendTrafficSnapshot(new(epoch, 180, 300, [first with { UploadBytes = 180, DownloadBytes = 300 }]));
+
+        Assert.Equal(180, storage.GetTrafficStatisticsSummary().TotalUploadBytes);
+        Assert.Equal(300, storage.GetTrafficStatisticsSummary().TotalDownloadBytes);
+        Assert.Equal(1, storage.GetRuleHitCounts()[first.RawRuleDisplay]);
+        Assert.Equal(180, Assert.Single(storage.GetNodeTrafficRows(10)).UploadBytes);
+        Assert.Equal(300, Assert.Single(storage.GetNodeTrafficRows(10)).DownloadBytes);
+    }
+
+    [Fact]
+    public async Task IncompleteNewEpoch_DiscardsThePreviousCoresConnectionBaselines()
+    {
+        using TempDatabase database = new();
+        await using LogStorageService storage = new(database.Path, () => "profile-a");
+        ActiveConnection row = TrafficConnection(100, 200);
+        storage.AppendTrafficSnapshot(new(Guid.NewGuid(), 100, 200, [row]));
+        Guid replacement = Guid.NewGuid();
+        storage.AppendTrafficSnapshot(new(replacement, 30, 60, [], ConnectionsComplete: false, TotalConnectionCount: 2049));
+        storage.AppendTrafficSnapshot(new(replacement, 40, 80, [row with { UploadBytes = 40, DownloadBytes = 80 }]));
+        Assert.Equal(140, storage.GetTrafficStatisticsSummary().TotalUploadBytes);
+        Assert.Equal(280, storage.GetTrafficStatisticsSummary().TotalDownloadBytes);
+        Assert.Equal(140, Assert.Single(storage.GetNodeTrafficRows(10)).UploadBytes);
+    }
+
+    [Fact]
     public async Task TrafficSnapshot_ClosedAndShortConnectionsRemainInTotalsAndDailyAndProfileRows()
     {
         using TempDatabase database = new();

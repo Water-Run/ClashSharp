@@ -11,7 +11,7 @@ namespace ClashSharp.ServiceProtocol;
 public static class MihomoServiceIpcProtocol
 {
     /// <summary>Gets the only protocol version accepted by this build.</summary>
-    public const int CurrentVersion = 3;
+    public const int CurrentVersion = 4;
 
     /// <summary>Gets the maximum encoded request or response size.</summary>
     public const int MaximumFrameBytes = 1024 * 1024;
@@ -644,6 +644,12 @@ public sealed record MihomoServiceIpcConnection
 /// <summary>Contains one bounded active-connection snapshot.</summary>
 public sealed record MihomoServiceIpcConnectionSnapshot
 {
+    /// <summary>Gets whether the snapshot contains every active connection row.</summary>
+    public bool ConnectionsComplete { get; init; } = true;
+
+    /// <summary>Gets the controller's full active connection count, including omitted detail rows.</summary>
+    public int? TotalConnectionCount { get; init; }
+
     /// <summary>Gets the child-process counter epoch, unchanged by configuration-only updates.</summary>
     public Guid? TrafficEpoch { get; init; }
 
@@ -670,6 +676,13 @@ public sealed record MihomoServiceIpcConnectionSnapshot
         if (MemoryBytes is < 0 || CoreStartedAt < DateTimeOffset.UnixEpoch)
         {
             return "service.ipc.connection_snapshot_runtime_invalid";
+        }
+
+        if (TotalConnectionCount is < 0 || TotalConnectionCount < Connections?.Count
+            || ConnectionsComplete && TotalConnectionCount is int total && total != Connections?.Count
+            || !ConnectionsComplete && (TotalConnectionCount is null || Connections?.Count != 0 || TrafficEpoch is null))
+        {
+            return "service.ipc.connection_snapshot_completeness_invalid";
         }
 
         if ((TrafficEpoch is not null || UploadTotalBytes is not null || DownloadTotalBytes is not null)

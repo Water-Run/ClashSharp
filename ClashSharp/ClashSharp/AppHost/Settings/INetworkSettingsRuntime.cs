@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using ClashSharp.ApplicationModel.Network;
 using ClashSharp.Model;
 using ClashSharp.Settings;
 
@@ -10,6 +11,13 @@ namespace ClashSharp.Hosting.Settings;
 internal interface INetworkSettingsRuntime
 {
     Task<NetworkSettingsConfiguration> ReadConfigurationAsync(CancellationToken cancellationToken);
+    /// <summary>Reads a complete verified state; native implementations preserve the observed Windows proxy flag.</summary>
+    async Task<NetworkStateSnapshot> ReadStateAsync(CancellationToken cancellationToken)
+    {
+        NetworkSettingsConfiguration configuration = await ReadConfigurationAsync(cancellationToken).ConfigureAwait(false);
+        return configuration.ToSnapshot(configuration.Mode is ClashSharpMode.RuleTakeover or ClashSharpMode.FullTakeover
+            && !configuration.EffectiveTunEnabled);
+    }
     Task RecoverConfigurationAsync(CancellationToken cancellationToken);
     Task ApplyConfigurationAsync(NetworkSettingsConfiguration configuration, CancellationToken cancellationToken);
     /// <summary>Restores an explicitly captured baseline after another owned generation may have changed the runtime.</summary>
@@ -41,4 +49,8 @@ internal sealed record NetworkSettingsConfiguration
     public bool TransparentProxyEnabled { get; }
     public int MixedPort { get; }
     public bool EffectiveTunEnabled => TransparentProxyEnabled && Mode is ClashSharpMode.RuleTakeover or ClashSharpMode.FullTakeover;
+
+    public NetworkStateSnapshot ToSnapshot(bool systemProxyEnabled) => new(Mode, Mode != ClashSharpMode.Disabled,
+        systemProxyEnabled, EffectiveTunEnabled, MixedPort,
+        $"{Mode}:{ProfileId}:{MixedPort}:{EffectiveTunEnabled}:{systemProxyEnabled}");
 }

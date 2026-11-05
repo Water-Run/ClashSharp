@@ -1100,6 +1100,7 @@ internal static partial class LocalizationResources
             ["RuntimeFailure.EndpointOccupied"] = "服務控制端點已被其他處理程序占用。請關閉衝突的 Clash# 執行個體或同類程式後再試；不要向該端點傳送憑證。",
             ["RuntimeFailure.Tun"] = "透明代理無法啟動。請確認其他 TUN/VPN 已關閉後再試。",
             ["RuntimeFailure.Configuration"] = "設定未通過驗證。請檢查目前設定，或還原上一個可用版本。",
+            ["RuntimeFailure.TunDnsListener"] = "此設定檔包含 DNS 監聽（dns.listen），透明代理服務無法承載。請移除此項後重試，或使用系統代理接管。",
             ["RuntimeFailure.Provider"] = "Provider 更新失敗。請檢查其位址和網路連線後再試。",
             ["RuntimeFailure.GeoData"] = "GeoIP/GeoSite/ASN 資源遺失或損毀。請執行安裝程式的「修復」。",
             ["RuntimeFailure.Controller"] = "核心控制器無法使用。請重新啟動代理；若持續失敗，請執行安裝程式的「修復」。",

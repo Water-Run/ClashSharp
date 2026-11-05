@@ -17,6 +17,20 @@ namespace ClashSharp.Tests.Integration;
 public sealed class NetworkSettingsParticipantTests
 {
     [Fact]
+    public async Task SpecificNativePreflightCode_SurvivesTheFailedSettingsBatch()
+    {
+        await using Fixture fixture = await Fixture.CreateAsync();
+        const string code = "configuration.tun_dns_listener_unsupported";
+        fixture.Surface.Failure = new ClashSharpUi::ClashSharp.Model.StableRuntimeDiagnosticException(code, "Isolated preflight rejection.");
+        Assert.True((await fixture.ChangeAsync(Change("MixedPort", "18399"))).IsSucceeded);
+
+        SettingsAuthorityResult result = await fixture.ApplyAsync(SettingsRegistry.Keys.MixedPort);
+
+        Assert.Equal(SettingsAuthorityStatus.ApplicationFailed, result.Status);
+        Assert.Equal(code, result.Code);
+        Assert.Equal(code, Assert.Single(result.Envelope!.PendingApplications).LastError!.Code);
+    }
+    [Fact]
     public async Task CompleteBatch_PersistsRunningBeforeApplyingAndVerifiesAllFourKeys()
     {
         await using Fixture fixture = await Fixture.CreateAsync();

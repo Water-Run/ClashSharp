@@ -1100,6 +1100,7 @@ internal static partial class LocalizationResources
             ["RuntimeFailure.EndpointOccupied"] = "다른 프로세스가 서비스 제어 엔드포인트를 차지하고 있습니다. 충돌하는 Clash# 인스턴스나 비슷한 프로그램을 닫은 뒤 다시 시도하세요. 이 엔드포인트로 자격 증명을 보내지 않았습니다.",
             ["RuntimeFailure.Tun"] = "투명 프록시를 시작하지 못했습니다. 다른 TUN/VPN을 끈 뒤 다시 시도하세요.",
             ["RuntimeFailure.Configuration"] = "구성이 검증을 통과하지 못했습니다. 현재 구성을 확인하거나, 마지막으로 잘 동작한 버전으로 복원하세요.",
+            ["RuntimeFailure.TunDnsListener"] = "이 구성에는 투명 프록시 서비스가 호스팅할 수 없는 DNS 리스너(dns.listen)가 있습니다. 이 항목을 제거한 뒤 다시 시도하거나 시스템 프록시를 사용하세요.",
             ["RuntimeFailure.Provider"] = "Provider 업데이트에 실패했습니다. 주소와 네트워크 연결을 확인한 뒤 다시 시도하세요.",
             ["RuntimeFailure.GeoData"] = "GeoIP/GeoSite/ASN 리소스가 없거나 손상되었습니다. 설치 프로그램에서 ‘복구’를 실행하세요.",
             ["RuntimeFailure.Controller"] = "코어 컨트롤러를 사용할 수 없습니다. 프록시를 다시 시작하고, 계속 실패하면 설치 프로그램에서 ‘복구’를 실행하세요.",

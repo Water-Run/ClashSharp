@@ -33,12 +33,15 @@ public sealed partial class LogStorageService
                 ? ReadConnectionBaselines(connection, transaction)
                 : [];
             // Retain only current connection identities, never hosts or process names, in the checkpoint.
-            ExecuteNonQuery(connection, transaction, "DELETE FROM TrafficConnectionCounters;");
+            if (snapshot.ConnectionsComplete || !sameEpoch)
+            {
+                ExecuteNonQuery(connection, transaction, "DELETE FROM TrafficConnectionCounters;");
+            }
             long now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             int insertedCount = 0;
             int newConnectionCount = 0;
             HashSet<(string, long)> seen = [];
-            foreach (ActiveConnection row in snapshot.Connections)
+            foreach (ActiveConnection row in snapshot.ConnectionsComplete ? snapshot.Connections : [])
             {
                 (string Id, long StartedAt) key = (row.Id, row.StartedAt.UtcTicks);
                 if (!seen.Add(key) || row.UploadBytes < 0 || row.DownloadBytes < 0)

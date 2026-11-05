@@ -1,5 +1,6 @@
 using ClashSharp.ApplicationModel.Diagnostics;
 using ClashSharp.ApplicationModel.Mutations;
+using ClashSharp.Diagnostics;
 using ClashSharp.Settings;
 
 namespace ClashSharp.ApplicationModel.Settings;
@@ -77,6 +78,7 @@ public sealed partial class SettingsAuthoritySession
 
         bool applied = false;
         bool replyFailed = false;
+        string? participantFailureCode = null;
         if (!matches)
         {
             try
@@ -87,6 +89,7 @@ public sealed partial class SettingsAuthoritySession
             catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
             {
                 replyFailed = true;
+                participantFailureCode = RuntimeDiagnosticCode.Extract(exception);
                 // A participant may have completed its effect before losing the reply.
                 // Resolve that ambiguity by probing; never infer rollback from an exception.
             }
@@ -94,8 +97,8 @@ public sealed partial class SettingsAuthoritySession
             observation = await TryProbeAsync(participant, request, lease).ConfigureAwait(false);
             if (!ValidateObservation(request, observation, out matches) || !matches)
             {
-                return await FailCoreAsync(envelope, batch, replyFailed
-                    ? "settings.application.participant_failed" : "settings.application.verification_failed").ConfigureAwait(false);
+                return await FailCoreAsync(envelope, batch, participantFailureCode ?? (replyFailed
+                    ? "settings.application.participant_failed" : "settings.application.verification_failed")).ConfigureAwait(false);
             }
         }
 

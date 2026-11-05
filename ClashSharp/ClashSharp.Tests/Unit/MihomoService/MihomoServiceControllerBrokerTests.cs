@@ -8,6 +8,46 @@ namespace ClashSharp.Tests.Unit.MihomoService;
 
 public sealed class MihomoServiceControllerBrokerTests
 {
+    [Theory]
+    [InlineData(2048, true)]
+    [InlineData(2049, false)]
+    public async Task LargeConnectionSets_RetainTotalsAndDeclareOmittedDetails(int count, bool complete)
+    {
+        FakeMihomoChildProcess process = new("broker", 501);
+        await using MihomoChildSupervisorTestContext context = new([process]);
+        string hash = context.WriteConfiguration("mixed-port: 7890\nmode: rule\n");
+        Assert.True((await context.Supervisor.StartAsync(70, hash, CancellationToken.None)).Succeeded);
+        string[] chain = ["DIRECT"];
+        string json = System.Text.Json.JsonSerializer.Serialize(new
+        {
+            uploadTotal = 1234,
+            downloadTotal = 5678,
+            connections = Enumerable.Range(0, count).Select(index => new
+            {
+                id = "id-" + index,
+                metadata = new { host = "example.invalid", process = "client.exe" },
+                rule = "MATCH",
+                rulePayload = "",
+                chains = chain,
+                upload = 1,
+                download = 2,
+                start = "2026-08-04T12:00:00+08:00",
+            }),
+        });
+        RecordingTransportFactory transport = new([Step.Json(HttpMethod.Get, "/connections", json)]);
+        MihomoServiceControllerBrokerResult result = await CreateBroker(context, transport).ExecuteAsync(
+            BrokerRequest(context.Supervisor.GetSnapshot(), MihomoServiceIpcCommand.GetConnections), CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        MihomoServiceIpcConnectionSnapshot snapshot = result.Payload!.ConnectionSnapshot!;
+        Assert.Equal(complete, snapshot.ConnectionsComplete);
+        Assert.Equal(count, snapshot.TotalConnectionCount);
+        Assert.Equal(complete ? count : 0, snapshot.Connections.Count);
+        Assert.Equal(1234, snapshot.UploadTotalBytes);
+        Assert.Equal(5678, snapshot.DownloadTotalBytes);
+        Assert.Null(snapshot.Validate());
+    }
+
     [Fact]
     public void ConnectionSnapshot_RejectsInvalidOptionalRuntimeDiagnostics()
     {

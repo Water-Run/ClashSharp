@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using ClashSharp.ApplicationModel.Diagnostics;
+using ClashSharp.ApplicationModel.Network;
 using ClashSharp.Model;
 using ClashSharp.Service;
 
@@ -12,6 +13,7 @@ internal sealed class NetworkSettingsRuntime : INetworkSettingsRuntime
 {
     private readonly Func<CancellationToken, Task<NetworkSettingsConfiguration>> _observe;
     private readonly Func<NetworkSettingsConfiguration, CancellationToken, Task> _apply;
+    private readonly Func<CancellationToken, Task<NetworkStateSnapshot>>? _readState;
     private bool _inactiveTransparentProxyPolicy;
     private UnresolvedConfiguration? _unresolved;
 
@@ -22,6 +24,16 @@ internal sealed class NetworkSettingsRuntime : INetworkSettingsRuntime
         ArgumentNullException.ThrowIfNull(proxy);
         _observe = token => takeover.ObserveNetworkSettingsAsync(configuration.ObserveRuntimeConfigurationIntegrity, proxy.ObserveOwnership, token);
         _apply = (target, token) => takeover.ApplyNetworkSettingsConfigurationAsync(configuration, target, token);
+        _readState = token => takeover.ObserveNetworkStateAsync(configuration.ObserveRuntimeConfigurationIntegrity, proxy.ObserveOwnership, token);
+    }
+
+    public async Task<NetworkStateSnapshot> ReadStateAsync(CancellationToken cancellationToken)
+    {
+        if (_unresolved is not null) { throw new InvalidOperationException("The network transaction requires runtime recovery before another observation."); }
+        if (_readState is not null) { return await _readState(cancellationToken).ConfigureAwait(false); }
+        NetworkSettingsConfiguration configuration = await ReadConfigurationAsync(cancellationToken).ConfigureAwait(false);
+        return configuration.ToSnapshot(configuration.Mode is ClashSharpMode.RuleTakeover or ClashSharpMode.FullTakeover
+            && !configuration.EffectiveTunEnabled);
     }
 
     internal NetworkSettingsRuntime(Func<CancellationToken, Task<NetworkSettingsConfiguration>> observe,

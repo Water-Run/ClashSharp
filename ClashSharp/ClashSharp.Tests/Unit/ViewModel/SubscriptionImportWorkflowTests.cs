@@ -29,6 +29,19 @@ public sealed class SubscriptionImportWorkflowTests
         Assert.Equal(2, catalog.ImportCount);
     }
 
+    [Theory]
+    [InlineData("https://example.com/sub?token=AbC", "https://example.com/sub?token=abc")]
+    [InlineData("https://example.com/Profile", "https://example.com/profile")]
+    [InlineData("https://first:password@example.com/sub", "https://second:password@example.com/sub")]
+    public async Task DistinctRequestAddressesKeepSeparateSubscriptions(string first, string second)
+    {
+        Catalog catalog = new();
+        await SubscriptionImportWorkflow.ImportAsync(catalog, "First", first, CancellationToken.None);
+        await SubscriptionImportWorkflow.ImportAsync(catalog, "Second", second, CancellationToken.None);
+        Assert.Equal(2, catalog.Links.Count);
+        Assert.Equal(2, catalog.ImportCount);
+    }
+
     [Fact]
     public async Task FailedDownloadKeepsTheLinkForRetry()
     {

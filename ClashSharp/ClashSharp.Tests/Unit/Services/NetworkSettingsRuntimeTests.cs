@@ -1,8 +1,13 @@
 extern alias ClashSharpUi;
 
 using System.Globalization;
+using ClashSharp.ApplicationModel.Mutations;
+using ClashSharp.ApplicationModel.Settings;
+using ClashSharp.Infrastructure.Settings;
 using ClashSharp.Model;
+using ClashSharp.Settings;
 using ClashSharp.Tests.Integration;
+using ClashSharp.Tests.Unit.Settings;
 using Host = ClashSharpUi::ClashSharp;
 using NetworkSettingsConfiguration = ClashSharpUi::ClashSharp.Hosting.Settings.NetworkSettingsConfiguration;
 using RuntimeConfigurationActivationPlan = ClashSharpUi::ClashSharp.Service.RuntimeConfigurationActivationPlan;
@@ -13,6 +18,147 @@ namespace ClashSharp.Tests.Unit.Services;
 /// <summary>Verifies actual production network observation and transaction code with isolated operating-system ports.</summary>
 public sealed class NetworkSettingsRuntimeTests
 {
+    [Fact]
+    public async Task GenerationProfileRuntime_PreservesTheInstalledNetworkAndLivePermissionAfterAFailedSettingsBatch()
+    {
+        await using DataGenerationTestDirectory directory = new();
+        var generation = directory.CreateGeneration(1);
+        JsonSettingsRepository repository = new(generation, SettingsRegistry.Default);
+        Assert.True((await repository.SaveAsync(SettingsEnvelopeTestData.CreateMatchingEnvelope(), 0, CancellationToken.None)).IsSucceeded);
+        MutationAdmissionBarrier admission = new();
+        await using SettingsAuthoritySession session = new(repository, SettingsRegistry.Default, admission);
+        NativePorts ports = new() { DataGenerationId = generation.GenerationId };
+        var configuration = CreateConfiguration(Path.Combine(generation.RootPath, "mihomo"), generationId: generation.GenerationId);
+        const string original = "proxies: []\nrules: ['MATCH,DIRECT']\n";
+        await configuration.ImportProfileConfigurationAsync("local-a", "A", original, CancellationToken.None);
+        NetworkSettingsConfiguration installed = new(ClashSharpMode.RuleTakeover, "local-a", false, 18395);
+        await ports.Takeover.ApplyNetworkSettingsConfigurationAsync(configuration, installed, CancellationToken.None);
+        using (MutationAdmissionLease lease = admission.AcquireOrdinary())
+        {
+            SettingValueChange[] changes =
+            [
+                new(SettingsRegistry.Keys.CurrentMode, SettingsRegistry.Default.Get("CurrentMode").Normalize("FullTakeover").Value!),
+                new(SettingsRegistry.Keys.MixedPort, SettingsRegistry.Default.Get("MixedPort").Normalize("18999").Value!),
+            ];
+            SettingsAuthorityResult changed = await session.ChangeAdmittedAsync(changes, Guid.NewGuid(), lease, CancellationToken.None);
+            var batch = Assert.Single(changed.Envelope!.PendingApplications);
+            SettingsAuthorityResult failed = await session.ApplyBatchAdmittedAsync(batch.BatchId, batch.AttemptId,
+                new RejectNetworkChange(installed), SettingsApplicationPhase.Live, lease, CancellationToken.None);
+            Assert.Equal(SettingsAuthorityStatus.ApplicationFailed, failed.Status);
+        }
+        long failedRevision = session.Snapshot.EnvelopeRevision;
+        Host.Hosting.Data.GenerationProfileRuntime runtime = new(session, configuration, ports.WindowsProxy);
+        runtime.BindTakeover(ports.Takeover);
+
+        Assert.True((await runtime.ImportAndApplyProfileAsync(
+            "local-a", "A", "proxies: []\nrules: ['MATCH,DIRECT']\n# refreshed\n", CancellationToken.None)).IsApplied);
+        Assert.Equal(installed, await ports.Takeover.ObserveNetworkSettingsAsync(
+            configuration.ObserveRuntimeConfigurationIntegrity, ports.WindowsProxy.ObserveOwnership, CancellationToken.None));
+        Assert.Equal("local-a", await runtime.ReadActiveProfileIdAsync("failed-target", CancellationToken.None));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => runtime.ImportProfileContentAsync(
+            "local-a", "Unauthorized", original, false, () => false,
+            _ => throw new InvalidOperationException("Inactive import must not execute."), CancellationToken.None));
+        Assert.Equal(failedRevision, session.Snapshot.EnvelopeRevision);
+        Assert.Equal(SettingsApplicationBatchState.Failed, Assert.Single(session.Snapshot.PendingApplications).State);
+    }
+
+    private sealed class RejectNetworkChange(NetworkSettingsConfiguration installed) : ISettingsApplicationParticipant
+    {
+        public SettingApplicationKind ApplicationKind => SettingApplicationKind.Network;
+        public Task ApplyAsync(SettingsApplicationRequest request, MutationAdmissionLease lease, CancellationToken token) =>
+            Task.FromException(new InvalidOperationException("Isolated occupied target port."));
+        public Task<SettingsApplicationObservation> ProbeAsync(SettingsApplicationRequest request, MutationAdmissionLease lease, CancellationToken token)
+        {
+            SettingValueChange[] values = request.Values.Keys.Select(key => new SettingValueChange(key,
+                SettingsRegistry.Default.Get(key.Value).NormalizeValue(
+                    key == SettingsRegistry.Keys.CurrentMode ? (object)installed.Mode : installed.MixedPort).Value!)).ToArray();
+            return Task.FromResult(new SettingsApplicationObservation(
+                request.Generation, request.Batch.BatchId, request.Batch.AttemptId, values));
+        }
+    }
+
+    [Fact]
+    public async Task ObservedProfileActivation_PreservesTheInstalledModeAndPort()
+    {
+        await using DataGenerationTestDirectory directory = new();
+        NativePorts ports = new();
+        var configuration = CreateConfiguration(directory.RootPath);
+        const string content = "proxies: []\nrules: ['MATCH,DIRECT']\n";
+        await configuration.ImportProfileConfigurationAsync("local-a", "A", content, CancellationToken.None);
+        await configuration.ImportProfileConfigurationAsync("local-b", "B", content, CancellationToken.None);
+        NetworkSettingsConfiguration installed = new(ClashSharpMode.RuleTakeover, "local-a", false, 18391);
+        await ports.Takeover.ApplyNetworkSettingsConfigurationAsync(configuration, installed, CancellationToken.None);
+
+        Assert.True((await ports.Takeover.ApplyProfileConfigurationAsync(
+            configuration, "local-b", ports.WindowsProxy.ObserveOwnership, CancellationToken.None)).IsApplied);
+        var observed = await ports.Takeover.ObserveNetworkSettingsAsync(
+            configuration.ObserveRuntimeConfigurationIntegrity, ports.WindowsProxy.ObserveOwnership, CancellationToken.None);
+
+        Assert.Equal(new NetworkSettingsConfiguration(installed.Mode, "local-b", false, installed.MixedPort), observed);
+    }
+
+    [Fact]
+    public async Task ObservedSourceEdit_RequiresLivePermissionAndFailsClosedForUnknownOwnership()
+    {
+        await using DataGenerationTestDirectory directory = new();
+        NativePorts ports = new();
+        var configuration = CreateConfiguration(directory.RootPath);
+        const string original = "proxies: []\nrules: ['MATCH,DIRECT']\n";
+        await configuration.ImportProfileConfigurationAsync("local-a", "A", original, CancellationToken.None);
+        await ports.Takeover.ApplyNetworkSettingsConfigurationAsync(
+            configuration, new(ClashSharpMode.RuleTakeover, "local-a", false, 18392), CancellationToken.None);
+        int writes = ports.Writes;
+        int checks = 0;
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => ports.Takeover.ImportObservedProfileContentAsync(
+            configuration, "local-a", "Changed", "rules: ['MATCH,REJECT']\n",
+            () => { ++checks; return false; }, ports.WindowsProxy.ObserveOwnership, CancellationToken.None));
+
+        Assert.Equal(1, checks);
+        Assert.Equal(original, await configuration.ReadImportedProfileConfigurationAsync("local-a", CancellationToken.None));
+        Assert.Equal(writes, ports.Writes);
+        ports.OwnerKnown = false;
+        await Assert.ThrowsAsync<InvalidOperationException>(() => ports.Takeover.ImportObservedProfileContentAsync(
+            configuration, "local-a", "Changed", "rules: ['MATCH,REJECT']\n",
+            () => true, ports.WindowsProxy.ObserveOwnership, CancellationToken.None));
+        Assert.Equal(original, await configuration.ReadImportedProfileConfigurationAsync("local-a", CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task NativeStateSnapshot_UsesTheProxyObservationThatWasValidated()
+    {
+        NativePorts ports = new();
+        ports.Proxy = new(true, "other-proxy:8080");
+        ports.Journal.Current = null;
+        RuntimeConfigurationIntegrityObservation empty = new(true, null, null, null);
+        var state = await ports.Takeover.ObserveNetworkStateAsync(() => empty,
+            ports.WindowsProxy.ObserveOwnership, CancellationToken.None);
+        Assert.Equal(ClashSharpMode.Disabled, state.Mode);
+        Assert.True(state.SystemProxyEnabled);
+        Assert.False(state.TransparentProxyEnabled);
+        Assert.Equal(0, ports.Writes);
+    }
+
+    [Fact]
+    public async Task NativeStateSnapshot_DoesNotMixAProxyChangeAfterTheLastValidatedRead()
+    {
+        NativePorts ports = new();
+        ports.Journal.Current = null;
+        RuntimeConfigurationIntegrityObservation empty = new(true, null, null, null);
+        int reads = 0;
+        var state = await ports.Takeover.ObserveNetworkStateAsync(() =>
+        {
+            if (++reads == 2)
+            {
+                ports.Registry.Current = ports.Registry.Current with { ProxyEnable = new(true, 1) };
+            }
+            return empty;
+        }, ports.WindowsProxy.ObserveOwnership, CancellationToken.None);
+        Assert.True(ports.WindowsProxy.GetCurrentState().IsEnabled);
+        Assert.False(state.SystemProxyEnabled);
+        Assert.Equal(ClashSharpMode.Disabled, state.Mode);
+    }
+
     [Fact]
     public async Task ColdStartup_SavedActiveConfigurationWithReleasedOwnersCanResumeWithoutLegacySettings()
     {
@@ -529,8 +675,9 @@ public sealed class NetworkSettingsRuntimeTests
         Assert.False(configuration.ObserveRuntimeConfigurationIntegrity().IsKnown);
     }
 
-    private static Host.Service.CoreConfigurationService CreateConfiguration(string path, Validator? validator = null) =>
-        new(path, new RejectLegacySettings(), new FixedControllerCredentialProvider(), new EmptyMetrics(), validator ?? new Validator(), key => key);
+    private static Host.Service.CoreConfigurationService CreateConfiguration(string path, Validator? validator = null, Guid? generationId = null) =>
+        new(path, new RejectLegacySettings(), new FixedControllerCredentialProvider(), new EmptyMetrics(), validator ?? new Validator(), key => key,
+            dataGenerationId: generationId);
 
     private sealed class RejectLegacySettings : Host.Service.ICoreConfigurationSettings
     {
@@ -578,6 +725,7 @@ public sealed class NetworkSettingsRuntimeTests
         Host.Service.INetworkTakeoverWindowsProxy, Host.Service.INetworkTakeoverMihomoService,
         Host.Service.INetworkTakeoverProxyRecovery, Host.Service.INetworkTakeoverReadiness
     {
+        public Guid? DataGenerationId { get; set; }
         public NativePorts()
         {
             WindowsProxy = new(Registry, Journal);
