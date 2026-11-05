@@ -516,6 +516,8 @@ public sealed partial class ProfileCatalogService : IProfileCatalog, IAsyncDispo
                 UpdateIntervalHours = updateIntervalHours,
                 Revision = checked(existingLink.Revision + 1),
                 Usage = uriChanged ? null : existingLink.Usage,
+                Status = SubscriptionStatusText.Normalize(existingLink.Status) == "ProfileCatalog.Subscription.Downloading"
+                    ? ProfileStatusText.Canceled : existingLink.Status,
             };
             ProfileSubscriptionScheduleState schedule = GetOrCreateScheduleState(document, existingLink);
             if (uriChanged)

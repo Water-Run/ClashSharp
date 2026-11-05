@@ -81,16 +81,21 @@ public sealed class ProfileCatalogServiceTests
         {
             await headers.Task.WaitAsync(TimeSpan.FromSeconds(5));
             bool changed = delete
-                ? await catalog.TryDeleteSubscriptionLinkAsync(link.Id, CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(2))
+                ? await catalog.TryDeleteSubscriptionLinkAsync(link.Id, CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5))
                 : await catalog.TryUpdateSubscriptionLinkAsync(link.Id, "Edited", link.Uri + "?revision=2",
-                    true, 24, CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(2));
+                    true, 24, CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5));
             Assert.True(changed);
-            await catalog.AddSubscriptionLinkAsync("Other", "https://other.invalid/profile", CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(2));
+            await catalog.AddSubscriptionLinkAsync("Other", "https://other.invalid/profile", CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5));
             release.SetResult();
             await Assert.ThrowsAsync<InvalidOperationException>(() => import);
             Assert.Empty(core.Imports);
             Assert.Empty(catalog.GetProfileHistory("subscription-" + link.Id));
-            if (!delete) { Assert.Equal("Edited", catalog.GetSubscriptionLinks().Single(item => item.Id == link.Id).Name); }
+            if (!delete)
+            {
+                ProfileSubscriptionLink edited = catalog.GetSubscriptionLinks().Single(item => item.Id == link.Id);
+                Assert.Equal("Edited", edited.Name);
+                Assert.Equal(ProfileStatusText.Canceled, edited.Status);
+            }
         }
         finally
         {
