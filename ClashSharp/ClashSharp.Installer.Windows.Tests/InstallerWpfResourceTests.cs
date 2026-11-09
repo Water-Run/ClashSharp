@@ -51,6 +51,7 @@ public sealed class InstallerWpfResourceTests
                     // ResourceDictionary defers parsing. Force every application resource to
                     // materialize so an invalid BasedOn reference cannot hide until window creation.
                     Materialize(application.Resources);
+                    InstallerWpfDynamicResourceBehavior.Verify(application, source);
                     foreach (string key in ColorResources)
                     {
                         Assert.NotNull(application.TryFindResource(key));
