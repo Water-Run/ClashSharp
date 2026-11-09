@@ -223,7 +223,7 @@ internal sealed class MihomoServiceControllerBroker
         MihomoServiceIpcProviderUpdate update,
         CancellationToken cancellationToken)
     {
-        EnsureIdentifier(update.Name, "provider name");
+        EnsureRouteSegment(update.Name, "provider name");
         string providerRoot = update.Kind switch
         {
             MihomoServiceIpcProviderKind.Proxy => "/providers/proxies/",
@@ -324,7 +324,7 @@ internal sealed class MihomoServiceControllerBroker
         string connectionId,
         CancellationToken cancellationToken)
     {
-        EnsureIdentifier(connectionId, "connection id");
+        EnsureRouteSegment(connectionId, "connection id");
         _ = await SendExpectedAsync(
                 transport,
                 HttpMethod.Delete,
@@ -388,7 +388,7 @@ internal sealed class MihomoServiceControllerBroker
         MihomoServiceIpcProxySelection selection,
         CancellationToken cancellationToken)
     {
-        EnsureIdentifier(selection.GroupName, "proxy group");
+        EnsureRouteSegment(selection.GroupName, "proxy group");
         EnsureIdentifier(selection.ProxyName, "proxy candidate");
         MihomoServiceIpcProxyGroup[] groups = await GetProxyGroupsAsync(
                 transport,
@@ -699,7 +699,17 @@ internal sealed class MihomoServiceControllerBroker
             HashSet<string> names = new(StringComparer.Ordinal);
             foreach (JsonProperty property in element.EnumerateObject())
             {
-                if (!names.Add(property.Name))
+                string name;
+                try
+                {
+                    name = property.Name;
+                }
+                catch (InvalidOperationException exception)
+                {
+                    throw CreateIllFormedTextException(exception);
+                }
+
+                if (!names.Add(name))
                 {
                     throw new InvalidDataException("The controller JSON contains duplicate properties.");
                 }
@@ -714,7 +724,23 @@ internal sealed class MihomoServiceControllerBroker
                 EnsureUniqueProperties(child, ref nodeCount);
             }
         }
+        else if (element.ValueKind == JsonValueKind.String)
+        {
+            // A lone-surrogate escape parses as JSON but cannot be read as text; it is an invalid
+            // upstream payload, not a transport failure, so it must surface as InvalidDataException.
+            try
+            {
+                _ = element.GetString();
+            }
+            catch (InvalidOperationException exception)
+            {
+                throw CreateIllFormedTextException(exception);
+            }
+        }
     }
+
+    private static InvalidDataException CreateIllFormedTextException(Exception inner) =>
+        new("The controller JSON contains text that is not well-formed UTF-16.", inner);
 
     private static JsonElement RequireObject(JsonElement element, string description)
     {
@@ -820,6 +846,20 @@ internal sealed class MihomoServiceControllerBroker
             || !IsWellFormedUtf16(value))
         {
             throw new InvalidDataException($"The controller {description} is invalid.");
+        }
+    }
+
+    /// <summary>Validates an identifier that is about to become one URL path segment.</summary>
+    /// <remarks>
+    /// "." and ".." survive percent-encoding but are dot-segments that the HTTP client normalizes
+    /// away, so DELETE /connections/. would silently become DELETE /connections/ (close all).
+    /// </remarks>
+    private static void EnsureRouteSegment(string value, string description)
+    {
+        EnsureIdentifier(value, description);
+        if (value is "." or "..")
+        {
+            throw new InvalidDataException($"The controller {description} is not a valid route segment.");
         }
     }
 
