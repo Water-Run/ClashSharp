@@ -228,7 +228,9 @@ internal static class MihomoYamlSemanticValidator
             using StringReader reader = new(configurationText);
             stream.Load(new NestingLimitedParser(new Parser(reader), MaxNestingDepth));
         }
-        catch (YamlException exception)
+        // Some malformed flow collections surface from the YAML library as an internal-state
+        // InvalidOperationException rather than a YamlException; both mean the text is not valid YAML.
+        catch (Exception exception) when (exception is YamlException or InvalidOperationException)
         {
             throw new ArgumentException("Mihomo configuration is not valid YAML.", parameterName, exception);
         }

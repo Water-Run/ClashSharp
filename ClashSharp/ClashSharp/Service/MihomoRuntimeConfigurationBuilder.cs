@@ -164,7 +164,8 @@ internal static class MihomoRuntimeConfigurationBuilder
         string normalized = configurationText
             .Replace("\r\n", "\n", StringComparison.Ordinal)
             .Replace('\r', '\n');
-        if (normalized.StartsWith('\uFEFF')) { normalized = normalized[1..]; }
+        // A byte-order mark is never YAML content; strip every leading one so that normalizing twice changes nothing.
+        normalized = normalized.TrimStart('\uFEFF');
         return normalized.EndsWith('\n') ? normalized : normalized + "\n";
     }
 
