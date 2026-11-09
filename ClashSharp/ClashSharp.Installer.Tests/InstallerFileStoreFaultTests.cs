@@ -432,6 +432,55 @@ public sealed class InstallerFileStoreFaultTests
 
     [Theory]
     [MemberData(nameof(Kinds))]
+    public async Task ClearOfADocumentHeldOpenByAnotherToolIsReportedWithAStableCodeAndConvergesOnRelease(string kind)
+    {
+        using InstallerScratchDirectory scratch = new();
+        using FileStoreHarness harness = FileStoreHarness.Create(kind, scratch.Path);
+        string hash = (await WriteChainAsync(harness, harness.TerminalIndex))!;
+
+        // A backup or indexing tool that opened the file with delete sharing: depending on the Windows
+        // delete semantics the delete either completes or leaves the name delete-pending. The store must
+        // report one of the two stable outcomes, never a raw platform exception.
+        FileStream held = new(
+            harness.DocumentPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        try
+        {
+            Exception? failure = await Record.ExceptionAsync(() => harness.ClearAsync(hash, CancellationToken.None));
+
+            if (failure is not null)
+            {
+                InstallerProtocolException refusal = Assert.IsType<InstallerProtocolException>(failure);
+                Assert.EndsWith(".target_query_failed", refusal.DiagnosticCode, StringComparison.Ordinal);
+            }
+        }
+        finally
+        {
+            await held.DisposeAsync();
+        }
+
+        // Once the other handle is released the deletion completes and the store sees a clean absence.
+        Assert.Null(await harness.LoadHashAsync(CancellationToken.None));
+        Assert.Empty(harness.RootFiles());
+    }
+
+    [Theory]
+    [MemberData(nameof(Kinds))]
+    public async Task AMissingRootIsAnAbsentDocumentForReadsAndAnIoFailureForWritesWithNothingCreated(string kind)
+    {
+        using InstallerScratchDirectory scratch = new();
+        string root = scratch.Combine("not-created-yet");
+        using FileStoreHarness harness = FileStoreHarness.Create(kind, root);
+
+        Assert.Null(await harness.LoadHashAsync(CancellationToken.None));
+        await Assert.ThrowsAnyAsync<IOException>(() => harness.SaveAsync(0, null, CancellationToken.None));
+        await Assert.ThrowsAsync<InstallerProtocolException>(() => harness.ClearAsync(InstallerTestData.Hash, CancellationToken.None));
+
+        Assert.False(Directory.Exists(root));
+        Assert.Empty(Directory.GetFileSystemEntries(scratch.Path));
+    }
+
+    [Theory]
+    [MemberData(nameof(Kinds))]
     public async Task ADisposedStoreRefusesEveryOperationAndDisposeIsIdempotent(string kind)
     {
         using InstallerScratchDirectory scratch = new();
