@@ -12,6 +12,8 @@
   <ItemGroup>
     <Compile Include="..\ClashSharp.Installer\InstallerBackdropBootstrap.cs" Link="Installer\InstallerBackdropBootstrap.cs" />
     <Compile Include="..\ClashSharp.Installer\MainWindow.xaml.cs" Link="Installer\MainWindow.xaml.cs" />
+    <Compile Include="..\ClashSharp.Installer\Runtime\EmbeddedInstallerReleaseManifest.cs" Link="Installer\Runtime\EmbeddedInstallerReleaseManifest.cs" />
+    <Compile Include="..\ClashSharp.Installer\Runtime\MigrationPreviewInstallerRuntime.cs" Link="Installer\Runtime\MigrationPreviewInstallerRuntime.cs" />
     <Page Include="..\ClashSharp.Installer\MainWindow.xaml" Link="Installer\MainWindow.xaml" />
     <ProjectReference Include="..\ClashSharp.Installer.Core\ClashSharp.Installer.Core.csproj" />
     <ProjectReference Include="..\ClashSharp.Installer.Presentation\ClashSharp.Installer.Presentation.csproj" />
