@@ -33,4 +33,7 @@ internal sealed class MasterHeroStatusItemViewModel : ObservableObject
         get => _value;
         set => SetProperty(ref _value, value);
     }
+
+    /// <summary>Gives screen readers a meaningful row name; the default would be the CLR type name.</summary>
+    public override string ToString() => string.IsNullOrWhiteSpace(Value) ? Title : Title + ": " + Value;
 }

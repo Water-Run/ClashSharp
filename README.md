@@ -88,7 +88,7 @@ Closing the main window minimizes Clash# to the tray by default, and it keeps ru
 ### Connect an Agent through MCP
 
 1. Open **Settings › MCP server**, enable the server, and choose the permissions to grant. The server is off by default, with only status reading preselected.
-2. Select **Apply changes** and confirm that the actual state is **Running**. The default Streamable HTTP endpoint is `http://127.0.0.1:17892/mcp`.
+2. Select **Apply changes** and confirm that the actual state is **Running**. The default Streamable HTTP endpoint is `http://127.0.0.1:20000/mcp`.
 3. Use **Copy client configuration** to supply the endpoint and authorization header to an Agent client that supports Streamable HTTP. The copied configuration contains a private token; Clash# excludes this copy from Windows clipboard history and cloud synchronization.
 4. Keep Clash# running while the Agent uses it. Closing the MCP server disconnects clients; replacing its token requires copying the configuration again.
 

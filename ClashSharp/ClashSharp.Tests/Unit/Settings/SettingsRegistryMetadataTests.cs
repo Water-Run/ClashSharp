@@ -36,7 +36,7 @@ public sealed class SettingsRegistryMetadataTests
     private static readonly IReadOnlyList<ExpectedDefinition> ExpectedDefinitions =
     [
         Mcp("McpServerEnabled", typeof(bool), "false"),
-        Mcp("McpServerPort", typeof(int), "17892"),
+        Mcp("McpServerPort", typeof(int), "20000"),
         Mcp("McpAllowedScopes", typeof(int), "1"),
         Internal("DataUnitStyle", typeof(DataUnitStyle), "BinaryWithDecimalLabels", SettingCategory.Regional,
             SettingsResetScope.Units, SettingApplicationKind.Appearance, "Settings.Units"),

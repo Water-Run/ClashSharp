@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using System.Linq;
 using ClashSharp.Model;
 
 namespace ClashSharp.ViewModel;
@@ -29,4 +30,7 @@ internal sealed class RulePreviewDisplay(
     public long HitCount => Model.HitCount;
 
     public string HitCountDisplay => Model.IsHitCountKnown ? Model.HitCount.ToString("N0", CultureInfo.CurrentCulture) : "—";
+
+    /// <summary>Gives screen readers a meaningful row name; the default would be the CLR type name.</summary>
+    public override string ToString() => string.Join(", ", new[] { RuleType, PayloadDisplay, Action }.Where(part => !string.IsNullOrWhiteSpace(part)));
 }

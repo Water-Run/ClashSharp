@@ -161,4 +161,7 @@ internal sealed class TriggerTaskItemViewModel : ObservableObject
     }
 
     private string FormatBytes(long bytes) => _formatter.Bytes(bytes);
+
+    /// <summary>Gives screen readers a meaningful row name; the default would be the CLR type name.</summary>
+    public override string ToString() => string.Join(", ", new[] { Name, ConditionsSummary, ActionsSummary }.Where(part => !string.IsNullOrWhiteSpace(part)));
 }

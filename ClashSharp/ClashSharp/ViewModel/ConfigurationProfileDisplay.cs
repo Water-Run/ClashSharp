@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.Model;
 
@@ -94,4 +95,7 @@ internal sealed class ConfigurationProfileDisplay(
     public int RuleCount => Model.RuleCount;
 
     public bool IsActive => Model.IsActive;
+
+    /// <summary>Gives screen readers a meaningful row name; the default would be the CLR type name.</summary>
+    public override string ToString() => string.Join(", ", new[] { NameDisplay, ActiveLabelDisplay, StatusDisplay }.Where(part => !string.IsNullOrWhiteSpace(part)));
 }

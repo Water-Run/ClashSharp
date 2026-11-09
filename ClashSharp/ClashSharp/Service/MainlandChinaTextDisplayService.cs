@@ -37,7 +37,6 @@ public sealed class MainlandChinaTextDisplayService
     [
         "习近平",
         "習近平",
-        "64",
         "六四",
         "天安门",
         "天安門",

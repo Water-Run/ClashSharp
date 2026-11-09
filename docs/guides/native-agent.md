@@ -7,7 +7,7 @@ Clash# provides an authenticated local MCP server. You choose what an Agent can 
 ## Connect
 
 1. Enable the MCP server, select the permissions you need, and choose **Apply changes**.
-2. Confirm that **Actual server state** is **Running**. Use the address displayed below it; the default is `http://127.0.0.1:17892/mcp`.
+2. Confirm that **Actual server state** is **Running**. Use the address displayed below it; the default is `http://127.0.0.1:20000/mcp`.
 3. Choose **Copy client configuration**. In a client that supports **Streamable HTTP**, enter the copied URL and `Authorization` header. Clients may wrap these fields in their own configuration format.
 4. Keep Clash# running. Closing its window normally leaves it running in the tray; exiting the application stops the MCP server.
 
@@ -17,7 +17,7 @@ The copied fields have this shape. Replace the placeholder with the configuratio
 
 ```json
 {
-  "url": "http://127.0.0.1:17892/mcp",
+  "url": "http://127.0.0.1:20000/mcp",
   "headers": {
     "Authorization": "Bearer YOUR_PRIVATE_TOKEN"
   }
@@ -26,7 +26,7 @@ The copied fields have this shape. Replace the placeholder with the configuratio
 
 The token grants the permissions you selected. Put it only in a trusted client's configuration. Clash# excludes this copied item from Windows clipboard history and cloud synchronization.
 
-The endpoint listens on the Windows device's loopback address. A remote machine or container may resolve `127.0.0.1` to a different environment. MCP uses port `17892` by default; HTTP/SOCKS proxy connections use the separate mixed port, which defaults to `10000`.
+The endpoint listens on the Windows device's loopback address. A remote machine or container may resolve `127.0.0.1` to a different environment. MCP uses port `20000` by default; HTTP/SOCKS proxy connections use the separate mixed port, which defaults to `10000`.
 
 ## Choose permissions
 

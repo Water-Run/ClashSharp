@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using ClashSharp.Model;
 using YamlDotNet.Core;
 using YamlDotNet.RepresentationModel;
@@ -109,6 +110,7 @@ internal static class MihomoRuntimeConfigurationBuilder
         EnsureSelectionPersistence(managedRoot);
         if (transparentProxyEnabled)
         {
+            NeutralizePrivilegedPreferences(managedRoot);
             EnsureTunDnsConfiguration(managedRoot);
         }
 
@@ -274,6 +276,67 @@ internal static class MihomoRuntimeConfigurationBuilder
                 PlainScalar("https://dns.alidns.com/dns-query"),
                 PlainScalar("https://1.1.1.1/dns-query")));
         return dns;
+    }
+
+    /// <summary>
+    /// Neutralizes the profile preferences whose privileged effect the transparent proxy service must not have.
+    /// </summary>
+    /// <remarks>
+    /// The service runs the core as LocalSystem with the GeoData files the installer provides. It never takes a
+    /// download address from a profile, never writes GeoData by itself and never writes the system clock, so these
+    /// preferences have no meaning there. Subscriptions carry them routinely, often to point a user-level core at a
+    /// mirror; refusing the whole profile for them would make the default transparent proxy unusable. The unwanted
+    /// effect is therefore switched off (the address is removed, the switches are set to false) instead of the profile
+    /// being refused. The service still rejects each of them independently, and ordinary mode keeps the profile as is.
+    /// Anything else the service forbids is not a preference and is still refused with a diagnostic.
+    /// </remarks>
+    private static void NeutralizePrivilegedPreferences(YamlMappingNode root)
+    {
+        YamlNode? downloadAddress = root.Children.Keys.FirstOrDefault(node =>
+            node is YamlScalarNode scalar && string.Equals(scalar.Value, "geox-url", StringComparison.Ordinal));
+        if (downloadAddress is not null)
+        {
+            _ = root.Children.Remove(downloadAddress);
+        }
+
+        // The service rejects these switches wherever they appear in the document, so they are found the same way.
+        Stack<YamlNode> pending = new();
+        HashSet<YamlNode> visited = new(ReferenceEqualityComparer.Instance);
+        pending.Push(root);
+        while (pending.Count > 0)
+        {
+            YamlNode current = pending.Pop();
+            if (!visited.Add(current))
+            {
+                continue;
+            }
+
+            switch (current)
+            {
+                case YamlMappingNode mapping:
+                    foreach (KeyValuePair<YamlNode, YamlNode> pair in mapping.Children.ToArray())
+                    {
+                        if (pair.Key is YamlScalarNode { Value: "geo-auto-update" or "write-to-system" }
+                            && !(pair.Value is YamlScalarNode { Value: string value }
+                                && string.Equals(value, "false", StringComparison.OrdinalIgnoreCase)))
+                        {
+                            mapping.Children[pair.Key] = PlainScalar("false");
+                            continue;
+                        }
+
+                        pending.Push(pair.Value);
+                    }
+
+                    break;
+                case YamlSequenceNode sequence:
+                    foreach (YamlNode child in sequence.Children)
+                    {
+                        pending.Push(child);
+                    }
+
+                    break;
+            }
+        }
     }
 
     private static void EnsureTunDnsConfiguration(YamlMappingNode root)

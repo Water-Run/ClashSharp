@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using System.Linq;
 using ClashSharp.Model;
 
 namespace ClashSharp.ViewModel;
@@ -35,4 +36,7 @@ internal sealed class ProxyNodeDisplay(ProxyNode model, string nameDisplay) : Ob
     public RegionMetadata Region => Model.Region;
 
     public int? LatencyMilliseconds => Model.LatencyMilliseconds;
+
+    /// <summary>Gives screen readers a meaningful row name; the default would be the CLR type name.</summary>
+    public override string ToString() => string.Join(", ", new[] { NameDisplay, Protocol, LatencyDisplay }.Where(part => !string.IsNullOrWhiteSpace(part)));
 }

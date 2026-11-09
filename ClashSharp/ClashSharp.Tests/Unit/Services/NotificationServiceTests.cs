@@ -719,6 +719,47 @@ public sealed class NotificationServiceTests
     }
 
     [Theory]
+    [InlineData(NotificationLevel.CriticalOnly)]
+    [InlineData(NotificationLevel.Default)]
+    [InlineData(NotificationLevel.More)]
+    public void ProxyFailureNotification_CarriesTheSpecificReasonAndStableCode(NotificationLevel level)
+    {
+        FakeWin11NotificationPlatform platform = new();
+        NotificationService service = CreateService(true, level, platform, new(), new());
+        service.SetForegroundProbe(static () => true);
+
+        service.NotifyProxyFailure("configuration.tun_dns_listener_unsupported");
+
+        NotificationRequest request = Assert.Single(platform.Requests);
+        Assert.Equal("RuntimeFailure.TunDnsListener [configuration.tun_dns_listener_unsupported]", request.Message);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("Not A Stable Code!")]
+    public void ProxyFailureNotification_FallsBackToTheGenericMessageWithoutAValidCode(string? code)
+    {
+        FakeWin11NotificationPlatform platform = new();
+        NotificationService service = CreateService(true, NotificationLevel.CriticalOnly, platform, new(), new());
+
+        service.NotifyProxyFailure(code);
+
+        Assert.Equal("Notification.Proxy.Unavailable", Assert.Single(platform.Requests).Message);
+    }
+
+    [Fact]
+    public void ProxyFailureNotification_RespectsTheMasterSwitch()
+    {
+        FakeWin11NotificationPlatform platform = new();
+        NotificationService service = CreateService(false, NotificationLevel.More, platform, new(), new());
+
+        service.NotifyProxyFailure("configuration.tun_dns_listener_unsupported");
+
+        Assert.Empty(platform.Requests);
+    }
+
+    [Theory]
     [InlineData("About.Update.Unavailable")]
     [InlineData("About.Update.Current")]
     [InlineData("Master.Diagnostics.Failed")]

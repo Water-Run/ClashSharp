@@ -499,4 +499,7 @@ internal sealed class TriggerConditionEditorViewModel : ObservableObject
             _ => "Triggers.Validation.InvalidCondition",
         };
     }
+
+    /// <summary>Gives screen readers a meaningful row name; the default would be the CLR type name.</summary>
+    public override string ToString() => string.IsNullOrWhiteSpace(Description) ? Title : Title + ", " + Description;
 }

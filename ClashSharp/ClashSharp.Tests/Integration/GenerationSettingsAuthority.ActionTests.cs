@@ -140,6 +140,65 @@ public sealed partial class GenerationSettingsAuthorityTests
         Assert.Equal("RuleTakeover", fixture.Session.Snapshot.Desired[SettingsRegistry.Keys.CurrentMode].Value.CanonicalText);
     }
 
+    private static Task<NetworkTakeoverResult> RunNetworkCommand(Actions actions, string command) => command switch
+    {
+        "standby" => actions.ApplyNetworkModeAsync(ClashSharpMode.Standby, CancellationToken.None),
+        "rule" => actions.ApplyNetworkModeAsync(ClashSharpMode.RuleTakeover, CancellationToken.None),
+        "disabled" => actions.ApplyNetworkModeAsync(ClashSharpMode.Disabled, CancellationToken.None),
+        "tun-off" => actions.ApplyTransparentProxyAsync(false, CancellationToken.None),
+        _ => throw new ArgumentOutOfRangeException(nameof(command)),
+    };
+
+    /// <summary>
+    /// A failed network attempt is retained, and that must never make a later command fail: whichever explicit
+    /// network command the user issues next, once the cause is gone, it converges and leaves nothing pending.
+    /// </summary>
+    [Theory]
+    [InlineData("standby")]
+    [InlineData("rule")]
+    [InlineData("disabled")]
+    [InlineData("tun-off")]
+    public async Task ProductionNetworkAction_ANewCommandResolvesAFailedNetworkAttemptInsteadOfBeingBlockedByIt(string command)
+    {
+        await using Fixture fixture = await Fixture.CreateAsync();
+        _ = await fixture.Authority.OpenAsync(CancellationToken.None);
+        Participant network = fixture.Participants[SettingApplicationKind.Network];
+        network.BeforeApply = () => throw new IOException("Isolated activation failure.");
+        Actions actions = CreateActions(fixture, new ActionObserver(fixture));
+        _ = await Assert.ThrowsAnyAsync<Exception>(() => actions.ApplyNetworkModeAsync(ClashSharpMode.RuleTakeover, CancellationToken.None));
+        Assert.Contains(fixture.Session.Snapshot.PendingApplications, batch =>
+            batch.ApplicationKind == SettingApplicationKind.Network && batch.State == SettingsApplicationBatchState.Failed);
+
+        // The cause is removed, as the failure message advises, and the user acts again.
+        network.BeforeApply = null;
+        _ = await RunNetworkCommand(actions, command);
+
+        Assert.DoesNotContain(fixture.Session.Snapshot.PendingApplications, batch => batch.ApplicationKind == SettingApplicationKind.Network);
+        foreach (SettingKey key in new[] { SettingsRegistry.Keys.CurrentMode, SettingsRegistry.Keys.ActiveProfileId,
+                     SettingsRegistry.Keys.TransparentProxyEnabled, SettingsRegistry.Keys.MixedPort })
+        {
+            Assert.Equal(SettingAppliedStateKind.Verified, fixture.Session.Snapshot.Applied[key].Kind);
+        }
+    }
+
+    [Fact]
+    public async Task ProductionNetworkAction_AFailedAttemptIsRetriedOnceAndAGenuineFailureIsStillReported()
+    {
+        await using Fixture fixture = await Fixture.CreateAsync();
+        _ = await fixture.Authority.OpenAsync(CancellationToken.None);
+        Participant network = fixture.Participants[SettingApplicationKind.Network];
+        network.BeforeApply = () => throw new IOException("Isolated activation failure.");
+        Actions actions = CreateActions(fixture, new ActionObserver(fixture));
+        _ = await Assert.ThrowsAnyAsync<Exception>(() => actions.ApplyNetworkModeAsync(ClashSharpMode.RuleTakeover, CancellationToken.None));
+        int afterFirst = network.Applies;
+
+        _ = await Assert.ThrowsAnyAsync<Exception>(() => actions.ApplyNetworkModeAsync(ClashSharpMode.Standby, CancellationToken.None));
+
+        Assert.InRange(network.Applies - afterFirst, 1, 2);
+        Assert.Contains(fixture.Session.Snapshot.PendingApplications, batch =>
+            batch.ApplicationKind == SettingApplicationKind.Network && batch.State == SettingsApplicationBatchState.Failed);
+    }
+
     [Fact]
     public async Task ProductionNetworkAction_PreservesUnrelatedPendingProfileIntent()
     {

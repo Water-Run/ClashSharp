@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using System.Linq;
 using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.Model;
 
@@ -94,4 +95,7 @@ internal sealed class ProfileSubscriptionLinkDisplay(
     }
 
     private string FormatBytes(decimal bytes) => Formatter.Bytes(bytes);
+
+    /// <summary>Gives screen readers a meaningful row name; the default would be the CLR type name.</summary>
+    public override string ToString() => string.Join(", ", new[] { NameDisplay, StatusDisplay, UsageDisplay }.Where(part => !string.IsNullOrWhiteSpace(part)));
 }

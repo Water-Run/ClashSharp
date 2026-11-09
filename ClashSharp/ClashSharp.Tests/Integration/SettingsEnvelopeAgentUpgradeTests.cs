@@ -47,7 +47,7 @@ public sealed class SettingsEnvelopeAgentUpgradeTests
         });
         var result = new SettingsMigrationPlanner(SettingsRegistry.Default).CreatePlan(input, Guid.NewGuid());
         Assert.False(result.Envelope.Desired[SettingsRegistry.Keys.McpServerEnabled].Value.Get<bool>());
-        Assert.Equal(17892, result.Envelope.Desired[SettingsRegistry.Keys.McpServerPort].Value.Get<int>());
+        Assert.Equal(20000, result.Envelope.Desired[SettingsRegistry.Keys.McpServerPort].Value.Get<int>());
         Assert.Equal(1, result.Envelope.Desired[SettingsRegistry.Keys.McpAllowedScopes].Value.Get<int>());
         Assert.All(SettingsRegistry.Default.Definitions.Where(definition => definition.ApplicationKind == SettingApplicationKind.McpServer),
             definition => Assert.False(definition.IncludeInDataPackage));

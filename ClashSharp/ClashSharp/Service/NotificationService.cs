@@ -37,6 +37,12 @@ internal interface IApplicationNotificationSink
 
     /// <summary>Reports a failed proxy availability change.</summary>
     void NotifyProxyFailure() { }
+
+    /// <summary>
+    /// Reports a failed proxy availability change with the same actionable, localized reason the page shows.
+    /// </summary>
+    /// <param name="diagnosticCode">Validated stable runtime diagnostic code, or null when none is known.</param>
+    void NotifyProxyFailure(string? diagnosticCode) => NotifyProxyFailure();
 }
 
 /// <summary>Win11 notification display boundary used by <see cref="NotificationService"/>.</summary>
@@ -456,6 +462,17 @@ internal sealed class NotificationService :
         GetString("Notification.Runtime.Title"), GetString("Notification.Runtime.UnexpectedExit"));
 
     public void NotifyProxyFailure() => ReportAvailability("Notification.Runtime.Title", "Notification.Proxy.Unavailable", true);
+
+    /// <summary>
+    /// The notification exists for the moment the user is not looking at Clash#, so it carries the same
+    /// localized reason and stable support code as the page. Only fixed application text and the bounded code
+    /// are used; exception messages never reach the notification.
+    /// </summary>
+    public void NotifyProxyFailure(string? diagnosticCode) =>
+        ShowUnlessVisibleInWindow(
+            NotificationLevel.CriticalOnly,
+            GetString("Notification.Runtime.Title"),
+            RuntimeFailureDiagnostics.Format(diagnosticCode, GetString, GetString("Notification.Proxy.Unavailable")));
 
     public void NotifyCustom(string message)
     {

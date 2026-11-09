@@ -34,7 +34,7 @@ public sealed class SettingsRegistryTests
         new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["McpServerEnabled"] = "false",
-            ["McpServerPort"] = "17892",
+            ["McpServerPort"] = "20000",
             ["McpAllowedScopes"] = "1",
             ["DataUnitStyle"] = "BinaryWithDecimalLabels",
             ["RateUnit"] = "Bytes",

@@ -201,10 +201,70 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
         catch (Exception failure) when (!ExceptionGraphClassifier.IsProcessFatal(failure)
             && !ExceptionGraphClassifier.IsCallerCancellation(failure, cancellationToken))
         {
-            TryNotify(_notifications.NotifyProxyFailure);
+            string? diagnosticCode = RuntimeDiagnosticCode.Extract(failure);
+            TryNotify(() => _notifications.NotifyProxyFailure(diagnosticCode));
             OperationNotificationRunner.MarkFailureReported(failure);
             throw;
         }
+    }
+
+    private static readonly SettingKey[] NetworkApplicationKeys =
+    [
+        SettingsRegistry.Keys.CurrentMode, SettingsRegistry.Keys.ActiveProfileId,
+        SettingsRegistry.Keys.TransparentProxyEnabled, SettingsRegistry.Keys.MixedPort,
+    ];
+
+    /// <summary>
+    /// Runs one explicit network command and resolves a failed network attempt left by an earlier command.
+    /// </summary>
+    /// <remarks>
+    /// The settings layer never replaces a failed attempt silently, and that contract is unchanged. A failed
+    /// network attempt (for example a profile the transparent proxy service cannot host) would otherwise make
+    /// every later network action fail, including switching to system proxy as the failure message advises,
+    /// until the user found the retry link on the Settings page. The new command is itself the user's request
+    /// to try again, so each failed network attempt is retried under a fresh identity before the command is run
+    /// once more. A genuine new failure is returned as it is; it is never retried in a loop.
+    /// </remarks>
+    private async Task<SettingsAuthorityResult> ApplyNetworkCommandAsync(
+        IReadOnlyList<SettingValueChange> changes, MutationAdmissionLease lease, CancellationToken cancellationToken)
+    {
+        SettingsAuthorityResult command = await _settings.ApplyRuntimeChangesAdmittedAsync(
+            changes, Guid.NewGuid(), lease, cancellationToken).ConfigureAwait(false);
+        if (command.Envelope is null || !IsBlockedByFailedNetworkAttempt(command))
+        {
+            return command;
+        }
+
+        foreach (SettingsApplicationBatch failed in command.Envelope.PendingApplications
+                     .Where(IsFailedNetworkBatch).ToArray())
+        {
+            SettingsAuthorityResult retried = await _settings.RetryAdmittedAsync(
+                failed.BatchId, failed.AttemptId, Guid.NewGuid(), lease, cancellationToken).ConfigureAwait(false);
+            if (!retried.IsSucceeded)
+            {
+                return retried;
+            }
+        }
+
+        return await _settings.ApplyRuntimeChangesAdmittedAsync(
+            changes, Guid.NewGuid(), lease, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static bool IsFailedNetworkBatch(SettingsApplicationBatch batch) =>
+        batch.State == SettingsApplicationBatchState.Failed && batch.ApplicationKind == SettingApplicationKind.Network;
+
+    private static bool IsBlockedByFailedNetworkAttempt(SettingsAuthorityResult command)
+    {
+        SettingsEnvelope envelope = command.Envelope!;
+        if (!envelope.PendingApplications.Any(IsFailedNetworkBatch))
+        {
+            return false;
+        }
+
+        // Either the retained attempt refused to start again, or the command itself took effect but a key of
+        // the retained attempt could not be verified, which the caller would report as superseded.
+        return command.Status == SettingsAuthorityStatus.Rejected && command.Code == "settings.application.state"
+            || command.IsSucceeded && NetworkApplicationKeys.Any(key => envelope.Applied[key].Kind != SettingAppliedStateKind.Verified);
     }
 
     private async Task<NetworkTakeoverResult> ApplyNetworkChangesCoreAsync(
@@ -213,8 +273,7 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
     {
         using MutationAdmissionLease lease = await _admissionBarrier.AcquireOrdinaryAsync(cancellationToken).ConfigureAwait(false);
         SettingsEnvelope before = _settings.CaptureSnapshot().Envelope;
-        SettingsAuthorityResult command = await _settings.ApplyRuntimeChangesAdmittedAsync(
-            changes, Guid.NewGuid(), lease, cancellationToken).ConfigureAwait(false);
+        SettingsAuthorityResult command = await ApplyNetworkCommandAsync(changes, lease, cancellationToken).ConfigureAwait(false);
         SettingsEnvelope committed = RequireApplied(command);
         // Keep mutation admission until the final independent read, including after a page cancels.
         // A directory transition must drain this complete operation before retiring its runtime.

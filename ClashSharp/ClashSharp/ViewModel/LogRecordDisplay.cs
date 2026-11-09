@@ -1,3 +1,4 @@
+using System.Linq;
 using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.Model;
 
@@ -25,4 +26,7 @@ internal sealed class LogRecordDisplay(LogRecord entry, string levelDisplay, str
         SetProperty(ref _sourceDisplay, source, nameof(SourceDisplay));
         OnPropertyChanged(nameof(CreatedAtDisplay));
     }
+
+    /// <summary>Gives screen readers a meaningful row name; the default would be the CLR type name.</summary>
+    public override string ToString() => string.Join(", ", new[] { CreatedAtDisplay, LevelDisplay, SourceDisplay, Message }.Where(part => !string.IsNullOrWhiteSpace(part)));
 }

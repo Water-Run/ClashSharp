@@ -4,7 +4,7 @@ namespace ClashSharp.Agent;
 public sealed record McpServerConfiguration
 {
     /// <summary>Default loopback port for native agent connections.</summary>
-    public const int DefaultPort = 17892;
+    public const int DefaultPort = 20000;
 
     /// <summary>Creates a validated endpoint configuration.</summary>
     /// <param name="port">Non-privileged TCP port in the range 1024 through 65535.</param>

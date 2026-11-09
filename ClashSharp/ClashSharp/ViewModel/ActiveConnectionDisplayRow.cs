@@ -1,6 +1,7 @@
 using System;
 using System.ComponentModel;
 using System.Globalization;
+using System.Linq;
 using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.Model;
 
@@ -76,5 +77,6 @@ public sealed class ActiveConnectionDisplayRow : INotifyPropertyChanged
         PropertyChanged?.Invoke(this, new(nameof(DownloadDisplay)));
     }
 
-
+    /// <summary>Gives screen readers a meaningful row name; the default would be the CLR type name.</summary>
+    public override string ToString() => string.Join(", ", new[] { ProcessNameDisplay, HostDisplay, RuleDisplay, ProxyNameDisplay }.Where(part => !string.IsNullOrWhiteSpace(part)));
 }
