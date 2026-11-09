@@ -140,7 +140,9 @@ public static class InstallerTransactionCodec
 
             return journal;
         }
-        catch (JsonException exception)
+        // Invalid UTF-8 inside a token is reported by System.Text.Json as InvalidOperationException
+        // only when the token is read; it is the same malformed-document condition as a JsonException.
+        catch (Exception exception) when (exception is JsonException or InvalidOperationException)
         {
             throw new InstallerProtocolException("installer.transaction.json_invalid", exception);
         }

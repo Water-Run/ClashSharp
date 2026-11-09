@@ -100,8 +100,9 @@ public static class InstallerRetiredUninstallProtocol
                 }
             }
         }
-        catch (JsonException)
+        catch (Exception exception) when (exception is JsonException or InvalidOperationException)
         {
+            // Invalid UTF-8 inside a string token surfaces as InvalidOperationException on read.
             throw new InstallerProtocolException("installer.retired_uninstall.document_invalid");
         }
         if (failure is not null)
