@@ -319,9 +319,13 @@ internal sealed class MihomoServicePipeServer
 
     private static bool IsRecoverableConnectionFailure(Exception exception)
     {
+        // InvalidDataException covers every frame-level protocol violation (bad length, invalid JSON,
+        // unknown members) and a request without correlation identity. One hostile or buggy client
+        // frame must cost only its own connection, never the serial loop that serves all later commands.
         return exception is IOException
             or UnauthorizedAccessException
             or TimeoutException
-            or OperationCanceledException;
+            or OperationCanceledException
+            or InvalidDataException;
     }
 }
