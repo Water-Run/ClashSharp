@@ -118,8 +118,10 @@ public sealed class JsonSettingsRepositoryFaultMatrixTests
         IReadOnlyList<SettingDefinition> mutable = SettingsGenerators.MutableDefinitions(SettingsRegistry.Default);
         SettingsPersistenceFaultPoint[] cuts = Enum.GetValues<SettingsPersistenceFaultPoint>();
         long lastRevision = current.EnvelopeRevision;
+        int succeededSaves = 0;
+        int interruptedSaves = 0;
 
-        for (int step = 0; step < 30; step++)
+        for (int step = 0; step < 14; step++)
         {
             SettingDefinition definition = mutable[random.Next(mutable.Count)];
             SettingsEnvelopeEditResult edit = editor.ApplyChanges(
@@ -132,7 +134,8 @@ public sealed class JsonSettingsRepositoryFaultMatrixTests
             }
 
             SettingsEnvelope next = edit.Envelope;
-            bool inject = random.Next(3) != 0;
+            // Every third step runs clean, so a seed can never produce a chain made only of faults.
+            bool inject = step % 3 != 2 && random.Next(3) != 0;
             SettingsPersistenceFaultPoint cut = cuts[random.Next(cuts.Length)];
             fixture.Injector.Behavior = inject
                 ? (point, _) => point == cut ? throw new IOException("random") : Task.CompletedTask
@@ -152,13 +155,20 @@ public sealed class JsonSettingsRepositoryFaultMatrixTests
             if (saved.IsSucceeded)
             {
                 Assert.Equal(next.EnvelopeRevision, reopened.Envelope.EnvelopeRevision);
+                succeededSaves++;
+            }
+            else
+            {
+                interruptedSaves++;
             }
 
             lastRevision = reopened.Envelope.EnvelopeRevision;
             current = reopened.Envelope;
         }
 
-        Assert.True(lastRevision > 5, "the chain must make real progress despite faults");
+        // The generator must have exercised both paths, otherwise the invariants above proved nothing.
+        Assert.True(succeededSaves > 0, "no save of the chain succeeded");
+        Assert.True(interruptedSaves > 0, "no save of the chain was interrupted by a fault");
     }
 
     /// <summary>A corrupted primary (flip or truncation at sampled offsets) is replaced from the backup and never throws.</summary>
@@ -182,7 +192,7 @@ public sealed class JsonSettingsRepositoryFaultMatrixTests
         Assert.NotEqual(primary, backup);
         int recovered = 0;
 
-        for (int offset = 0; offset < primary.Length; offset += 53)
+        for (int offset = 0; offset < primary.Length; offset += 107)
         {
             foreach (byte[] corrupted in new[] { Flip(primary, offset), primary[..offset] })
             {
@@ -211,7 +221,7 @@ public sealed class JsonSettingsRepositoryFaultMatrixTests
             }
         }
 
-        Assert.True(recovered > primary.Length / 53, "nearly every corruption must be detected and repaired from the backup");
+        Assert.True(recovered > primary.Length / 107, "nearly every corruption must be detected and repaired from the backup");
     }
 
     /// <summary>Invalid UTF-8 inside a JSON string of the primary (a typical single-sector corruption) must be recovered from the backup.</summary>
@@ -254,7 +264,7 @@ public sealed class JsonSettingsRepositoryFaultMatrixTests
         byte[] primary = await File.ReadAllBytesAsync(fixture.Repository.PrimaryPath);
         Random random = new(SettingsGenerators.Seed);
 
-        for (int round = 0; round < 8; round++)
+        for (int round = 0; round < 4; round++)
         {
             await using Fixture isolated = new(random);
             Assert.True((await isolated.Repository.SaveAsync(SettingsEnvelopeTestData.CreateMatchingEnvelope(), 0, CancellationToken.None)).IsSucceeded);

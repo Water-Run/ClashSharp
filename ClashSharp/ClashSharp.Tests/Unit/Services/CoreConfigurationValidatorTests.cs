@@ -275,6 +275,23 @@ public sealed class CoreConfigurationValidatorTests
         internal string Configuration { get; }
         internal static byte[] AssetBytes(string name) => Encoding.UTF8.GetBytes("owned-test-asset:" + name);
 
-        public void Dispose() => Directory.Delete(_root, recursive: true);
+        public void Dispose()
+        {
+            // A just-exited native process, or a scanner that opened one of its files, can hold a handle for a
+            // moment longer on Windows. Cleanup retries a bounded number of times; the assertions of the tests
+            // are made before this point and are not affected.
+            for (int attempt = 1; ; attempt++)
+            {
+                try
+                {
+                    Directory.Delete(_root, recursive: true);
+                    return;
+                }
+                catch (Exception exception) when (attempt < 20 && exception is IOException or UnauthorizedAccessException)
+                {
+                    Thread.Sleep(100);
+                }
+            }
+        }
     }
 }
