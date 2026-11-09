@@ -410,17 +410,17 @@ public sealed class WindowsElevationAndPackageFaultMappingTests
         string kind,
         string executable,
         CancellationToken cancellationToken) => kind switch
-    {
-        "machine" => launcher.StartAsync(executable, Machine(), cancellationToken),
-        "owner-transfer" => ((IWindowsOwnerTransferProcessLauncher)launcher).StartAsync(
-            executable,
-            InstallerOwnerTransferBootstrap.Create(Sha, 4242),
-            cancellationToken),
-        _ => ((IWindowsRetiredUninstallProcessLauncher)launcher).StartAsync(
-            executable,
-            InstallerRetiredUninstallBootstrap.Create(Sha, 4242),
-            cancellationToken),
-    };
+        {
+            "machine" => launcher.StartAsync(executable, Machine(), cancellationToken),
+            "owner-transfer" => ((IWindowsOwnerTransferProcessLauncher)launcher).StartAsync(
+                executable,
+                InstallerOwnerTransferBootstrap.Create(Sha, 4242),
+                cancellationToken),
+            _ => ((IWindowsRetiredUninstallProcessLauncher)launcher).StartAsync(
+                executable,
+                InstallerRetiredUninstallBootstrap.Create(Sha, 4242),
+                cancellationToken),
+        };
 
     private static string[] Arguments(string kind) => kind switch
     {

@@ -553,12 +553,15 @@ public sealed class InstallerPackagePayloadTests
             ["machine-zero-length"] = () => Rebuild(baseline, p => p with { MachineFiles = [machine with { Length = 0 }, .. baseline.MachineFiles.Skip(1)] }),
             ["machine-hash"] = () => Rebuild(baseline, p => p with { MachineFiles = [machine with { Sha256 = "x" }, .. baseline.MachineFiles.Skip(1)] }),
             ["machine-oversize-asset"] = () => Rebuild(baseline, p => p with { MachineFiles = [machine with { Length = InstallerPayloadBudgets.MaximumGeoDataAssetBytes + 1 }, .. baseline.MachineFiles.Skip(1)] }),
-            ["machine-total-budget"] = () => Rebuild(baseline, p => p with { MachineFiles = [.. baseline.MachineFiles.Select(static file => file.Path switch
+            ["machine-total-budget"] = () => Rebuild(baseline, p => p with
+            {
+                MachineFiles = [.. baseline.MachineFiles.Select(static file => file.Path switch
             {
                 "binaries/mihomo.exe" or "binaries/service/clashsharp.mihomoservice.exe" => file with { Length = InstallerPayloadBudgets.MaximumFileBytes },
                 "binaries/geodata/asn.mmdb" => file with { Length = InstallerPayloadBudgets.MaximumGeoDataAssetBytes },
                 _ => file,
-            })] }),
+            })]
+            }),
             ["files-null"] = () => Rebuild(baseline, p => p with { Files = null! }),
             ["files-too-few"] = () => Rebuild(baseline, p => p with { Files = [primaryFile, certificateFile, provenanceFile] }),
             ["files-too-many"] = () => Rebuild(baseline, p => p with { Files = [.. Enumerable.Range(0, 70).Select(static i => new InstallerPayloadFileEntry($"dependencies/x64/d{i:D3}.msix", InstallerPayloadFileRole.DependencyPackage, 1, InstallerTestData.Hash)), primaryFile, certificateFile, provenanceFile] }),

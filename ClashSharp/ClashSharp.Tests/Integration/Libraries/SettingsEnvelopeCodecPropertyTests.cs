@@ -425,7 +425,8 @@ public sealed class SettingsEnvelopeCodecPropertyTests
             {
                 parent.AsObject().Remove(path[^1]);
             }
-        });
+        }
+        );
         yield return ("null", root => Replace(root, null));
         yield return ("string", root => Replace(root, JsonValue.Create("x")));
         yield return ("number", root => Replace(root, JsonValue.Create(7)));

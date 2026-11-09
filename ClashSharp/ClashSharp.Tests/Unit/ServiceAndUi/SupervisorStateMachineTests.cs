@@ -78,131 +78,131 @@ public sealed class SupervisorStateMachineTests
                 case Operation.Start:
                 case Operation.StartWithLaunchFailure:
                 case Operation.StartWithReadinessFailure:
-                {
-                    harness.Launcher.FailNextLaunch = operation == Operation.StartWithLaunchFailure;
-                    if (operation == Operation.StartWithReadinessFailure)
                     {
-                        harness.MakeReadinessFail();
-                    }
+                        harness.Launcher.FailNextLaunch = operation == Operation.StartWithLaunchFailure;
+                        if (operation == Operation.StartWithReadinessFailure)
+                        {
+                            harness.MakeReadinessFail();
+                        }
 
-                    string hash = harness.WriteNewConfiguration();
-                    result = await harness.Supervisor.StartAsync(++generation, hash, CancellationToken.None);
-                    if (phase is Phase.Running or Phase.FaultedOwned)
-                    {
-                        Assert.False(result.Succeeded, label);
-                        Assert.Equal("service.child.already_running", result.ErrorCode);
-                    }
-                    else if (operation == Operation.StartWithLaunchFailure)
-                    {
-                        Assert.Equal("service.child.launch_failed", result.ErrorCode);
-                        phase = Phase.FaultedNoChild;
-                        exhausted = false;
-                    }
-                    else if (operation == Operation.StartWithReadinessFailure)
-                    {
-                        Assert.Equal("service.child.controller_not_ready", result.ErrorCode);
-                        phase = Phase.FaultedNoChild;
-                        exhausted = false;
-                    }
-                    else
-                    {
-                        Assert.True(result.Succeeded, $"{label}: {result.ErrorCode}");
-                        phase = Phase.Running;
-                        crashes = 0;
-                        exhausted = false;
-                    }
+                        string hash = harness.WriteNewConfiguration();
+                        result = await harness.Supervisor.StartAsync(++generation, hash, CancellationToken.None);
+                        if (phase is Phase.Running or Phase.FaultedOwned)
+                        {
+                            Assert.False(result.Succeeded, label);
+                            Assert.Equal("service.child.already_running", result.ErrorCode);
+                        }
+                        else if (operation == Operation.StartWithLaunchFailure)
+                        {
+                            Assert.Equal("service.child.launch_failed", result.ErrorCode);
+                            phase = Phase.FaultedNoChild;
+                            exhausted = false;
+                        }
+                        else if (operation == Operation.StartWithReadinessFailure)
+                        {
+                            Assert.Equal("service.child.controller_not_ready", result.ErrorCode);
+                            phase = Phase.FaultedNoChild;
+                            exhausted = false;
+                        }
+                        else
+                        {
+                            Assert.True(result.Succeeded, $"{label}: {result.ErrorCode}");
+                            phase = Phase.Running;
+                            crashes = 0;
+                            exhausted = false;
+                        }
 
-                    break;
-                }
+                        break;
+                    }
 
                 case Operation.Reload:
                 case Operation.ReloadWithLaunchFailure:
                 case Operation.ReloadWithTerminationFailure:
-                {
-                    harness.Launcher.FailNextLaunch = operation == Operation.ReloadWithLaunchFailure;
-                    bool terminationFails = operation == Operation.ReloadWithTerminationFailure && owned is not null;
-                    if (terminationFails)
                     {
-                        owned!.StopFailure = new TimeoutException("scripted termination failure");
-                    }
+                        harness.Launcher.FailNextLaunch = operation == Operation.ReloadWithLaunchFailure;
+                        bool terminationFails = operation == Operation.ReloadWithTerminationFailure && owned is not null;
+                        if (terminationFails)
+                        {
+                            owned!.StopFailure = new TimeoutException("scripted termination failure");
+                        }
 
-                    string hash = harness.WriteNewConfiguration();
-                    result = await harness.Supervisor.ReloadAsync(++generation, hash, CancellationToken.None);
-                    if (terminationFails)
-                    {
-                        Assert.Equal("service.child.stop_failed", result.ErrorCode);
-                        phase = Phase.FaultedOwned;
+                        string hash = harness.WriteNewConfiguration();
+                        result = await harness.Supervisor.ReloadAsync(++generation, hash, CancellationToken.None);
+                        if (terminationFails)
+                        {
+                            Assert.Equal("service.child.stop_failed", result.ErrorCode);
+                            phase = Phase.FaultedOwned;
+                            break;
+                        }
+
+                        // A previously failed termination is retried (and now succeeds) by reload.
+                        if (operation == Operation.ReloadWithLaunchFailure)
+                        {
+                            Assert.Equal("service.child.launch_failed", result.ErrorCode);
+                            phase = Phase.FaultedNoChild;
+                        }
+                        else
+                        {
+                            Assert.True(result.Succeeded, $"{label}: {result.ErrorCode}");
+                            phase = Phase.Running;
+                        }
+
+                        crashes = 0;
+                        exhausted = false;
                         break;
                     }
-
-                    // A previously failed termination is retried (and now succeeds) by reload.
-                    if (operation == Operation.ReloadWithLaunchFailure)
-                    {
-                        Assert.Equal("service.child.launch_failed", result.ErrorCode);
-                        phase = Phase.FaultedNoChild;
-                    }
-                    else
-                    {
-                        Assert.True(result.Succeeded, $"{label}: {result.ErrorCode}");
-                        phase = Phase.Running;
-                    }
-
-                    crashes = 0;
-                    exhausted = false;
-                    break;
-                }
 
                 case Operation.Stop:
                 case Operation.StopWithTerminationFailure:
-                {
-                    bool terminationFails = operation == Operation.StopWithTerminationFailure && owned is not null;
-                    if (terminationFails)
                     {
-                        owned!.StopFailure = new TimeoutException("scripted termination failure");
-                    }
+                        bool terminationFails = operation == Operation.StopWithTerminationFailure && owned is not null;
+                        if (terminationFails)
+                        {
+                            owned!.StopFailure = new TimeoutException("scripted termination failure");
+                        }
 
-                    result = await harness.Supervisor.StopAsync(CancellationToken.None);
-                    if (terminationFails)
-                    {
-                        Assert.Equal("service.child.stop_failed", result.ErrorCode);
-                        phase = Phase.FaultedOwned;
-                    }
-                    else
-                    {
-                        Assert.True(result.Succeeded, $"{label}: {result.ErrorCode}");
-                        phase = Phase.Stopped;
-                        exhausted = false;
-                    }
+                        result = await harness.Supervisor.StopAsync(CancellationToken.None);
+                        if (terminationFails)
+                        {
+                            Assert.Equal("service.child.stop_failed", result.ErrorCode);
+                            phase = Phase.FaultedOwned;
+                        }
+                        else
+                        {
+                            Assert.True(result.Succeeded, $"{label}: {result.ErrorCode}");
+                            phase = Phase.Stopped;
+                            exhausted = false;
+                        }
 
-                    break;
-                }
-
-                case Operation.Crash:
-                {
-                    if (phase != Phase.Running)
-                    {
                         break;
                     }
 
-                    int startedBefore = harness.Launcher.Snapshot().Length;
-                    owned!.Exit(1);
-                    crashes++;
-                    if (crashes <= budget)
+                case Operation.Crash:
                     {
-                        await SupervisorHarness.WaitUntilAsync(() =>
-                            harness.Launcher.Snapshot().Length == startedBefore + 1
-                            && harness.Supervisor.GetSnapshot().ChildState == MihomoServiceChildState.Running);
-                    }
-                    else
-                    {
-                        await SupervisorHarness.WaitUntilAsync(() =>
-                            harness.Supervisor.GetSnapshot().FaultCode == "service.child.restart_exhausted");
-                        phase = Phase.FaultedNoChild;
-                        exhausted = true;
-                    }
+                        if (phase != Phase.Running)
+                        {
+                            break;
+                        }
 
-                    break;
-                }
+                        int startedBefore = harness.Launcher.Snapshot().Length;
+                        owned!.Exit(1);
+                        crashes++;
+                        if (crashes <= budget)
+                        {
+                            await SupervisorHarness.WaitUntilAsync(() =>
+                                harness.Launcher.Snapshot().Length == startedBefore + 1
+                                && harness.Supervisor.GetSnapshot().ChildState == MihomoServiceChildState.Running);
+                        }
+                        else
+                        {
+                            await SupervisorHarness.WaitUntilAsync(() =>
+                                harness.Supervisor.GetSnapshot().FaultCode == "service.child.restart_exhausted");
+                            phase = Phase.FaultedNoChild;
+                            exhausted = true;
+                        }
+
+                        break;
+                    }
             }
 
             harness.Launcher.FailNextLaunch = false;
