@@ -10,6 +10,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using ClashSharp.ServiceProtocol;
 using YamlDotNet.Core;
+using YamlDotNet.Core.Events;
 using YamlDotNet.RepresentationModel;
 
 namespace ClashSharp.MihomoService;
@@ -48,6 +49,9 @@ internal static class MihomoServiceConfigurationTrustValidator
     private const long MaximumConfigurationBytes = 8L * 1024 * 1024;
 
     private const int MaximumYamlNodeCount = 100_000;
+
+    /// <summary>Largest collection nesting accepted before the recursive YAML loader runs.</summary>
+    internal const int MaximumYamlNesting = 64;
 
     private const string RequiredControllerEndpoint = "127.0.0.1:9090";
 
@@ -712,16 +716,62 @@ internal static class MihomoServiceConfigurationTrustValidator
         return components;
     }
 
+    /// <summary>
+    /// Returns whether collection nesting stays within <see cref="MaximumYamlNesting"/>, measured with the
+    /// iterative event parser. The representation-model loader recurses once per level, so a few
+    /// thousand nested flow sequences in a small file overflow the stack and kill the host process.
+    /// Syntax errors are left for the real loader to report.
+    /// </summary>
+    internal static bool IsYamlNestingWithinLimit(string configurationText)
+    {
+        ArgumentNullException.ThrowIfNull(configurationText);
+        int depth = 0;
+        try
+        {
+            Parser parser = new(new StringReader(configurationText));
+            while (parser.MoveNext())
+            {
+                if (parser.Current is SequenceStart or MappingStart)
+                {
+                    if (++depth > MaximumYamlNesting)
+                    {
+                        return false;
+                    }
+                }
+                else if (parser.Current is SequenceEnd or MappingEnd)
+                {
+                    depth--;
+                }
+            }
+        }
+        catch (Exception exception) when (exception is YamlException or ArgumentException or InvalidOperationException)
+        {
+            // Syntax errors (YamlDotNet also signals some as InvalidOperationException) are reported
+            // by the loader that follows, under the caller's own exception contract.
+            return true;
+        }
+
+        return true;
+    }
+
     private static YamlMappingNode LoadUniqueRoot(string configurationText)
     {
+        if (!IsYamlNestingWithinLimit(configurationText))
+        {
+            throw new MihomoServiceConfigurationTrustException(
+                "The staged mihomo configuration is nested too deeply.");
+        }
+
         YamlStream stream = new();
         try
         {
             using StringReader reader = new(configurationText);
             stream.Load(reader);
         }
-        catch (YamlException exception)
+        catch (Exception exception) when (exception is YamlException or ArgumentException or InvalidOperationException)
         {
+            // YamlDotNet reports some malformed input as ArgumentException ("current event is of an
+            // unsupported type") or InvalidOperationException (scanner state) rather than YamlException.
             throw new MihomoServiceConfigurationTrustException(
                 "The staged mihomo configuration is not valid YAML.",
                 exception);

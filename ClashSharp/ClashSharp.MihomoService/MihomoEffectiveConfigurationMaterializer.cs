@@ -354,6 +354,12 @@ internal sealed class MihomoEffectiveConfigurationMaterializer
 
     private static YamlMappingNode LoadRootMapping(string configurationText)
     {
+        if (!MihomoServiceConfigurationTrustValidator.IsYamlNestingWithinLimit(configurationText))
+        {
+            throw new MihomoServiceConfigurationTrustException(
+                "The source configuration is nested too deeply.");
+        }
+
         try
         {
             YamlStream stream = new();
@@ -368,7 +374,7 @@ internal sealed class MihomoEffectiveConfigurationMaterializer
 
             return mapping;
         }
-        catch (YamlException exception)
+        catch (Exception exception) when (exception is YamlException or ArgumentException or InvalidOperationException)
         {
             throw new InvalidDataException("The source configuration is invalid YAML.", exception);
         }

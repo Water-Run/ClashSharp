@@ -58,7 +58,7 @@ internal static class MihomoYamlSemanticValidator
     /// Deepest sequence/mapping nesting accepted. Real profiles nest a handful of levels, while the document
     /// loader below recurses once per level and a few thousand levels overflow the stack of the calling thread.
     /// </summary>
-    internal const int MaxNestingDepth = 128;
+    internal const int MaxNestingDepth = ClashSharp.MihomoService.MihomoServiceConfigurationTrustValidator.MaximumYamlNesting;
 
     /// <summary>Returns whether one root RawConfig key is exclusively controlled by Clash#.</summary>
     public static bool IsAppOwnedRuntimeKey(string key)

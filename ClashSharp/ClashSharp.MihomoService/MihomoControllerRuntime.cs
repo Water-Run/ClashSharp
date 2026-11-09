@@ -84,6 +84,12 @@ internal sealed record MihomoRuntimeConfigurationPlan(
                 exception);
         }
 
+        if (!MihomoServiceConfigurationTrustValidator.IsYamlNestingWithinLimit(text))
+        {
+            throw new MihomoServiceConfigurationTrustException(
+                "The readiness plan source is nested too deeply.");
+        }
+
         try
         {
             YamlStream yaml = new();
@@ -103,7 +109,7 @@ internal sealed record MihomoRuntimeConfigurationPlan(
             // deliberately disabled by the effective overlay.
             return new MihomoRuntimeConfigurationPlan(0, mode, tunEnabled);
         }
-        catch (YamlException exception)
+        catch (Exception exception) when (exception is YamlException or ArgumentException or InvalidOperationException)
         {
             throw new MihomoServiceConfigurationTrustException(
                 "The readiness plan source is invalid YAML.",
