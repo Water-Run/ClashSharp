@@ -66,13 +66,19 @@ public sealed class MutationAdmissionLease : IDisposable, IAsyncDisposable
     /// <param name="verifiedSuccess">Whether recovery verified its permitted final state.</param>
     public void CompleteRecoveryAttempt(bool journalPresent, bool verifiedSuccess)
     {
-        MutationAdmissionBarrier? owner = Interlocked.Exchange(ref _owner, null);
-        if (owner is null)
+        if (Volatile.Read(ref _owner) is null)
         {
             return;
         }
 
-        owner.CompleteRecoveryAttempt(_kind, journalPresent, verifiedSuccess);
+        if (_kind != MutationAdmissionLeaseKind.Recovery)
+        {
+            // Rejecting before detaching keeps a misused ordinary or exclusive lease releasable.
+            throw new InvalidOperationException("Only a recovery lease can complete a recovery attempt.");
+        }
+
+        MutationAdmissionBarrier? owner = Interlocked.Exchange(ref _owner, null);
+        owner?.CompleteRecoveryAttempt(_kind, journalPresent, verifiedSuccess);
     }
 
     /// <summary>Releases this lease. Repeated calls have no effect.</summary>
