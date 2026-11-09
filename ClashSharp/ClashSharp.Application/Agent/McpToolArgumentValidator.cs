@@ -49,7 +49,7 @@ public static class McpToolArgumentValidator
                 return WithinBounds(schema, "minLength", "maxLength", text.Length)
                     && (!schema.TryGetProperty("format", out _) || Guid.TryParse(text, out Guid id) && id != Guid.Empty)
                     && (!schema.TryGetProperty("pattern", out JsonElement pattern)
-                        || Regex.IsMatch(text, pattern.GetString()!, RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100)));
+                        || Regex.IsMatch(text, "(?:" + pattern.GetString()! + ")\\z", RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100)));
             default: return false;
         }
     }
