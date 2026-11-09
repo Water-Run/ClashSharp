@@ -168,9 +168,12 @@ public sealed class InstallerShellViewModelSequenceTests
         Assert.False(viewModel.PrimaryActionCommand.CanExecute(null));
         Assert.False(viewModel.RefreshCommand.CanExecute(null));
         Assert.Equal(49, storm.Count(static task => task.IsCompletedSuccessfully));
+        // The one in-flight click is identified before the runtime completes, because completing it may
+        // run the continuation inline and finish the task before it could be looked up again.
+        Task inFlight = storm.Single(static task => !task.IsCompleted);
 
         Assert.True(runtime.TryCompleteExecution(new Random(Seed), out _, forced: ExecutionKind.Succeeded));
-        await storm.Single(static task => !task.IsCompleted);
+        await inFlight;
         Assert.False(viewModel.IsBusy);
         // The success invalidated readiness: no second install without a fresh inspection.
         Assert.False(viewModel.PrimaryActionCommand.CanExecute(null));
