@@ -143,9 +143,9 @@ internal sealed class AsyncRelayCommand : ObservableObject, ICommand, IAsyncComm
             return Task.CompletedTask;
         }
 
-        LastError = null;
+        RaiseIsolated(() => LastError = null);
         Task execution = ExecuteObservedCoreAsync(parameter, cancellationToken);
-        ExecutionTask = execution;
+        RaiseIsolated(() => ExecutionTask = execution);
         return execution;
     }
 
@@ -161,7 +161,7 @@ internal sealed class AsyncRelayCommand : ObservableObject, ICommand, IAsyncComm
         }
         catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
         {
-            LastError = exception;
+            RaiseIsolated(() => LastError = exception);
             try
             {
                 await _errorSink.ReportAsync(
@@ -171,7 +171,7 @@ internal sealed class AsyncRelayCommand : ObservableObject, ICommand, IAsyncComm
             catch (Exception sinkException) when (
                 !ExceptionGraphClassifier.IsProcessFatal(sinkException))
             {
-                LastError = new AggregateException(exception, sinkException);
+                RaiseIsolated(() => LastError = new AggregateException(exception, sinkException));
             }
         }
     }
@@ -194,8 +194,46 @@ internal sealed class AsyncRelayCommand : ObservableObject, ICommand, IAsyncComm
 
     private void NotifyExecutionStateChanged()
     {
-        OnPropertyChanged(nameof(IsRunning));
-        OnPropertyChanged(nameof(IsBusy));
-        NotifyCanExecuteChanged();
+        RaiseIsolated(() => OnPropertyChanged(nameof(IsRunning)));
+        RaiseIsolated(() => OnPropertyChanged(nameof(IsBusy)));
+        RaiseIsolated(NotifyCanExecuteChanged);
+    }
+
+    /// <summary>
+    /// Raises a change notification without letting an observer decide the command's lifetime.
+    /// </summary>
+    /// <remarks>
+    /// Interface bindings subscribe to these events and can throw, for example a COM failure while a window is
+    /// closing. The running state is set before observers are told and cleared before they are told again, so a
+    /// failing observer must not unwind through either transition: it would leave the command busy for good or
+    /// replace the error of the run itself. The failure is handed to the application error sink instead.
+    /// </remarks>
+    private void RaiseIsolated(Action raise)
+    {
+        try
+        {
+            raise();
+        }
+        catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
+        {
+            ReportObserverFailure(exception);
+        }
+    }
+
+    private void ReportObserverFailure(Exception exception)
+    {
+        try
+        {
+            Task report = _errorSink.ReportAsync(new ApplicationError(_operationName, exception), CancellationToken.None);
+            _ = report.ContinueWith(
+                static task => _ = task.Exception,
+                CancellationToken.None,
+                TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+        }
+        catch (Exception sinkFailure) when (!ExceptionGraphClassifier.IsProcessFatal(sinkFailure))
+        {
+            // The command's own state is already consistent; there is nowhere left to report to.
+        }
     }
 }
