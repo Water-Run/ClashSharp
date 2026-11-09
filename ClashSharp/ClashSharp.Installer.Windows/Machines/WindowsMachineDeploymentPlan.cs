@@ -433,8 +433,12 @@ internal sealed class WindowsMachineDeploymentPlan
         string fullRoot = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar);
         string fullCandidate = Path.GetFullPath(candidate);
         string prefix = string.Concat(fullRoot, Path.DirectorySeparatorChar);
+        // The root spelled with a trailing separator is still the root, never one of its children.
         if (!fullCandidate.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(fullCandidate, fullRoot, StringComparison.OrdinalIgnoreCase))
+            || string.Equals(
+                Path.TrimEndingDirectorySeparator(fullCandidate),
+                fullRoot,
+                StringComparison.OrdinalIgnoreCase))
         {
             throw new InstallerProtocolException(diagnosticCode);
         }
