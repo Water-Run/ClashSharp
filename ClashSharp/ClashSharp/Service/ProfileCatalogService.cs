@@ -973,7 +973,8 @@ public sealed partial class ProfileCatalogService : IProfileCatalog, IAsyncDispo
             TryRecordSubscriptionCancellation(link);
         }
         else if (failure is ArgumentException or HttpRequestException or InvalidOperationException or IOException
-            or UnauthorizedAccessException or SecurityException or OperationCanceledException or AggregateException)
+            or InvalidDataException or UnauthorizedAccessException or SecurityException or OperationCanceledException
+            or AggregateException)
         {
             if (checkOnly) { TryRecordSubscriptionStatus(link, GetString("ProfileCatalog.Subscription.CheckFailed")); }
             else { TryRecordSubscriptionFailure(link, GetString("ProfileCatalog.Subscription.UpdateFailed"), DateTimeOffset.Now); }
@@ -1989,8 +1990,26 @@ public sealed partial class ProfileCatalogService : IProfileCatalog, IAsyncDispo
         }
 
         string historyPath = GetProfileHistoryPath(pendingHistory.ProfileId, pendingHistory.VersionId);
-        Directory.CreateDirectory(Path.GetDirectoryName(historyPath)!);
-        File.Move(pendingHistory.PendingPath, historyPath);
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(historyPath)!);
+            File.Move(pendingHistory.PendingPath, historyPath);
+        }
+        catch (Exception promotionFailure) when (!ExceptionGraphClassifier.IsProcessFatal(promotionFailure))
+        {
+            // The staged text is owned by this transaction until it is promoted; never leave it behind.
+            try
+            {
+                DeletePendingHistory(pendingHistory);
+            }
+            catch (Exception cleanupFailure) when (!ExceptionGraphClassifier.IsProcessFatal(cleanupFailure))
+            {
+                TryAppendMaintenanceWarning("A staged profile history file could not be removed.", cleanupFailure);
+            }
+
+            throw;
+        }
+
         document.History.Add(new ProfileHistoryEntry(
             pendingHistory.VersionId,
             pendingHistory.ProfileId,

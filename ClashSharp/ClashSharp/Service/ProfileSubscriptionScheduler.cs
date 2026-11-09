@@ -140,6 +140,7 @@ internal sealed class ProfileSubscriptionScheduler : IRuntimeParticipant
                 exception is ArgumentException
                     or HttpRequestException
                     or IOException
+                    or InvalidDataException
                     or UnauthorizedAccessException
                     or SecurityException
                     or InvalidOperationException

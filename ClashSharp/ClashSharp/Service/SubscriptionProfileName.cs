@@ -48,6 +48,7 @@ internal static class SubscriptionProfileName
         {
             if (text.EndsWith(extension, StringComparison.OrdinalIgnoreCase)) { text = text[..^extension.Length]; break; }
         }
+        text = text.Trim();
         return string.IsNullOrWhiteSpace(text) || text.Length > 128 ? null : text;
     }
 }
