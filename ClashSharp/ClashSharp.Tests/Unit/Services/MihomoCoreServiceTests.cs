@@ -118,7 +118,7 @@ public sealed class MihomoCoreServiceTests
             service.Start(new CoreConfigurationState(testRoot, configPath, true));
             child = GetReportedChild(testRoot);
 
-            MihomoCoreUnexpectedExitEventArgs eventArgs = await exited.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            MihomoCoreUnexpectedExitEventArgs eventArgs = await exited.Task.WaitAsync(TestTimeouts.Completion);
 
             Assert.Equal(42, eventArgs.ExitCode);
             Assert.True(child.HasExited);
@@ -232,7 +232,7 @@ public sealed class MihomoCoreServiceTests
             service.Start(new CoreConfigurationState(testRoot, configPath, true));
             Assert.True(service.IsRunning);
 
-            MihomoCoreUnexpectedExitEventArgs eventArgs = await exited.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            MihomoCoreUnexpectedExitEventArgs eventArgs = await exited.Task.WaitAsync(TestTimeouts.Completion);
 
             Assert.Equal(42, eventArgs.ExitCode);
             Assert.False(service.IsRunning);
@@ -377,7 +377,7 @@ public sealed class MihomoCoreServiceTests
 
         string output = await launched.StandardOutput!.ReadToEndAsync();
         string error = await launched.StandardError!.ReadToEndAsync();
-        await launched.Process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        await launched.Process.WaitForExitAsync().WaitAsync(TestTimeouts.Completion);
 
         string[] actual = output.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries)
             .Select(line => Encoding.UTF8.GetString(Convert.FromBase64String(line[4..])))
@@ -428,7 +428,7 @@ public sealed class MihomoCoreServiceTests
         {
             Task<string> outputTask = launched.StandardOutput!.ReadToEndAsync();
             Task<string> errorTask = launched.StandardError!.ReadToEndAsync();
-            await launched.Process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(5));
+            await launched.Process.WaitForExitAsync().WaitAsync(TestTimeouts.Completion);
             string output = await outputTask;
             string error = await errorTask;
             Assert.True(launched.Process.ExitCode == 0, $"Probe failed ({launched.Process.ExitCode}): {error}");
@@ -455,7 +455,7 @@ public sealed class MihomoCoreServiceTests
                 ["emit", "0", "31"],
                 CaptureOutput: false));
 
-        await launched.Process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        await launched.Process.WaitForExitAsync().WaitAsync(TestTimeouts.Completion);
 
         Assert.Null(launched.StandardOutput);
         Assert.Null(launched.StandardError);

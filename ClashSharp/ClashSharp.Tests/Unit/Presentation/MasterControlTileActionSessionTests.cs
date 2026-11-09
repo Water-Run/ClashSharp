@@ -16,7 +16,7 @@ public sealed class MasterControlTileActionSessionTests
         TaskCompletionSource release = new(TaskCreationOptions.RunContinuationsAsynchronously);
         session.Activate((_, _) => { calls++; return Task.CompletedTask; }, () => current);
         Task running = session.RunAsync(async _ => { entered.SetResult(); await release.Task; });
-        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await entered.Task.WaitAsync(TestTimeouts.Completion);
         Task queued = session.ExecuteAsync(MasterControlTileAction.RunLatencyTest, CancellationToken.None);
         current = false;
         await session.ExecuteAsync(MasterControlTileAction.RunLatencyTest, CancellationToken.None);
@@ -40,7 +40,7 @@ public sealed class MasterControlTileActionSessionTests
         int calls = 0;
         session.Activate((_, _) => { calls++; return Task.CompletedTask; });
         Task old = session.RunAsync(async token => { accepted = token; entered.SetResult(); await release.Task; });
-        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await entered.Task.WaitAsync(TestTimeouts.Completion);
 
         session.Cancel();
         Task drain = session.DrainAsync();
@@ -67,12 +67,12 @@ public sealed class MasterControlTileActionSessionTests
             await Task.Delay(Timeout.InfiniteTimeSpan, token);
         });
         Task first = session.ExecuteAsync(MasterControlTileAction.RunLatencyTest, CancellationToken.None);
-        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await entered.Task.WaitAsync(TestTimeouts.Completion);
         Task queued = session.ExecuteAsync(MasterControlTileAction.ImportConfiguration, CancellationToken.None);
 
         session.Deactivate();
         await session.ExecuteAsync(MasterControlTileAction.ExportConfiguration, CancellationToken.None);
-        await session.DrainAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        await session.DrainAsync().WaitAsync(TestTimeouts.Completion);
         await Task.WhenAll(first, queued);
 
         Assert.Equal(1, calls);
@@ -94,12 +94,12 @@ public sealed class MasterControlTileActionSessionTests
             await release.Task;
         });
         Task execution = session.ExecuteAsync(MasterControlTileAction.RunLatencyTest, CancellationToken.None);
-        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await entered.Task.WaitAsync(TestTimeouts.Completion);
         session.Deactivate();
         Task drain = session.DrainAsync();
         Assert.False(drain.IsCompleted);
         Assert.False(execution.IsCompleted);
         release.SetResult();
-        await Task.WhenAll(drain, execution).WaitAsync(TimeSpan.FromSeconds(5));
+        await Task.WhenAll(drain, execution).WaitAsync(TestTimeouts.Completion);
     }
 }

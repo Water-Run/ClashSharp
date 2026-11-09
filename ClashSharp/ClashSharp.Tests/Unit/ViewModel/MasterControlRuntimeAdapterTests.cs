@@ -156,7 +156,7 @@ public sealed partial class MasterControlRuntimeAdapterTests
 
         Task<RuntimeSnapshot> execution =
             adapter.GetSnapshotAsync(cancellationSource.Token);
-        await source.Work.Started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await source.Work.Started.Task.WaitAsync(TestTimeouts.Completion);
         cancellationSource.Cancel();
 
         OperationCanceledException exception =

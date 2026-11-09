@@ -107,7 +107,7 @@ public sealed partial class ProductionDataGenerationTests
         Task? retirement = null;
         try
         {
-            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await entered.Task.WaitAsync(TestTimeouts.Completion);
             retirement = fixture.Manager.DisposeAsync().AsTask();
             Assert.False(retirement.IsCompleted);
             Assert.Throws<DataGenerationManagerException>(() => configuration.GetState());
@@ -116,7 +116,7 @@ public sealed partial class ProductionDataGenerationTests
         finally { release.TrySetResult(); }
         if (failValidation) { await Assert.ThrowsAsync<IOException>(() => import); }
         else { Assert.True(File.Exists((await import).ConfigPath)); }
-        await retirement!.WaitAsync(TimeSpan.FromSeconds(5));
+        await retirement!.WaitAsync(TestTimeouts.Completion);
         Assert.All(fixture.Participants, participant => Assert.Equal(1, participant.Disposals));
     }
 
@@ -135,15 +135,15 @@ public sealed partial class ProductionDataGenerationTests
         Task? retiring = null;
         try
         {
-            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await entered.Task.WaitAsync(TestTimeouts.Completion);
             retiring = fixture.Manager.DisposeAsync().AsTask();
             Assert.False(retiring.IsCompleted);
             Assert.False(selecting.IsCompleted);
             Assert.All(fixture.Participants, participant => Assert.Equal(0, participant.Disposals));
         }
         finally { release.TrySetResult(); }
-        await selecting.WaitAsync(TimeSpan.FromSeconds(5));
-        await retiring!.WaitAsync(TimeSpan.FromSeconds(5));
+        await selecting.WaitAsync(TestTimeouts.Completion);
+        await retiring!.WaitAsync(TestTimeouts.Completion);
         Assert.Equal("Node B", new SelectionStore(Path.Combine(manifest.Descriptor.RootPath, "mihomo", "proxy-selections.json")).Read("profile-a")["GLOBAL"]);
         await Assert.ThrowsAsync<DataGenerationManagerException>(() => selections.RestoreAsync(SelectionPlan, CancellationToken.None));
     }

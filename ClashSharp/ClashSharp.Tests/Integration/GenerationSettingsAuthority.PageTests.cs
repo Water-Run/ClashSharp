@@ -27,7 +27,7 @@ public sealed partial class GenerationSettingsAuthorityTests
         Task<MutationAdmissionLease>? drain = null;
         try
         {
-            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await entered.Task.WaitAsync(TestTimeouts.Completion);
             Assert.False(command.IsCompleted);
             Assert.False(page.NotificationEnabled);
             Assert.Equal("More", page.NotificationLevel.ToString());
@@ -35,8 +35,8 @@ public sealed partial class GenerationSettingsAuthorityTests
             Assert.False(drain.IsCompleted);
         }
         finally { release.TrySetResult(); }
-        await command.WaitAsync(TimeSpan.FromSeconds(5));
-        await using MutationAdmissionLease exclusive = await drain!.WaitAsync(TimeSpan.FromSeconds(5));
+        await command.WaitAsync(TestTimeouts.Completion);
+        await using MutationAdmissionLease exclusive = await drain!.WaitAsync(TestTimeouts.Completion);
         Assert.Empty(fixture.Session.Snapshot.PendingApplications);
         Assert.Equal("false", fixture.Session.Snapshot.Applied[SettingsRegistry.Keys.NotificationEnabled].Value!.CanonicalText);
         Assert.Equal("More", fixture.Session.Snapshot.Applied[SettingsRegistry.Keys.NotificationLevel].Value!.CanonicalText);

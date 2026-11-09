@@ -608,7 +608,7 @@ public sealed class ControllerBrokerContractTests
 
         // The command gate was released: a lifecycle command still completes.
         Assert.True((await rig.Harness.Supervisor.StartAsync(1, rig.Harness.Hash, CancellationToken.None)
-            .WaitAsync(TimeSpan.FromSeconds(5))).Succeeded);
+            .WaitAsync(TestTimeouts.Completion)).Succeeded);
     }
 
     [Fact]

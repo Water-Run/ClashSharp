@@ -291,7 +291,7 @@ public sealed class InstallerArchivedCertificateStoreTests
         };
         var store = new InstallerArchivedCertificateStore(ledger.TargetSid, files);
         Task<InstallerCertificateOwnershipSnapshot> operation = store.ReleaseReferenceAsync(Snapshot(ledger), cancellation.Token);
-        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await entered.Task.WaitAsync(TestTimeouts.Completion);
         Assert.False(operation.IsCompleted);
         InstallerProtocolException overlap = await Assert.ThrowsAsync<InstallerProtocolException>(() => store.LoadAsync(CancellationToken.None));
         Assert.Equal("installer.certificate_archive.concurrent_access", overlap.DiagnosticCode);

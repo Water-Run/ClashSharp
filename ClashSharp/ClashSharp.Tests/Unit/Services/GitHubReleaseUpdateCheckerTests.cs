@@ -26,11 +26,11 @@ public sealed class GitHubReleaseUpdateCheckerTests
         GitHubReleaseUpdateChecker checker = new(client, "1.0.0");
         ApplicationUpdateCheckResult? cached = useCache ? await checker.CheckAsync(CancellationToken.None) : null;
 
-        ApplicationUpdateCheckResult timedOut = await checker.CheckAsync(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5));
+        ApplicationUpdateCheckResult timedOut = await checker.CheckAsync(CancellationToken.None).WaitAsync(TestTimeouts.Completion);
 
         Assert.Equal(cached?.Availability ?? ApplicationUpdateAvailability.Unavailable, timedOut.Availability);
         Assert.Equal(ApplicationUpdateAvailability.UpdateAvailable,
-            (await checker.CheckAsync(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5))).Availability);
+            (await checker.CheckAsync(CancellationToken.None).WaitAsync(TestTimeouts.Completion)).Availability);
     }
 
     [Fact]
@@ -41,7 +41,7 @@ public sealed class GitHubReleaseUpdateCheckerTests
         GitHubReleaseUpdateChecker checker = new(client, "1.0.0");
         using CancellationTokenSource caller = new(TimeSpan.FromMilliseconds(60));
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => checker.CheckAsync(caller.Token).WaitAsync(TimeSpan.FromSeconds(5)));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => checker.CheckAsync(caller.Token).WaitAsync(TestTimeouts.Completion));
     }
 
     [Fact]

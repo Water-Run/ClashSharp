@@ -215,7 +215,7 @@ public sealed class InstallerRetiredUninstallStoreFaultTests
             await release.Task;
         };
         Task<InstallerTransactionSnapshot?> running = world.Store.LoadAsync(CancellationToken.None);
-        await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await entered.Task.WaitAsync(TestTimeouts.Completion);
 
         foreach (Func<Task> overlapping in new Func<Task>[]
         {

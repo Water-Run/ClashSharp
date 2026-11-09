@@ -174,7 +174,7 @@ public sealed partial class ProductionDataGenerationTests
             repositories.Logs.AppendLog("Info", "Test", "accepted operation finishing", null);
             return (await profiles.AddSubscriptionLinkAsync("accepted", "https://example.test/accepted", token)).Name;
         }, CancellationToken.None);
-        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await entered.Task.WaitAsync(TestTimeouts.Completion);
         Task retiring = fixture.Manager.DisposeAsync().AsTask();
         try
         {
@@ -184,7 +184,7 @@ public sealed partial class ProductionDataGenerationTests
         }
         finally { release.TrySetResult(); }
         Assert.Equal("accepted", await accepted);
-        await retiring.WaitAsync(TimeSpan.FromSeconds(5));
+        await retiring.WaitAsync(TestTimeouts.Completion);
         Assert.Throws<ObjectDisposedException>(() => repositories.Profiles.GetProfiles());
         Assert.Throws<ObjectDisposedException>(() => repositories.Logs.GetRecentLogs(5));
         Assert.All(fixture.Participants, participant => Assert.Equal(1, participant.Disposals));

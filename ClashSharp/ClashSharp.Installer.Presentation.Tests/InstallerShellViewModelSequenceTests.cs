@@ -346,7 +346,7 @@ public sealed class InstallerShellViewModelSequenceTests
     {
         if (inFlight is not null)
         {
-            await inFlight.WaitAsync(TimeSpan.FromSeconds(10));
+            await inFlight.WaitAsync(TestTimeouts.Completion);
         }
     }
 

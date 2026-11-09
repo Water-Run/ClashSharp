@@ -20,7 +20,7 @@ public sealed class ProfileSubscriptionSchedulerTests
         Assert.Empty(catalog.ImportedLinkIds);
 
         gate.Publish();
-        await pass.WaitAsync(TimeSpan.FromSeconds(5));
+        await pass.WaitAsync(TestTimeouts.Completion);
         Assert.Equal(1, catalog.Reads);
         Assert.Equal(["held"], catalog.ImportedLinkIds);
     }
@@ -44,16 +44,16 @@ public sealed class ProfileSubscriptionSchedulerTests
         try
         {
             await scheduler.StartAsync(CancellationToken.None);
-            await firstWait.Task.WaitAsync(TimeSpan.FromSeconds(5));
-            var paused = await scheduler.QuiesceAsync(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5));
+            await firstWait.Task.WaitAsync(TestTimeouts.Completion);
+            var paused = await scheduler.QuiesceAsync(CancellationToken.None).WaitAsync(TestTimeouts.Completion);
             Assert.True(paused.WasRunning);
             Assert.Equal(0, catalog.Reads);
 
             await scheduler.ResumeAsync(paused, CancellationToken.None);
-            await secondWait.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await secondWait.Task.WaitAsync(TestTimeouts.Completion);
             Assert.Empty(catalog.ImportedLinkIds);
             gate.Publish();
-            await imported.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await imported.Task.WaitAsync(TestTimeouts.Completion);
             Assert.Equal(["resumed"], catalog.ImportedLinkIds);
         }
         finally { await scheduler.StopAsync(CancellationToken.None); }

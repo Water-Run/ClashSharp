@@ -47,7 +47,7 @@ public sealed class TriggersSettingsParticipantTests
             catch (OperationCanceledException) { cancelledBeforePublication.TrySetResult(); }
         };
         fixture.Events.Publish(TriggerEventKind.AppEntered);
-        await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await entered.Task.WaitAsync(TestTimeouts.Completion);
         Task<SettingsAuthorityResult> disabling = fixture.Authority.ApplyChangesAsync(
             [new(SettingsRegistry.Keys.TriggersEnabled, SettingsEnvelopeTestData.Value("TriggersEnabled", "false"))],
             Guid.NewGuid(), CancellationToken.None);
@@ -61,7 +61,7 @@ public sealed class TriggersSettingsParticipantTests
             MutationAdmissionState admissionBeforeProducerSettled = fixture.Admission.State;
             bool pausedBeforeProducerSettled = paused.Task.IsCompleted;
             continueProducer.TrySetResult();
-            Task<SettingsAuthorityResult> nested = await nestedStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            Task<SettingsAuthorityResult> nested = await nestedStarted.Task.WaitAsync(TestTimeouts.Completion);
             if (pausedBeforeProducerSettled)
             {
                 Assert.False(disabling.IsCompleted);
@@ -69,7 +69,7 @@ public sealed class TriggersSettingsParticipantTests
             }
             Assert.Equal(MutationAdmissionState.Closing, admissionBeforeProducerSettled);
             Assert.False(pausedBeforeProducerSettled);
-            Assert.True((await disabling.WaitAsync(TimeSpan.FromSeconds(10))).IsSucceeded);
+            Assert.True((await disabling.WaitAsync(TestTimeouts.Completion)).IsSucceeded);
             Assert.True(cancelledBeforePublication.Task.IsCompleted);
             Assert.True(fixture.Authority.CaptureSnapshot().Envelope.Desired[SettingsRegistry.Keys.NotificationEnabled].Value.Get<bool>());
             Assert.False(fixture.Authority.CaptureSnapshot().Envelope.Applied[SettingsRegistry.Keys.TriggersEnabled].Value!.Get<bool>());
@@ -80,7 +80,7 @@ public sealed class TriggersSettingsParticipantTests
             // A failing assertion against the previous ordering must still break and drain its cycle.
             continueProducer.TrySetResult();
             cleanupCancellation.Cancel();
-            await disabling.WaitAsync(TimeSpan.FromSeconds(10));
+            await disabling.WaitAsync(TestTimeouts.Completion);
         }
     }
 
@@ -159,7 +159,7 @@ public sealed class TriggersSettingsParticipantTests
         fixture.Events.OnUnsubscribe = () => paused.TrySetResult();
         using CancellationTokenSource cancellation = new();
         Task<SettingsAuthorityResult> applying = fixture.ApplyAsync(cancellationToken: cancellation.Token);
-        await paused.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await paused.Task.WaitAsync(TestTimeouts.Completion);
         cancellation.Cancel();
         Assert.False(applying.IsCompleted);
         Assert.Throws<MutationAdmissionRejectedException>(() => fixture.Admission.AcquireOrdinary());
@@ -236,7 +236,7 @@ public sealed class TriggersSettingsParticipantTests
         fixture.Evaluator.Execution = execution;
         fixture.Handoff.FailuresRemaining = 3;
         fixture.Events.Publish(TriggerEventKind.AppEntered);
-        await fixture.Handoff.ThirdAttempt.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await fixture.Handoff.ThirdAttempt.Task.WaitAsync(TestTimeouts.Completion);
         await fixture.ChangeAsync(false);
         Assert.True((await fixture.ApplyAsync()).IsSucceeded);
         await fixture.Clock.TickAsync();
@@ -296,7 +296,7 @@ public sealed class TriggersSettingsParticipantTests
         fixture.Events.Publish(TriggerEventKind.AppEntered);
         await fixture.Evaluator.ReadAsync();
         Task retiring = fixture.Participant.DisposeAsync().AsTask();
-        await fixture.Evaluator.CancellationObserved.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await fixture.Evaluator.CancellationObserved.Task.WaitAsync(TestTimeouts.Completion);
         Assert.False(retiring.IsCompleted);
         Assert.Equal(0, fixture.Events.ActiveSubscriptions);
         fixture.Evaluator.Release.TrySetResult();
@@ -376,7 +376,7 @@ public sealed class TriggersSettingsParticipantTests
         Assert.False(applying.IsCompleted);
         Assert.False(fixture.Evaluator.CancellationObserved.Task.IsCompleted);
         fixture.Evaluator.Release.TrySetResult();
-        SettingsAuthorityResult result = await applying.WaitAsync(TimeSpan.FromSeconds(10));
+        SettingsAuthorityResult result = await applying.WaitAsync(TestTimeouts.Completion);
         Assert.True(result.IsSucceeded, result.Code);
         Assert.False(result.Envelope!.Applied[SettingsRegistry.Keys.TriggerNotificationsEnabled].Value!.Get<bool>());
         Assert.True(result.Envelope.Applied[SettingsRegistry.Keys.TriggersEnabled].Value!.Get<bool>());

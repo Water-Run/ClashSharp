@@ -56,7 +56,7 @@ public sealed class ConnectionSamplingServiceTests
         FakeConnectionSamplingSource source = new() { BlockFirstSample = true };
         ConnectionSamplingService service = CreateService(source: source);
         Task first = service.SampleOnceAsync(CancellationToken.None);
-        await source.FirstSampleStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await source.FirstSampleStarted.Task.WaitAsync(TestTimeouts.Completion);
         Task flush = service.FlushAsync(CancellationToken.None);
         Assert.False(flush.IsCompleted);
         Assert.Equal(1, source.CallCount);
@@ -236,7 +236,7 @@ public sealed class ConnectionSamplingServiceTests
         try
         {
             await service.StartAsync(CancellationToken.None);
-            await source.FirstSampleStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+            await source.FirstSampleStarted.Task.WaitAsync(TestTimeouts.Completion);
 
             Task restarting = service.RestartFromSettingsAsync(CancellationToken.None);
             await Task.Delay(80);

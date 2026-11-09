@@ -164,7 +164,7 @@ public sealed class WindowPlacementTests
         var session = new WindowPlacementSession(store, view, new Errors());
         await session.InitializeAsync(CancellationToken.None);
         Task saving = session.CheckpointAsync(true, CancellationToken.None);
-        await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await entered.Task.WaitAsync(TestTimeouts.Completion);
         Task clearing = session.PrepareShutdownAsync(false, CancellationToken.None);
         Task lateHide = session.CheckpointAsync(true, CancellationToken.None);
         try { Assert.False(clearing.IsCompleted); }

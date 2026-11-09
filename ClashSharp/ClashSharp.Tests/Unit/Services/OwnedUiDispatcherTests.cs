@@ -101,10 +101,10 @@ public sealed class OwnedUiDispatcherTests
             Assert.False(operation.IsCompleted);
             Assert.False(retirement.IsCompleted);
             release.Set();
-            Assert.Equal(42, await operation.WaitAsync(TimeSpan.FromSeconds(5)));
-            await retirement.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.Equal(42, await operation.WaitAsync(TestTimeouts.Completion));
+            await retirement.WaitAsync(TestTimeouts.Completion);
         }
-        finally { release.Set(); await callback.WaitAsync(TimeSpan.FromSeconds(5)); }
+        finally { release.Set(); await callback.WaitAsync(TestTimeouts.Completion); }
     }
 
     [Theory]

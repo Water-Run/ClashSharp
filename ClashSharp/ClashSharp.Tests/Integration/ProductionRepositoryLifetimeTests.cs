@@ -56,14 +56,14 @@ public sealed class ProductionRepositoryLifetimeTests
         Task<MutationAdmissionLease>? draining = null;
         try
         {
-            await commitEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await commitEntered.Task.WaitAsync(TestTimeouts.Completion);
             Assert.False(activation.IsCompleted);
             retiring = profiles.DisposeAsync().AsTask();
             draining = admission.CloseAndDrainAsync(MutationAdmissionClosure.Destructive, CancellationToken.None).AsTask();
             Assert.False(retiring.IsCompleted);
             Assert.False(draining.IsCompleted);
             commitRelease.TrySetResult();
-            await restoreEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await restoreEntered.Task.WaitAsync(TestTimeouts.Completion);
             Assert.Equal("previous-profile", settings.ActiveProfileId);
             Assert.False(activation.IsCompleted);
             Assert.False(retiring.IsCompleted);
@@ -75,8 +75,8 @@ public sealed class ProductionRepositoryLifetimeTests
             commitRelease.TrySetResult();
             restoreRelease.TrySetResult();
             Assert.Same(failure, await Assert.ThrowsAsync<IOException>(() => activation));
-            if (retiring is not null) { await retiring.WaitAsync(TimeSpan.FromSeconds(5)); }
-            if (draining is not null) { (await draining.WaitAsync(TimeSpan.FromSeconds(5))).Dispose(); }
+            if (retiring is not null) { await retiring.WaitAsync(TestTimeouts.Completion); }
+            if (draining is not null) { (await draining.WaitAsync(TestTimeouts.Completion)).Dispose(); }
             await profiles.DisposeAsync();
             await logs.DisposeAsync();
             if (Directory.Exists(root)) { Directory.Delete(root, recursive: true); }
@@ -108,7 +108,7 @@ public sealed class ProductionRepositoryLifetimeTests
             Assert.NotNull(logs);
             logs.AppendLog("Info", "Startup", "before retirement", null);
             Task<bool> activation = profiles.TryApplyActiveProfileAsync(ProfileCatalogIds.BuiltInDirect, CancellationToken.None);
-            await runtime.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await runtime.Entered.Task.WaitAsync(TestTimeouts.Completion);
             Task retiringHost = host.DisposeAsync().AsTask();
             try
             {
@@ -123,7 +123,7 @@ public sealed class ProductionRepositoryLifetimeTests
             }
 
             Assert.True(await activation);
-            await retiringHost.WaitAsync(TimeSpan.FromSeconds(5));
+            await retiringHost.WaitAsync(TestTimeouts.Completion);
             Assert.Throws<ObjectDisposedException>(() => logs.AppendLog("Info", "late", "late", null));
             Assert.Throws<ObjectDisposedException>(() => profiles.GetProfiles());
             await using LogStorageService reopened = LogStorageServiceFactory.CreateForDirectory(root, () => settings.ActiveProfileId);

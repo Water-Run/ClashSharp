@@ -307,7 +307,7 @@ public sealed class InstallerOwnerTransferStoreTests
         Task<InstallerOwnerTransferSnapshot?> pending = store.LoadAsync(CancellationToken.None);
         try
         {
-            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await entered.Task.WaitAsync(TestTimeouts.Completion);
             InstallerProtocolException exception = await Assert.ThrowsAsync<InstallerProtocolException>(() =>
                 store.SaveAsync(InstallerOwnerTransferJournalTests.CreateJournal(), null, CancellationToken.None));
             Assert.Equal("installer.owner_transfer.concurrent_access", exception.DiagnosticCode);

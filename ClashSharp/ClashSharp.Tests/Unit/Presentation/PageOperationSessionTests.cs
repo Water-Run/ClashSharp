@@ -18,14 +18,14 @@ public sealed class PageOperationSessionTests
             entered.SetResult();
             await release.Task.WaitAsync(token);
         });
-        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await entered.Task.WaitAsync(TestTimeouts.Completion);
         using CancellationTokenSource caller = new();
         bool queuedInvoked = false;
         Task second = session.RunAsync(_ => { queuedInvoked = true; return Task.CompletedTask; }, caller.Token);
         caller.Cancel();
         Assert.False(first.IsCompleted);
         release.SetResult();
-        await Task.WhenAll(first, second).WaitAsync(TimeSpan.FromSeconds(5));
+        await Task.WhenAll(first, second).WaitAsync(TestTimeouts.Completion);
         Assert.False(queuedInvoked);
         Assert.Empty(errors.Errors);
     }
@@ -44,14 +44,14 @@ public sealed class PageOperationSessionTests
             await release.Task.WaitAsync(token);
             order.Add(2);
         });
-        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await entered.Task.WaitAsync(TestTimeouts.Completion);
 
         Task second = session.RunAsync(_ => { order.Add(3); return Task.CompletedTask; });
         Task third = session.RunAsync(_ => { order.Add(4); return Task.CompletedTask; });
         Assert.False(second.IsCompleted);
         Assert.False(third.IsCompleted);
         release.SetResult();
-        await Task.WhenAll(first, second, third).WaitAsync(TimeSpan.FromSeconds(5));
+        await Task.WhenAll(first, second, third).WaitAsync(TestTimeouts.Completion);
 
         Assert.Equal([1, 2, 3, 4], order);
     }
@@ -68,11 +68,11 @@ public sealed class PageOperationSessionTests
             entered.SetResult();
             await Task.Delay(Timeout.InfiniteTimeSpan, token);
         });
-        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await entered.Task.WaitAsync(TestTimeouts.Completion);
         Task queued = session.RunAsync(_ => { queuedInvoked = true; return Task.CompletedTask; });
 
         session.Cancel();
-        await session.DrainAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        await session.DrainAsync().WaitAsync(TestTimeouts.Completion);
         await Task.WhenAll(first, queued);
         bool newVisitInvoked = false;
         await session.RunAsync(_ => { newVisitInvoked = true; return Task.CompletedTask; });
@@ -94,14 +94,14 @@ public sealed class PageOperationSessionTests
             entered.SetResult();
             await release.Task;
         });
-        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await entered.Task.WaitAsync(TestTimeouts.Completion);
 
         session.Cancel();
         Task next = session.RunAsync(_ => { newVisitInvoked = true; return Task.CompletedTask; });
         Assert.False(newVisitInvoked);
         Assert.False(session.DrainAsync().IsCompleted);
         release.SetResult();
-        await Task.WhenAll(first, next).WaitAsync(TimeSpan.FromSeconds(5));
+        await Task.WhenAll(first, next).WaitAsync(TestTimeouts.Completion);
 
         Assert.True(newVisitInvoked);
     }
@@ -148,10 +148,10 @@ public sealed class PageOperationSessionTests
             entered.SetResult();
             await Task.Delay(Timeout.InfiniteTimeSpan, token);
         });
-        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await entered.Task.WaitAsync(TestTimeouts.Completion);
 
         session.Cancel();
-        await session.DrainAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        await session.DrainAsync().WaitAsync(TestTimeouts.Completion);
         await action;
 
         Assert.IsType<AggregateException>(Assert.Single(errors.Errors).Exception);

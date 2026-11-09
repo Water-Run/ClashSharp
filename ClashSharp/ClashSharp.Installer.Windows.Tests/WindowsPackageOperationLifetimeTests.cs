@@ -16,7 +16,7 @@ public sealed class WindowsPackageOperationLifetimeTests
         Task<int> pending = Begin(native);
         try
         {
-            await native.Subscribed.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await native.Subscribed.Task.WaitAsync(TestTimeouts.Completion);
             Collect();
 
             Assert.True(native.IsProjectionAlive(), "The pending WinRT operation must remain owned independently of its Task.");
@@ -25,19 +25,19 @@ public sealed class WindowsPackageOperationLifetimeTests
 
             if (outcome == "success")
             {
-                Assert.Equal(41, await pending.WaitAsync(TimeSpan.FromSeconds(5)));
+                Assert.Equal(41, await pending.WaitAsync(TestTimeouts.Completion));
                 Assert.Equal(1, native.GetResultsCount);
             }
             else if (outcome == "error")
             {
                 InvalidOperationException error = await Assert.ThrowsAsync<InvalidOperationException>(
-                    () => pending.WaitAsync(TimeSpan.FromSeconds(5)));
+                    () => pending.WaitAsync(TestTimeouts.Completion));
                 Assert.Same(native.Failure, error);
             }
             else
             {
                 await Assert.ThrowsAnyAsync<OperationCanceledException>(
-                    () => pending.WaitAsync(TimeSpan.FromSeconds(5)));
+                    () => pending.WaitAsync(TestTimeouts.Completion));
             }
             Assert.Equal(0, native.CancelCount);
             Assert.Equal(0, native.CloseCount);
@@ -47,7 +47,7 @@ public sealed class WindowsPackageOperationLifetimeTests
             // The fake native producer can finish an abandoned bridge even when a failing
             // assertion proves that the original managed projection has already disappeared.
             native.Drain(pending);
-            try { await pending.WaitAsync(TimeSpan.FromSeconds(5)); }
+            try { await pending.WaitAsync(TestTimeouts.Completion); }
             catch (Exception exception) when (exception is InvalidOperationException or OperationCanceledException) { }
         }
     }

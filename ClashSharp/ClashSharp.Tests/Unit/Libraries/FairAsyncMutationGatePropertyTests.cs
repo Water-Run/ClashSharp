@@ -77,7 +77,7 @@ public sealed class FairAsyncMutationGatePropertyTests
             }
             else
             {
-                await task.WaitAsync(TimeSpan.FromSeconds(10));
+                await task.WaitAsync(TestTimeouts.Completion);
             }
 
             source.Dispose();
@@ -155,11 +155,11 @@ public sealed class FairAsyncMutationGatePropertyTests
             }
             else
             {
-                await second.WaitAsync(TimeSpan.FromSeconds(5));
+                await second.WaitAsync(TestTimeouts.Completion);
                 Assert.True(secondRan);
             }
 
-            await third.WaitAsync(TimeSpan.FromSeconds(5));
+            await third.WaitAsync(TestTimeouts.Completion);
             Assert.False(gate.IsHeld);
             Assert.Equal(0, gate.QueuedCount);
         }
@@ -279,7 +279,7 @@ public sealed class FairAsyncMutationGatePropertyTests
             await source.CancelAsync();
         }
 
-        await Task.WhenAll(tasks).WaitAsync(TimeSpan.FromSeconds(20));
+        await Task.WhenAll(tasks).WaitAsync(TestTimeouts.Completion);
         Assert.Equal(0, violations);
         Assert.True(completed > 0);
         Assert.False(gate.IsHeld);

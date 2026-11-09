@@ -314,7 +314,7 @@ public sealed class SupervisorStateMachineTests
         Assert.Equal(MihomoServiceChildState.Stopped, stopped.Snapshot.ChildState);
         Assert.Equal(1, harness.Launcher.Attempts);
         // The cancelled restart task must be gone: shutdown drains tracked background work.
-        await harness.Supervisor.ShutdownAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        await harness.Supervisor.ShutdownAsync().WaitAsync(TestTimeouts.Completion);
         Assert.Equal(1, harness.Launcher.Attempts);
         Assert.Empty(harness.EffectiveFiles());
     }
@@ -336,7 +336,7 @@ public sealed class SupervisorStateMachineTests
         Assert.True(reloaded.Succeeded);
         Assert.Equal(2, harness.Launcher.Attempts);
         Assert.Equal(2, reloaded.Snapshot.ActiveGeneration);
-        await harness.Supervisor.ShutdownAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        await harness.Supervisor.ShutdownAsync().WaitAsync(TestTimeouts.Completion);
         Assert.Equal(2, harness.Launcher.Attempts);
         Assert.False(harness.Launcher.OverlapDetected);
     }
@@ -350,7 +350,7 @@ public sealed class SupervisorStateMachineTests
         await SupervisorHarness.WaitUntilAsync(() =>
             harness.Supervisor.GetSnapshot() is { ChildState: MihomoServiceChildState.Starting, ChildProcessId: null });
 
-        await harness.Supervisor.ShutdownAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        await harness.Supervisor.ShutdownAsync().WaitAsync(TestTimeouts.Completion);
 
         Assert.Equal(1, harness.Launcher.Attempts);
         Assert.Equal(MihomoServiceChildState.Stopped, harness.Supervisor.GetSnapshot().ChildState);
@@ -379,8 +379,8 @@ public sealed class SupervisorStateMachineTests
             Mode = MihomoServiceIpcRoutingMode.Rule,
             TunEnabled = true,
         });
-        Assert.True((await start.WaitAsync(TimeSpan.FromSeconds(5))).Succeeded);
-        MihomoChildOperationResult stopped = await stop.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.True((await start.WaitAsync(TestTimeouts.Completion)).Succeeded);
+        MihomoChildOperationResult stopped = await stop.WaitAsync(TestTimeouts.Completion);
         Assert.True(stopped.Succeeded);
         Assert.Equal(MihomoServiceChildState.Stopped, stopped.Snapshot.ChildState);
         Assert.Equal(1, harness.Launcher.Snapshot().Single().StopCalls);
@@ -401,8 +401,8 @@ public sealed class SupervisorStateMachineTests
 
         Task shutdown = harness.Supervisor.ShutdownAsync();
 
-        MihomoChildOperationResult result = await start.WaitAsync(TimeSpan.FromSeconds(5));
-        await shutdown.WaitAsync(TimeSpan.FromSeconds(5));
+        MihomoChildOperationResult result = await start.WaitAsync(TestTimeouts.Completion);
+        await shutdown.WaitAsync(TestTimeouts.Completion);
         Assert.False(result.Succeeded);
         Assert.Equal("service.child.service_stopping", result.ErrorCode);
         FakeMihomoChildProcess child = harness.Launcher.Snapshot().Single();
@@ -566,7 +566,7 @@ public sealed class SupervisorStateMachineTests
             TunEnabled = true,
         });
 
-        Assert.True((await first.WaitAsync(TimeSpan.FromSeconds(5))).Succeeded);
+        Assert.True((await first.WaitAsync(TestTimeouts.Completion)).Succeeded);
         Assert.Equal(MihomoServiceChildState.Running, harness.Supervisor.GetSnapshot().ChildState);
         Assert.Equal(1, harness.Launcher.Attempts);
         Assert.Equal(0, harness.Launcher.Snapshot().Single().StopCalls);
@@ -605,7 +605,7 @@ public sealed class SupervisorStateMachineTests
             _ = escaped;
             MihomoChildOperationResult probe = await harness.Supervisor
                 .StartAsync(1, harness.Hash, CancellationToken.None)
-                .WaitAsync(TimeSpan.FromSeconds(5));
+                .WaitAsync(TestTimeouts.Completion);
             Assert.True(probe.Succeeded, $"The command gate stayed held after {failure.GetType().Name}.");
         }
 
@@ -622,7 +622,7 @@ public sealed class SupervisorStateMachineTests
                 cancellation.Token);
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => cancelled);
         Assert.True((await harness.Supervisor.StartAsync(1, harness.Hash, CancellationToken.None)
-            .WaitAsync(TimeSpan.FromSeconds(5))).Succeeded);
+            .WaitAsync(TestTimeouts.Completion)).Succeeded);
     }
 
     /// <summary>Gets one row per field of the exact runtime binding.</summary>
@@ -695,7 +695,7 @@ public sealed class SupervisorStateMachineTests
                 binding,
                 (_, _) => throw new Xunit.Sdk.XunitException("A revoked context must never reach its operation."),
                 CancellationToken.None)
-            .WaitAsync(TimeSpan.FromSeconds(5));
+            .WaitAsync(TestTimeouts.Completion);
         Assert.NotNull(operation.ErrorCode);
     }
 
@@ -725,7 +725,7 @@ public sealed class SupervisorStateMachineTests
             }
         }
 
-        MihomoChildOperationResult[] results = await Task.WhenAll(pending).WaitAsync(TimeSpan.FromSeconds(30));
+        MihomoChildOperationResult[] results = await Task.WhenAll(pending).WaitAsync(TestTimeouts.Completion);
 
         Assert.False(harness.Launcher.OverlapDetected, "Two mihomo children were alive at the same time.");
         Assert.All(results, result =>

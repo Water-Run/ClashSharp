@@ -140,14 +140,14 @@ public sealed class WindowsInstallerParentEngineFlowContractTests
         Task<string> first = harness.Observe(holder, CancellationToken.None);
         try
         {
-            await harness.Factory.Entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await harness.Factory.Entered.Task.WaitAsync(TestTimeouts.Completion);
             int creates = harness.Factory.Creates;
             int stages = harness.Store.Stages;
             int acquisitions = harness.Lock.Acquisitions;
 
             // A second caller that were admitted would park on the same gate; bound the wait so a
             // missing rejection fails instead of hanging the run.
-            string second = await harness.Observe(probe, CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(10));
+            string second = await harness.Observe(probe, CancellationToken.None).WaitAsync(TestTimeouts.Completion);
 
             string expected = (probe is "inspect" or "launch" ? "throws:" : "Blocked:") + Concurrent;
             Assert.Equal(expected, second);
@@ -160,7 +160,7 @@ public sealed class WindowsInstallerParentEngineFlowContractTests
             harness.Factory.Release.TrySetResult();
         }
 
-        _ = await first.WaitAsync(TimeSpan.FromSeconds(10));
+        _ = await first.WaitAsync(TestTimeouts.Completion);
         Assert.False(harness.Lock.Held);
         harness.Factory.Gated = false;
         harness.Store.Pending = null;

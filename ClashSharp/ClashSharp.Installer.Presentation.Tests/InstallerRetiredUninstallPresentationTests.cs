@@ -21,7 +21,7 @@ public sealed class InstallerRetiredUninstallPresentationTests
         Task execution = viewModel.RetiredUninstallCommand.ExecuteAsync();
         try
         {
-            await displayed.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await displayed.Task.WaitAsync(TestTimeouts.Completion);
             Assert.True(viewModel.IsBusy);
             Assert.Equal(0, runtime.Calls);
             Assert.False(viewModel.IsCancelActionVisible);
@@ -31,7 +31,7 @@ public sealed class InstallerRetiredUninstallPresentationTests
             await viewModel.RetiredUninstallCommand.ExecuteAsync();
             Assert.Equal(0, runtime.Calls);
             (accepted ? viewModel.ConfirmRetiredUninstallCommand : viewModel.DeclineRetiredUninstallCommand).Execute(null);
-            await execution.WaitAsync(TimeSpan.FromSeconds(5));
+            await execution.WaitAsync(TestTimeouts.Completion);
         }
         finally { viewModel.RequestCancellation(); await execution; }
         Assert.Equal(accepted ? 1 : 0, runtime.Calls);
@@ -50,9 +50,9 @@ public sealed class InstallerRetiredUninstallPresentationTests
         using var viewModel = new InstallerShellViewModel(runtime);
         TaskCompletionSource displayed = Observe(viewModel);
         Task execution = viewModel.RetiredUninstallCommand.ExecuteAsync();
-        await displayed.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await displayed.Task.WaitAsync(TestTimeouts.Completion);
         viewModel.RequestCancellation();
-        await execution.WaitAsync(TimeSpan.FromSeconds(5));
+        await execution.WaitAsync(TestTimeouts.Completion);
         Assert.Equal(0, runtime.Calls);
         Assert.False(viewModel.IsBusy);
         Assert.False(viewModel.IsRetiredUninstallConfirmationVisible);
@@ -79,9 +79,9 @@ public sealed class InstallerRetiredUninstallPresentationTests
         Task execution = viewModel.RetiredUninstallCommand.ExecuteAsync();
         try
         {
-            await displayed.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await displayed.Task.WaitAsync(TestTimeouts.Completion);
             viewModel.ConfirmRetiredUninstallCommand.Execute(null);
-            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await entered.Task.WaitAsync(TestTimeouts.Completion);
             viewModel.RequestCancellation();
             Assert.True(viewModel.IsBusy);
             Assert.False(execution.IsCompleted);
@@ -102,9 +102,9 @@ public sealed class InstallerRetiredUninstallPresentationTests
         using var viewModel = new InstallerShellViewModel(runtime);
         TaskCompletionSource displayed = Observe(viewModel);
         Task execution = viewModel.RetiredUninstallCommand.ExecuteAsync();
-        await displayed.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await displayed.Task.WaitAsync(TestTimeouts.Completion);
         viewModel.ConfirmRetiredUninstallCommand.Execute(null);
-        await execution.WaitAsync(TimeSpan.FromSeconds(5));
+        await execution.WaitAsync(TestTimeouts.Completion);
         Assert.Equal(code, viewModel.DiagnosticCode);
         Assert.Contains(detail, viewModel.StatusDetail, StringComparison.Ordinal);
         Assert.True(viewModel.IsRetiredUninstallActionVisible);

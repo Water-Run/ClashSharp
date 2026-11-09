@@ -19,7 +19,7 @@ public sealed partial class LogsViewModelTests
             token => StreamRuntimeLogsAsync(advanced, token));
         using CancellationTokenSource cancellation = new();
         Task watching = page.WatchRuntimeLogsAsync(cancellation.Token);
-        await advanced.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await advanced.Task.WaitAsync(TestTimeouts.Completion);
         Assert.Contains(page.RecentLogs, row => row.Message == "runtime message");
         cancellation.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => watching);
@@ -121,7 +121,7 @@ public sealed partial class LogsViewModelTests
         using CancellationTokenSource cancellation = new();
 
         Task watchTask = viewModel.WatchRuntimeLogsAsync(cancellation.Token);
-        await streamAdvanced.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await streamAdvanced.Task.WaitAsync(TestTimeouts.Completion);
 
         LogRecordDisplay row = Assert.Single(viewModel.RecentLogs);
         Assert.Equal("Warning", row.Record.Level);
@@ -151,7 +151,7 @@ public sealed partial class LogsViewModelTests
         using CancellationTokenSource cancellation = new();
 
         Task watchTask = viewModel.WatchRuntimeLogsAsync(cancellation.Token);
-        await streamAdvanced.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await streamAdvanced.Task.WaitAsync(TestTimeouts.Completion);
 
         LogRecordDisplay row = Assert.Single(viewModel.RecentLogs);
         Assert.Equal(MihomoServiceIpcProtocol.MaximumRuntimeLogMessageCharacters, row.Message.Length);

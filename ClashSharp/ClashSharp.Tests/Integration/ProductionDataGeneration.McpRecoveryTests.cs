@@ -100,7 +100,7 @@ public sealed partial class ProductionDataGenerationTests
             McpAccessScope.ReadStatus | McpAccessScope.ReadConfiguration | McpAccessScope.ModifyConfiguration);
 
         CallToolResult result = await agent.CallAsync(McpToolId.RetrySettingsApplication,
-            new { operation_id = Guid.NewGuid(), batch_id = batch.BatchId, attempt_id = batch.AttemptId }).WaitAsync(TimeSpan.FromSeconds(10));
+            new { operation_id = Guid.NewGuid(), batch_id = batch.BatchId, attempt_id = batch.AttemptId }).WaitAsync(TestTimeouts.Completion);
 
         Assert.False(result.IsError ?? false, result.StructuredContent?.GetRawText());
         Assert.Empty(fixture.Containers[0].Session.Snapshot.PendingApplications);

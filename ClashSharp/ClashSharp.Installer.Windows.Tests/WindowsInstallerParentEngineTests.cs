@@ -274,8 +274,8 @@ public sealed class WindowsInstallerParentEngineTests
         Task<InstallerRuntimeInspection>? inspection = null;
         try
         {
-            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
-            inspection = await returned.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await entered.Task.WaitAsync(TestTimeouts.Completion);
+            inspection = await returned.Task.WaitAsync(TestTimeouts.Completion);
             Assert.NotEqual(callerThread, inspector.WorkerThread);
             Assert.False(inspection.IsCompleted);
             cancellation.Cancel();
@@ -297,10 +297,10 @@ public sealed class WindowsInstallerParentEngineTests
         {
             cancellation.Cancel();
             release.Set();
-            await caller.WaitAsync(TimeSpan.FromSeconds(5));
+            await caller.WaitAsync(TestTimeouts.Completion);
             inspection ??= await returned.Task;
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-                inspection.WaitAsync(TimeSpan.FromSeconds(5)));
+                inspection.WaitAsync(TestTimeouts.Completion));
         }
         Assert.True(inspector.Drained);
     }

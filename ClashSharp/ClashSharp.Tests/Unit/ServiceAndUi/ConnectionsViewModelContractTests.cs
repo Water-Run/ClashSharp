@@ -668,7 +668,7 @@ public sealed class ConnectionsViewModelContractTests
         {
             for (int index = 0; index < count; index++)
             {
-                await _consumed.WaitAsync(TimeSpan.FromSeconds(10));
+                await _consumed.WaitAsync(TestTimeouts.Completion);
             }
         }
 

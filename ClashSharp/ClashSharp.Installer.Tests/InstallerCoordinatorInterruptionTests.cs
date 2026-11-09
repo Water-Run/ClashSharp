@@ -321,7 +321,7 @@ public sealed class InstallerCoordinatorInterruptionTests
         using InstallerCoordinator coordinator = scenario.CreateCoordinator();
         Task<InstallerExecutionResult> running = coordinator.ExecuteAsync(
             RequestFor(InstallerOperation.Install), null, CancellationToken.None);
-        await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await entered.Task.WaitAsync(TestTimeouts.Completion);
         int eventsWhileRunning = scenario.Events.Count;
 
         foreach (InstallerOperation other in Operations)

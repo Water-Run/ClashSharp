@@ -198,7 +198,7 @@ public sealed partial class ProductionInstallerRuntimeTests
         }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default).Unwrap();
         try
         {
-            await returned.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await returned.Task.WaitAsync(TestTimeouts.Completion);
             Assert.True(entered.Wait(TimeSpan.FromSeconds(5)));
             Assert.False(operationTask.IsCompleted);
             cancellation.Cancel();

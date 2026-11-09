@@ -78,7 +78,7 @@ public sealed class InstallerWpfResourceTests
                     finally { window.Close(); }
 
                     SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext());
-                    Task behavior = InstallerWpfShellBehavior.VerifyAsync().WaitAsync(TimeSpan.FromSeconds(15));
+                    Task behavior = InstallerWpfShellBehavior.VerifyAsync().WaitAsync(TestTimeouts.Completion);
                     DispatcherFrame frame = new();
                     _ = behavior.ContinueWith(_ => application.Dispatcher.BeginInvoke(() => frame.Continue = false), TaskScheduler.Default);
                     Dispatcher.PushFrame(frame);

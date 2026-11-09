@@ -141,14 +141,14 @@ public sealed partial class GenerationSettingsAuthorityTests
         Task<DataGenerationTransition>? draining = null;
         try
         {
-            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await entered.Task.WaitAsync(TestTimeouts.Completion);
             draining = fixture.Generations.BeginDrainAsync(fixture.Manifest.ContentHash, CancellationToken.None).AsTask();
             Assert.False(draining.IsCompleted);
             Assert.False(reset.IsCompleted);
         }
         finally { release.TrySetResult(); }
-        Assert.True((await reset.WaitAsync(TimeSpan.FromSeconds(5))).Outcome.IsSucceeded);
-        await using DataGenerationTransition transition = await draining!.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.True((await reset.WaitAsync(TestTimeouts.Completion)).Outcome.IsSucceeded);
+        await using DataGenerationTransition transition = await draining!.WaitAsync(TestTimeouts.Completion);
     }
 
     [Fact]
@@ -219,12 +219,12 @@ public sealed partial class GenerationSettingsAuthorityTests
         Task reset = page.ResetProxySettingsToDefaultsAsync(CancellationToken.None);
         try
         {
-            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await entered.Task.WaitAsync(TestTimeouts.Completion);
             Assert.Equal(23456, page.MixedPort);
             Assert.False(reset.IsCompleted);
         }
         finally { release.TrySetResult(); }
-        await reset.WaitAsync(TimeSpan.FromSeconds(5));
+        await reset.WaitAsync(TestTimeouts.Completion);
         Assert.Equal(10000, page.MixedPort);
         Assert.Equal(30, page.ConnectionSamplingIntervalSeconds);
         network.BeforeApply = null;

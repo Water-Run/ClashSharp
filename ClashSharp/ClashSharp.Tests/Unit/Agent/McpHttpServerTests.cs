@@ -134,15 +134,15 @@ public sealed class McpHttpServerTests
         Task? stop = null;
         try
         {
-            await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await entered.Task.WaitAsync(TestTimeouts.Completion);
             stop = fixture.Server.StopAsync(CancellationToken.None);
-            await cancellationObserved.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await cancellationObserved.Task.WaitAsync(TestTimeouts.Completion);
             Assert.False(stop.IsCompleted);
         }
         finally
         {
             release.TrySetResult();
-            if (stop is not null) { await stop.WaitAsync(TimeSpan.FromSeconds(10)); }
+            if (stop is not null) { await stop.WaitAsync(TestTimeouts.Completion); }
             _ = await Record.ExceptionAsync(async () => await call);
         }
         Assert.Null(fixture.Server.BoundEndpoint);
@@ -168,9 +168,9 @@ public sealed class McpHttpServerTests
         Task? disposal = null;
         try
         {
-            await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await entered.Task.WaitAsync(TestTimeouts.Completion);
             Task stop = fixture.Server.StopAsync(waiting.Token);
-            await cancellationObserved.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await cancellationObserved.Task.WaitAsync(TestTimeouts.Completion);
             await waiting.CancelAsync();
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() => stop);
             disposal = fixture.Server.DisposeAsync().AsTask();
@@ -179,7 +179,7 @@ public sealed class McpHttpServerTests
         finally
         {
             release.TrySetResult();
-            if (disposal is not null) { await disposal.WaitAsync(TimeSpan.FromSeconds(10)); }
+            if (disposal is not null) { await disposal.WaitAsync(TestTimeouts.Completion); }
             _ = await Record.ExceptionAsync(async () => await call);
         }
         Assert.Null(fixture.Server.BoundEndpoint);

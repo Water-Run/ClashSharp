@@ -238,7 +238,7 @@ public sealed class NetworkSettingsParticipantTests
         TaskCompletionSource release = new(TaskCreationOptions.RunContinuationsAsynchronously);
         fixture.Surface.BeforeApply = async () => { started.TrySetResult(); await release.Task; };
         Task<SettingsAuthorityResult> operation = fixture.ApplyAsync(SettingsRegistry.Keys.MixedPort);
-        await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await started.Task.WaitAsync(TestTimeouts.Completion);
         Task retirement = fixture.Participant.DisposeAsync().AsTask();
         try
         {

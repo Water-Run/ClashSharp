@@ -142,7 +142,7 @@ public sealed partial class ProductionDataGenerationTests
         Task<DataGenerationTransition>? drain = null;
         try
         {
-            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await entered.Task.WaitAsync(TestTimeouts.Completion);
             drain = fixture.Manager.BeginDrainAsync(baseline.ContentHash, CancellationToken.None).AsTask();
             Assert.False(drain.IsCompleted);
             Assert.Throws<DataGenerationManagerException>(() => logs.AppendLog("Info", "Pages", "too late", null));
@@ -153,7 +153,7 @@ public sealed partial class ProductionDataGenerationTests
         }
         if (failEnumeration) { await Assert.ThrowsAsync<IOException>(() => accepted); }
         else { Assert.Equal(1, await accepted); }
-        await using DataGenerationTransition transition = await drain!.WaitAsync(TimeSpan.FromSeconds(5));
+        await using DataGenerationTransition transition = await drain!.WaitAsync(TestTimeouts.Completion);
         await transition.AbortAsync();
         Assert.Equal(failEnumeration ? 0 : 1, logs.GetStorageSummary().ConnectionCount);
         logs.AppendLog("Info", "Pages", "after drain", null);
@@ -175,7 +175,7 @@ public sealed partial class ProductionDataGenerationTests
         Task? retirement = null;
         try
         {
-            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await entered.Task.WaitAsync(TestTimeouts.Completion);
             retirement = fixture.Manager.DisposeAsync().AsTask();
             Assert.False(retirement.IsCompleted);
             Assert.All(fixture.Participants, participant => Assert.Equal(0, participant.Disposals));
@@ -185,8 +185,8 @@ public sealed partial class ProductionDataGenerationTests
         {
             release.TrySetResult();
         }
-        var result = await import.WaitAsync(TimeSpan.FromSeconds(5));
-        await retirement!.WaitAsync(TimeSpan.FromSeconds(5));
+        var result = await import.WaitAsync(TestTimeouts.Completion);
+        await retirement!.WaitAsync(TestTimeouts.Completion);
         Assert.True(File.Exists(result.ConfigPath));
         await using Fixture reopened = new(directory);
         _ = await reopened.StartAsync();
@@ -216,7 +216,7 @@ public sealed partial class ProductionDataGenerationTests
         Task<DataGenerationTransition>? drain = null;
         try
         {
-            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await entered.Task.WaitAsync(TestTimeouts.Completion);
             drain = fixture.Manager.BeginDrainAsync(baseline.ContentHash, CancellationToken.None).AsTask();
             Assert.False(drain.IsCompleted);
             if (cancel) { cancellation.Cancel(); }
@@ -227,7 +227,7 @@ public sealed partial class ProductionDataGenerationTests
         }
         if (cancel) { await Assert.ThrowsAnyAsync<OperationCanceledException>(() => import); }
         else { await Assert.ThrowsAsync<IOException>(() => import); }
-        await using DataGenerationTransition transition = await drain!.WaitAsync(TimeSpan.FromSeconds(5));
+        await using DataGenerationTransition transition = await drain!.WaitAsync(TestTimeouts.Completion);
         await transition.AbortAsync();
         Assert.Single(page.GetProfiles());
         Assert.False(await new ProfileFacade(fixture.Manager).TryUpdateSubscriptionLinkStatusAsync("absent", "unused", CancellationToken.None));
@@ -249,7 +249,7 @@ public sealed partial class ProductionDataGenerationTests
             entered.TrySetResult();
             await release.Task;
         }, CancellationToken.None);
-        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await entered.Task.WaitAsync(TestTimeouts.Completion);
         DateTimeOffset attempted = DateTimeOffset.UtcNow;
         Task accepted = profiles.RecordSubscriptionUpdateOutcomeAsync(link.Id, true, attempted, CancellationToken.None);
         Task retirement = fixture.Manager.DisposeAsync().AsTask();
@@ -264,9 +264,9 @@ public sealed partial class ProductionDataGenerationTests
         {
             release.TrySetResult();
         }
-        await gateOwner.WaitAsync(TimeSpan.FromSeconds(5));
-        await accepted.WaitAsync(TimeSpan.FromSeconds(5));
-        await retirement.WaitAsync(TimeSpan.FromSeconds(5));
+        await gateOwner.WaitAsync(TestTimeouts.Completion);
+        await accepted.WaitAsync(TestTimeouts.Completion);
+        await retirement.WaitAsync(TestTimeouts.Completion);
         await using Fixture reopened = new(directory);
         _ = await reopened.StartAsync();
         SubscriptionCatalog scheduler = new(new ProfileFacade(reopened.Manager));

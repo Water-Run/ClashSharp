@@ -357,7 +357,7 @@ public sealed partial class WindowsMachineHelperHostTests
             state.Journal.TargetSid, cancellation.Token);
         try
         {
-            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await entered.Task.WaitAsync(TestTimeouts.Completion);
             cancellation.Cancel();
             Assert.False(pending.IsCompleted);
             Assert.Equal(["authority-lock", "owner-transfer-check"], events);

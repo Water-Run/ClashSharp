@@ -833,8 +833,8 @@ public sealed partial class TriggerEditorViewModelTests
             [new TriggerDefinitionCatalogItem(CompleteDefinition("new", "New"), null)], [], nextDirectory));
         completion.SetResult(TriggerPersistenceResult.Succeeded(Catalog(2, original)));
 
-        Assert.True(await write.WaitAsync(TimeSpan.FromSeconds(5)));
-        Assert.True(await refresh.WaitAsync(TimeSpan.FromSeconds(5)));
+        Assert.True(await write.WaitAsync(TestTimeouts.Completion));
+        Assert.True(await refresh.WaitAsync(TestTimeouts.Completion));
 
         Assert.Equal(nextDirectory, page.CatalogVersion.DataGenerationId);
         Assert.Equal("new", Assert.Single(page.TriggerTasks).Id);
@@ -856,7 +856,7 @@ public sealed partial class TriggerEditorViewModelTests
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => refresh);
         Assert.False(write.IsCompleted);
         completion.SetResult(TriggerPersistenceResult.Succeeded(Catalog(2, original)));
-        Assert.True(await write.WaitAsync(TimeSpan.FromSeconds(5)));
+        Assert.True(await write.WaitAsync(TestTimeouts.Completion));
         Assert.False(page.IsBusy);
         Assert.Equal(1, store.ReadCallCount);
     }

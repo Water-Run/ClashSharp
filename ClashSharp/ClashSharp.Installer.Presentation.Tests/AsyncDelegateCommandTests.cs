@@ -46,7 +46,7 @@ public sealed class AsyncDelegateCommandTests
         Assert.False(command.CanExecute(parameter: null));
         CollectUnrootedOperations();
         Assert.True(source.Complete(fail), "The live command lost its pending operation during collection.");
-        await finished.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await finished.Task.WaitAsync(TestTimeouts.Completion);
         Assert.Equal(fail ? 1 : 0, failures);
         Assert.True(command.CanExecute(parameter: null));
 

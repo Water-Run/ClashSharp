@@ -27,7 +27,7 @@ public sealed partial class NetworkTakeoverServiceTests
                 await release.Task.WaitAsync(cancellationToken);
             });
         Task<NetworkTakeoverResult> transition = service.ApplyModeAsync(mode, tun, 10000, CancellationToken.None);
-        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await entered.Task.WaitAsync(TestTimeouts.Completion);
         Assert.False(transition.IsCompleted);
         Assert.False(core.Stopped);
         Assert.Equal(0, owner.StopCount);

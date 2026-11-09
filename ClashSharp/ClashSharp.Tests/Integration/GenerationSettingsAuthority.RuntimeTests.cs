@@ -96,7 +96,7 @@ public sealed partial class GenerationSettingsAuthorityTests
             : fixture.Authority.ApplyRuntimeChangesAdmittedAsync([Change("NotificationEnabled", "true")], Guid.NewGuid(), suppliedLease, cancellation.Token);
         try
         {
-            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await entered.Task.WaitAsync(TestTimeouts.Completion);
             Assert.True(cancellation.IsCancellationRequested);
             Assert.NotNull(drain);
             Assert.False(drain.IsCompleted);
@@ -105,7 +105,7 @@ public sealed partial class GenerationSettingsAuthorityTests
         finally { release.TrySetResult(); }
         try
         {
-            SettingsAuthorityResult result = await command.WaitAsync(TimeSpan.FromSeconds(5));
+            SettingsAuthorityResult result = await command.WaitAsync(TestTimeouts.Completion);
             Assert.True(result.IsSucceeded, result.Code);
             Assert.Empty(result.Envelope!.PendingApplications);
             if (suppliedLease is not null)
@@ -115,7 +115,7 @@ public sealed partial class GenerationSettingsAuthorityTests
             }
         }
         finally { suppliedLease?.Dispose(); }
-        await using MutationAdmissionLease exclusive = await drain!.WaitAsync(TimeSpan.FromSeconds(5));
+        await using MutationAdmissionLease exclusive = await drain!.WaitAsync(TestTimeouts.Completion);
         Assert.Equal("true", fixture.Session.Snapshot.Applied[SettingsRegistry.Keys.NotificationEnabled].Value!.CanonicalText);
     }
 }

@@ -185,7 +185,7 @@ public sealed class MutationAdmissionBarrierStateMachineTests
             }
 
             releaseOrder[^1].Dispose();
-            MutationAdmissionLease exclusive = await task.WaitAsync(TimeSpan.FromSeconds(5));
+            MutationAdmissionLease exclusive = await task.WaitAsync(TestTimeouts.Completion);
             Assert.True(exclusive.IsExclusive);
             barrier.EnsureActiveExclusiveLease(exclusive);
             Assert.All(leases, lease => Assert.Throws<InvalidOperationException>(() => barrier.EnsureActiveLease(lease)));
@@ -227,7 +227,7 @@ public sealed class MutationAdmissionBarrierStateMachineTests
                 : barrier.AcquireOrdinary();
 
             Task retained = owner.RetainRecoveryOnlyAsync();
-            await retained.WaitAsync(TimeSpan.FromSeconds(5));
+            await retained.WaitAsync(TestTimeouts.Completion);
 
             Assert.Equal(MutationAdmissionState.RecoveryOnly, barrier.State);
             Assert.Throws<MutationAdmissionRejectedException>(() => barrier.AcquireOrdinary());
@@ -267,9 +267,9 @@ public sealed class MutationAdmissionBarrierStateMachineTests
 
         MutationAdmissionBarrier requested = new();
         MutationAdmissionLease owner = await requested.CloseAndDrainAsync(MutationAdmissionClosure.Destructive, CancellationToken.None);
-        await owner.RetainRecoveryOnlyAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        await owner.RetainRecoveryOnlyAsync().WaitAsync(TestTimeouts.Completion);
         Assert.Equal(MutationAdmissionState.RecoveryOnly, requested.State);
-        await requested.RequestRecoveryShutdownAsync(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5));
+        await requested.RequestRecoveryShutdownAsync(CancellationToken.None).WaitAsync(TestTimeouts.Completion);
         Assert.Equal(MutationAdmissionState.ClosedForShutdown, requested.State);
         await AssertTerminalAsync(requested);
     }
@@ -294,7 +294,7 @@ public sealed class MutationAdmissionBarrierStateMachineTests
 
         recovery.CompleteRecoveryAttempt(journalPresent, verifiedSuccess);
 
-        await shutdown.WaitAsync(TimeSpan.FromSeconds(5));
+        await shutdown.WaitAsync(TestTimeouts.Completion);
         Assert.Equal(MutationAdmissionState.ClosedForShutdown, barrier.State);
         await AssertTerminalAsync(barrier);
     }
@@ -331,7 +331,7 @@ public sealed class MutationAdmissionBarrierStateMachineTests
         using MutationAdmissionLease drained = await barrier
             .CloseAndDrainAsync(MutationAdmissionClosure.Destructive, CancellationToken.None)
             .AsTask()
-            .WaitAsync(TimeSpan.FromSeconds(5));
+            .WaitAsync(TestTimeouts.Completion);
         Assert.True(drained.IsExclusive);
     }
 

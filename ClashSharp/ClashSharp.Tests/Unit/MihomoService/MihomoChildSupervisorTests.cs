@@ -151,7 +151,7 @@ public sealed class MihomoChildSupervisorTests
             TunEnabled = true,
         });
 
-        MihomoChildOperationResult result = await start.WaitAsync(TimeSpan.FromSeconds(5));
+        MihomoChildOperationResult result = await start.WaitAsync(TestTimeouts.Completion);
         Assert.True(result.Succeeded);
         Assert.Equal(MihomoServiceChildState.Running, result.Snapshot.ChildState);
     }
@@ -291,13 +291,13 @@ public sealed class MihomoChildSupervisorTests
             21,
             secondHash,
             CancellationToken.None);
-        await first.StopEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await first.StopEntered.Task.WaitAsync(TestTimeouts.Completion);
         Task<MihomoChildOperationResult> stop = context.Supervisor.StopAsync(CancellationToken.None);
         Assert.False(stop.IsCompleted);
         first.ReleaseStop();
 
-        Assert.True((await reload.WaitAsync(TimeSpan.FromSeconds(5))).Succeeded);
-        MihomoChildOperationResult stopped = await stop.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.True((await reload.WaitAsync(TestTimeouts.Completion)).Succeeded);
+        MihomoChildOperationResult stopped = await stop.WaitAsync(TestTimeouts.Completion);
         Assert.True(stopped.Succeeded);
         Assert.Equal(MihomoServiceChildState.Stopped, stopped.Snapshot.ChildState);
         Assert.Equal(1, second.StopCalls);
@@ -376,7 +376,7 @@ public sealed class MihomoChildSupervisorTests
                     return new object();
                 },
                 CancellationToken.None);
-        await operationEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await operationEntered.Task.WaitAsync(TestTimeouts.Completion);
 
         process.Exit(24);
         await MihomoServiceTestSupport.WaitUntilAsync(() =>
@@ -408,7 +408,7 @@ public sealed class MihomoChildSupervisorTests
 
         releaseOperation.TrySetResult(null);
         MihomoControllerBoundOperationResult<object> operationResult = await brokerOperation
-            .WaitAsync(TimeSpan.FromSeconds(5));
+            .WaitAsync(TestTimeouts.Completion);
         Assert.Equal("service.controller.stale_generation", operationResult.ErrorCode);
     }
 
@@ -433,7 +433,7 @@ public sealed class MihomoChildSupervisorTests
             firstBinding,
             out var firstControllerContext));
         Assert.NotNull(firstControllerContext);
-        await first.ExitObservationEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await first.ExitObservationEntered.Task.WaitAsync(TestTimeouts.Completion);
 
         string secondHash = context.WriteConfiguration("mixed-port: 7304\n");
         MihomoChildOperationResult secondStarted = await context.Supervisor.ReloadAsync(
@@ -513,7 +513,7 @@ public sealed class MihomoChildSupervisorTests
         Task firstShutdown = context.Supervisor.ShutdownAsync();
         Task secondShutdown = context.Supervisor.ShutdownAsync();
         Assert.Same(firstShutdown, secondShutdown);
-        await firstShutdown.WaitAsync(TimeSpan.FromSeconds(5));
+        await firstShutdown.WaitAsync(TestTimeouts.Completion);
 
         Assert.Equal(1, process.StopCalls);
         Assert.True(process.IsDisposed);
@@ -534,14 +534,14 @@ public sealed class MihomoChildSupervisorTests
             53,
             hash,
             CancellationToken.None)).Succeeded);
-        await process.ExitObservationEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await process.ExitObservationEntered.Task.WaitAsync(TestTimeouts.Completion);
 
         Task shutdown = context.Supervisor.ShutdownAsync();
         await MihomoServiceTestSupport.WaitUntilAsync(() => process.IsDisposed);
 
         Assert.False(shutdown.IsCompleted);
         process.ReleaseExitObservation();
-        await shutdown.WaitAsync(TimeSpan.FromSeconds(5));
+        await shutdown.WaitAsync(TestTimeouts.Completion);
     }
 
     /// <summary>Verifies shutdown drains output pumps and observes their unexpected exceptions.</summary>
@@ -559,14 +559,14 @@ public sealed class MihomoChildSupervisorTests
             54,
             hash,
             CancellationToken.None)).Succeeded);
-        await output.ReadEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await output.ReadEntered.Task.WaitAsync(TestTimeouts.Completion);
 
         Task shutdown = context.Supervisor.ShutdownAsync();
         await MihomoServiceTestSupport.WaitUntilAsync(() => process.IsDisposed);
 
         Assert.False(shutdown.IsCompleted);
         output.Release();
-        await shutdown.WaitAsync(TimeSpan.FromSeconds(5));
+        await shutdown.WaitAsync(TestTimeouts.Completion);
         Assert.Contains(
             context.Logs.ReadLatest(20),
             entry => entry.Contains(

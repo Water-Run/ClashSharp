@@ -174,7 +174,7 @@ internal static class InstallerWpfShellBehavior
                 Assert.InRange(bounds.Bottom, 0, root.ActualHeight);
                 Assert.NotNull(decline.Command);
                 decline.Command.Execute(null);
-                await active.WaitAsync(TimeSpan.FromSeconds(5));
+                await active.WaitAsync(TestTimeouts.Completion);
                 Assert.True(model.IsOperationSummaryVisible);
                 Assert.Equal(0, runtime.Mutations);
             }
@@ -182,7 +182,7 @@ internal static class InstallerWpfShellBehavior
         finally
         {
             model.RequestShutdown();
-            if (active is not null) { await active.WaitAsync(TimeSpan.FromSeconds(5)); }
+            if (active is not null) { await active.WaitAsync(TestTimeouts.Completion); }
             window.Close();
         }
         Assert.Equal(1, runtime.Disposals);
@@ -220,7 +220,7 @@ internal static class InstallerWpfShellBehavior
             model.RequestShutdown();
             await WaitUntilAsync(() => !model.IsBusy);
             if (window.IsVisible) { window.Close(); }
-            await closed.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await closed.Task.WaitAsync(TestTimeouts.Completion);
         }
         Assert.True(rejected);
         Assert.Equal(1, runtime.Inspections);

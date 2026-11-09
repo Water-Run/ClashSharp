@@ -32,14 +32,14 @@ public sealed partial class ProductionDataGenerationTests
         Task? closing = null;
         try
         {
-            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await entered.Task.WaitAsync(TestTimeouts.Completion);
             closing = fixture.Manager.DisposeAsync().AsTask();
             Assert.False(closing.IsCompleted);
             Assert.All(fixture.Participants, participant => Assert.Equal(0, participant.Disposals));
         }
         finally { release.TrySetResult(); }
-        DataGenerationDescriptor prepared = await preparing.WaitAsync(TimeSpan.FromSeconds(5));
-        await closing!.WaitAsync(TimeSpan.FromSeconds(5));
+        DataGenerationDescriptor prepared = await preparing.WaitAsync(TestTimeouts.Completion);
+        await closing!.WaitAsync(TestTimeouts.Completion);
         Assert.Equal(prepared.GenerationId, fixture.Containers[^1].Generation.GenerationId);
         Assert.All(fixture.Participants, participant => Assert.Equal(1, participant.Disposals));
         Assert.Throws<ObjectDisposedException>(() => fixture.Containers[^1].Logs.GetRecentLogs(5));
@@ -162,7 +162,7 @@ public sealed partial class ProductionDataGenerationTests
         Task? shutdown = null;
         try
         {
-            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await entered.Task.WaitAsync(TestTimeouts.Completion);
             await Assert.ThrowsAsync<DataGenerationManagerException>(() => transition.PromoteManifestAsync(directory.Store, CancellationToken.None));
             await Assert.ThrowsAsync<DataGenerationManagerException>(() => transition.ExecuteBaselineAsync<UiService.ILogStorage, int>((_, _, _) => Task.FromResult(0), CancellationToken.None));
             cancellation.Cancel();
@@ -172,8 +172,8 @@ public sealed partial class ProductionDataGenerationTests
             Assert.All(fixture.Participants, participant => Assert.Equal(0, participant.Disposals));
         }
         finally { release.TrySetResult(); }
-        Assert.Equal(1, await accepted.WaitAsync(TimeSpan.FromSeconds(5)));
-        await shutdown!.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(1, await accepted.WaitAsync(TestTimeouts.Completion));
+        await shutdown!.WaitAsync(TestTimeouts.Completion);
         Assert.All(fixture.Participants, participant => Assert.Equal(1, participant.Disposals));
         Assert.Throws<ObjectDisposedException>(() => fixture.Containers[^1].Logs.GetRecentLogs(5));
     }

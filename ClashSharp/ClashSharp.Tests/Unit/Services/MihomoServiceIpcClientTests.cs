@@ -310,7 +310,7 @@ public sealed class MihomoServiceIpcClientTests
 
         Exception? failure = await Record.ExceptionAsync(() =>
             client.SendAsync(CreateRequest(), CancellationToken.None));
-        int bytesRead = await serverRead.WaitAsync(TimeSpan.FromSeconds(5));
+        int bytesRead = await serverRead.WaitAsync(TestTimeouts.Completion);
 
         Assert.NotNull(failure);
         Assert.Equal(0, bytesRead);

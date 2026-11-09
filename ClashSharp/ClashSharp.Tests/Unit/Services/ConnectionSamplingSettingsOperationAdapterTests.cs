@@ -91,7 +91,7 @@ public sealed class ConnectionSamplingSettingsOperationAdapterTests
         try
         {
             await sampling.StartAsync(CancellationToken.None);
-            await source.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await source.Entered.Task.WaitAsync(TestTimeouts.Completion);
             ConnectionSamplingSettingsCoordinator coordinator = new(admission, new ConnectionSamplingSettingsOperationAdapter(settings, sampling));
             apply = coordinator.ApplyAsync(new(false, 90), CancellationToken.None);
             held = !apply.IsCompleted && settings.ReadConnectionSamplingSettings() == new ConnectionSamplingSettings(true, 30);

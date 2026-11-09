@@ -204,7 +204,7 @@ public sealed class SupervisedLoopTests
             });
 
         await loop.StartAsync(CancellationToken.None);
-        SupervisorHealth health = await failureObserved.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        SupervisorHealth health = await failureObserved.Task.WaitAsync(TestTimeouts.Completion);
 
         Assert.Equal(SupervisorHealthState.Retrying, health.State);
         Assert.Equal(1, health.ConsecutiveFailureCount);
@@ -328,7 +328,7 @@ public sealed class SupervisedLoopTests
             });
 
         await loop.StartAsync(CancellationToken.None);
-        await firstStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        await firstStarted.Task.WaitAsync(TestTimeouts.Completion);
         await loop.StartAsync(CancellationToken.None);
         Assert.Equal(1, Volatile.Read(ref calls));
 
@@ -344,7 +344,7 @@ public sealed class SupervisedLoopTests
         Assert.False(alreadyQuiesced.WasRunning);
 
         await loop.ResumeAsync(priorState, CancellationToken.None);
-        await resumedStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        await resumedStarted.Task.WaitAsync(TestTimeouts.Completion);
         await loop.ResumeAsync(priorState, CancellationToken.None);
         Assert.Equal(2, Volatile.Read(ref calls));
 

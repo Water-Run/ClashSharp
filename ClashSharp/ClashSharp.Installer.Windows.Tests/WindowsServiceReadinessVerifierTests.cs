@@ -129,7 +129,7 @@ public sealed class WindowsServiceReadinessVerifierTests
         using var cancellation = new CancellationTokenSource();
         fixture.Connection.Hang = true;
         Task verification = fixture.Verifier().VerifyAsync(fixture.Plan, cancellation.Token);
-        await fixture.Connection.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await fixture.Connection.Entered.Task.WaitAsync(TestTimeouts.Completion);
 
         cancellation.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => verification);

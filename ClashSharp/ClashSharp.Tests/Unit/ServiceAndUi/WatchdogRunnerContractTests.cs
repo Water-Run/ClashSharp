@@ -335,10 +335,10 @@ public sealed class WatchdogRunnerContractTests
             });
 
         Task<int> first = Task.Run(() => Create(block: true).RunAsync(invocation, CancellationToken.None));
-        await firstInRestore.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await firstInRestore.Task.WaitAsync(TestTimeouts.Completion);
         int second = await Create(block: false).RunAsync(invocation, CancellationToken.None);
         releaseFirst.Set();
-        int firstResult = await first.WaitAsync(TimeSpan.FromSeconds(10));
+        int firstResult = await first.WaitAsync(TestTimeouts.Completion);
 
         Assert.Equal(0, second);
         Assert.Equal(1, firstResult);
@@ -363,7 +363,7 @@ public sealed class WatchdogRunnerContractTests
 
         foreach (Invocation invocation in gone)
         {
-            await Runner.WaitForParentExitAsync(invocation, CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(10));
+            await Runner.WaitForParentExitAsync(invocation, CancellationToken.None).WaitAsync(TestTimeouts.Completion);
         }
     }
 
@@ -377,7 +377,7 @@ public sealed class WatchdogRunnerContractTests
 
         // The current process is alive, so a correct identity must wait (and then see the cancellation).
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-            Runner.WaitForParentExitAsync(exact, cancellation.Token).WaitAsync(TimeSpan.FromSeconds(10)));
+            Runner.WaitForParentExitAsync(exact, cancellation.Token).WaitAsync(TestTimeouts.Completion));
     }
 
     private sealed class CountingLock(Probe probe) : IDisposable

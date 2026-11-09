@@ -161,13 +161,13 @@ public sealed class WindowsInstallerProtectedTransactionReaderTests
         Task? disposal = null;
         try
         {
-            await enteredRead.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await enteredRead.Task.WaitAsync(TestTimeouts.Completion);
             disposal = Task.Run(() =>
             {
                 enteredDispose.SetResult();
                 reader.Dispose();
             });
-            await enteredDispose.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await enteredDispose.Task.WaitAsync(TestTimeouts.Completion);
 
             // Wait for disposal admission without relying on scheduling delays. Any read accepted
             // before Dispose entered is independently guarded and fully awaited here.
@@ -197,7 +197,7 @@ public sealed class WindowsInstallerProtectedTransactionReaderTests
             releaseRead.Set();
             if (disposal is not null)
             {
-                await disposal.WaitAsync(TimeSpan.FromSeconds(10));
+                await disposal.WaitAsync(TestTimeouts.Completion);
             }
         }
 

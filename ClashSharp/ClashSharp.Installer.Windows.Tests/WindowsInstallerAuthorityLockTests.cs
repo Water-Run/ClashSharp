@@ -86,7 +86,7 @@ public sealed class WindowsInstallerAuthorityLockTests
         Task<IAsyncDisposable> admission = gate.AcquireAsync(cancellation.Token);
         try
         {
-            await opening.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await opening.Task.WaitAsync(TestTimeouts.Completion);
             cancellation.Cancel();
             Assert.False(admission.IsCompleted);
         }

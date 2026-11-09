@@ -50,7 +50,7 @@ public sealed partial class SettingsViewModelTests
         Task reset = viewModel.ResetStartupSettingsToDefaultsAsync(cancellation.Token);
         try
         {
-            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await entered.Task.WaitAsync(TestTimeouts.Completion);
             Assert.False(reset.IsCompleted);
             Assert.False(scope.Disposed);
             Assert.Equal(before, StartupResetState.Capture(viewModel));
@@ -59,7 +59,7 @@ public sealed partial class SettingsViewModelTests
         finally
         {
             release.TrySetResult();
-            await reset.WaitAsync(TimeSpan.FromSeconds(5));
+            await reset.WaitAsync(TestTimeouts.Completion);
         }
 
         Assert.Equal(StartupResetState.Defaults, StartupResetState.Capture(viewModel));
@@ -178,7 +178,7 @@ public sealed partial class SettingsViewModelTests
         Task reset = viewModel.ResetStartupSettingsToDefaultsAsync(CancellationToken.None);
         try
         {
-            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await entered.Task.WaitAsync(TestTimeouts.Completion);
             Assert.Equal(0, admissions);
             Assert.Null(scope.Receipt);
             Assert.False(reset.IsCompleted);
@@ -186,7 +186,7 @@ public sealed partial class SettingsViewModelTests
         finally
         {
             release.TrySetResult();
-            await Task.WhenAll(accepted, reset).WaitAsync(TimeSpan.FromSeconds(5));
+            await Task.WhenAll(accepted, reset).WaitAsync(TestTimeouts.Completion);
         }
 
         Assert.Equal(1, admissions);
@@ -218,7 +218,7 @@ public sealed partial class SettingsViewModelTests
         Task queued = viewModel.ResetAllSettingsAsync(queuedCancellation.Token);
         try
         {
-            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await entered.Task.WaitAsync(TestTimeouts.Completion);
             Assert.Equal(1, admissions);
             Assert.False(queued.IsCompleted);
             queuedCancellation.Cancel();
@@ -229,7 +229,7 @@ public sealed partial class SettingsViewModelTests
         {
             queuedCancellation.Cancel();
             release.TrySetResult();
-            await reset.WaitAsync(TimeSpan.FromSeconds(5));
+            await reset.WaitAsync(TestTimeouts.Completion);
             _ = await Record.ExceptionAsync(() => queued);
         }
 

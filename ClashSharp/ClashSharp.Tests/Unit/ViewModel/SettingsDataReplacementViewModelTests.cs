@@ -25,12 +25,12 @@ public sealed partial class SettingsViewModelTests
         Task reset = page.ResetAllSettingsAsync(CancellationToken.None);
         try
         {
-            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await entered.Task.WaitAsync(TestTimeouts.Completion);
             Assert.False(reset.IsCompleted);
             Assert.Equal(23456, page.MixedPort);
         }
         finally { finish.TrySetResult(); }
-        await reset.WaitAsync(TimeSpan.FromSeconds(5));
+        await reset.WaitAsync(TestTimeouts.Completion);
         Assert.Equal(10000, page.MixedPort);
         Assert.Equal(restart, page.HasRestartRequiredSettings);
         Assert.Equal(warning && !restart, page.HasDataReplacementWarning);

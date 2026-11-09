@@ -41,7 +41,7 @@ public sealed partial class DisplayPageViewModelTests
         Task old = viewModel.LoadAsync(CancellationToken.None);
         try
         {
-            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await entered.Task.WaitAsync(TestTimeouts.Completion);
             catalog.Read = () => [new("new", "DOMAIN", "new.example", "DIRECT", 0)];
             await viewModel.ReloadForDataChangeAsync(CancellationToken.None);
         }

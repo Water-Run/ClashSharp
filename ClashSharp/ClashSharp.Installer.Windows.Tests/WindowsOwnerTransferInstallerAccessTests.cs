@@ -218,7 +218,7 @@ public sealed class WindowsOwnerTransferInstallerAccessTests
         Task pending = fixture.ApplyAsync(cancellation.Token);
         try
         {
-            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await entered.Task.WaitAsync(TestTimeouts.Completion);
             cancellation.Cancel();
             Assert.False(pending.IsCompleted);
             Assert.Equal(fixture.Native.Opened.Count, fixture.Native.LiveLeases);

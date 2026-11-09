@@ -61,7 +61,7 @@ public sealed partial class WindowsRetiredUninstallAuthorityTests
         await receipts.ApplyAsync(fixture.Request, new ReleaseLease(fixture), default);
         await receipts.ExecuteAsync(Command(state, InstallerMachineHelperVerb.Clear));
         Assert.Null(await receipts.LoadAsync(default));
-        await pair.Exit.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await pair.Exit.Task.WaitAsync(TestTimeouts.Completion);
         Assert.Null(pair.HostFailure);
         Assert.Equal(1, pair.Launches);
         Assert.Empty(fixture.Active);

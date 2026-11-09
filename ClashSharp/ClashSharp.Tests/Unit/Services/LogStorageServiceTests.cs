@@ -193,7 +193,7 @@ public sealed partial class LogStorageServiceTests
         TaskCompletionSource entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
         LogStorageService service = new(tempDatabase.Path, () => "profile-a");
         Task<int> write = Task.Run(() => service.AppendConnectionSnapshot(WaitForRelease()));
-        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await entered.Task.WaitAsync(TestTimeouts.Completion);
         Task retirement = service.DisposeAsync().AsTask();
         try
         {
@@ -208,7 +208,7 @@ public sealed partial class LogStorageServiceTests
         }
 
         Assert.Equal(1, await write);
-        await retirement.WaitAsync(TimeSpan.FromSeconds(5));
+        await retirement.WaitAsync(TestTimeouts.Completion);
         await service.DisposeAsync();
         await using LogStorageService reopened = new(tempDatabase.Path, () => "profile-a");
         Assert.Equal(1, reopened.GetTrafficStatisticsSummary().ConnectionCount);

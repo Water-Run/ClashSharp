@@ -246,7 +246,7 @@ public sealed class MihomoServiceCommandAndPipeTests
                 await client.DisposeAsync();
             }
             stopping.Cancel();
-            await serverTask.WaitAsync(TimeSpan.FromSeconds(5));
+            await serverTask.WaitAsync(TestTimeouts.Completion);
         }
     }
 

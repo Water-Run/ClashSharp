@@ -130,9 +130,9 @@ public sealed class InstallerDirectoryCleanupPresentationTests
         Task execution = (retiredUninstall ? viewModel.RetiredUninstallCommand : viewModel.OwnerTransferCommand).ExecuteAsync();
         try
         {
-            await displayed.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await displayed.Task.WaitAsync(TestTimeouts.Completion);
             (retiredUninstall ? viewModel.ConfirmRetiredUninstallCommand : viewModel.ConfirmOwnerTransferCommand).Execute(null);
-            await execution.WaitAsync(TimeSpan.FromSeconds(5));
+            await execution.WaitAsync(TestTimeouts.Completion);
         }
         finally
         {

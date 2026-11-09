@@ -82,7 +82,7 @@ public sealed class ProfileOperationGateTests
         Task<IDisposable> waiting = gate.EnterAsync("subscription", CancellationToken.None).AsTask();
 
         first.Dispose();
-        using IDisposable next = await waiting.WaitAsync(TimeSpan.FromSeconds(5));
+        using IDisposable next = await waiting.WaitAsync(TestTimeouts.Completion);
         Assert.Equal(1, gate.ActiveKeyCount);
 
         next.Dispose();
@@ -102,7 +102,7 @@ public sealed class ProfileOperationGateTests
         Assert.False(waiting.IsCompleted);
 
         next.Dispose();
-        using IDisposable last = await waiting.WaitAsync(TimeSpan.FromSeconds(5));
+        using IDisposable last = await waiting.WaitAsync(TestTimeouts.Completion);
         last.Dispose();
         Assert.Equal(0, gate.ActiveKeyCount);
     }
@@ -149,7 +149,7 @@ public sealed class ProfileOperationGateTests
         })).ToArray();
 
         start.SetResult();
-        await Task.WhenAll(workers).WaitAsync(TimeSpan.FromSeconds(30));
+        await Task.WhenAll(workers).WaitAsync(TestTimeouts.Completion);
 
         Assert.All(holders, count => Assert.Equal(0, count));
         Assert.Equal(0, gate.ActiveKeyCount);

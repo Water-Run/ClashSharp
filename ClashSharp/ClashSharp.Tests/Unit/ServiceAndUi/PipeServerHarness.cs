@@ -152,7 +152,7 @@ internal sealed class PipeServerHarness : IAsyncDisposable
         _stopping.Cancel();
         try
         {
-            await _serverTask.WaitAsync(TimeSpan.FromSeconds(10));
+            await _serverTask.WaitAsync(TestTimeouts.Completion);
         }
         catch (Exception exception) when (exception is OperationCanceledException or InvalidDataException)
         {

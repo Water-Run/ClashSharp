@@ -59,7 +59,7 @@ public sealed partial class SettingsViewModelTests
         Task reset = ResetNetworkGroupAsync(viewModel, selectedScope, cancellation.Token);
         try
         {
-            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await entered.Task.WaitAsync(TestTimeouts.Completion);
             Assert.False(reset.IsCompleted);
             Assert.False(scope.Disposed);
             Assert.Equal(before.ForPage, NetworkResetState.Capture(viewModel));
@@ -68,7 +68,7 @@ public sealed partial class SettingsViewModelTests
         finally
         {
             release.TrySetResult();
-            await reset.WaitAsync(TimeSpan.FromSeconds(5));
+            await reset.WaitAsync(TestTimeouts.Completion);
         }
 
         Assert.Equal(expected.ForPage, NetworkResetState.Capture(viewModel));
@@ -171,7 +171,7 @@ public sealed partial class SettingsViewModelTests
         Task reset = ResetNetworkGroupAsync(viewModel, selectedScope, CancellationToken.None);
         try
         {
-            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await entered.Task.WaitAsync(TestTimeouts.Completion);
             Assert.Equal(0, admissions);
             Assert.Null(scope.Receipt);
             Assert.False(reset.IsCompleted);
@@ -179,7 +179,7 @@ public sealed partial class SettingsViewModelTests
         finally
         {
             release.TrySetResult();
-            await Task.WhenAll(accepted, reset).WaitAsync(TimeSpan.FromSeconds(5));
+            await Task.WhenAll(accepted, reset).WaitAsync(TestTimeouts.Completion);
         }
 
         Assert.Equal(1, admissions);

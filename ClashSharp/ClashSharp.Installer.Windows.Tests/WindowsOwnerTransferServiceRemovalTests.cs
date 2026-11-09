@@ -125,7 +125,7 @@ public sealed class WindowsOwnerTransferServiceRemovalTests
         Task pending = fixture.Step.ApplyAndVerifyAsync(fixture.Journal, cancellation.Token);
         try
         {
-            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await entered.Task.WaitAsync(TestTimeouts.Completion);
             cancellation.Cancel();
             Assert.False(pending.IsCompleted);
             Assert.Equal(2, fixture.Backend.LiveLeases);

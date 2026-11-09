@@ -224,7 +224,7 @@ public sealed partial class WindowsOwnerTransferAuthorityTests
         Task pending = fixture.CreateAsync(cancellation.Token);
         try
         {
-            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await entered.Task.WaitAsync(TestTimeouts.Completion);
             cancellation.Cancel();
             Assert.False(pending.IsCompleted);
             fixture.RequireHeld();
@@ -257,7 +257,7 @@ public sealed partial class WindowsOwnerTransferAuthorityTests
         Task second = handoff.Authority.DisposeAsync().AsTask();
         try
         {
-            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await entered.Task.WaitAsync(TestTimeouts.Completion);
             Assert.Same(first, second);
             Assert.False(first.IsCompleted);
             fixture.RequireHeld();

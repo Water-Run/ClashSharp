@@ -48,7 +48,7 @@ public sealed partial class NetworkTakeoverServiceTests
             async token => { entered.TrySetResult(); await release.Task.WaitAsync(token); }, logs.Store, clock);
         NetworkTakeoverService second = root.BindDataScope(secondStore, new ScopeSelections(), _ => Task.CompletedTask, _ => Task.CompletedTask, logs.Store);
         Task firstOperation = first.ApplyModeAsync(ClashSharpMode.Disabled, false, 12345, CancellationToken.None);
-        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await entered.Task.WaitAsync(TestTimeouts.Completion);
         Task secondOperation = second.ApplyModeAsync(ClashSharpMode.Disabled, false, 12345, CancellationToken.None);
         Task rootOperation = root.ApplyModeAsync(ClashSharpMode.Disabled, false, 12345, CancellationToken.None);
         try
@@ -59,7 +59,7 @@ public sealed partial class NetworkTakeoverServiceTests
             Assert.Empty(rootConfiguration.Requests);
         }
         finally { release.TrySetResult(); }
-        await Task.WhenAll(firstOperation, secondOperation, rootOperation).WaitAsync(TimeSpan.FromSeconds(5));
+        await Task.WhenAll(firstOperation, secondOperation, rootOperation).WaitAsync(TestTimeouts.Completion);
         Assert.Single(firstStore.Configuration.Requests);
         Assert.Single(secondStore.Configuration.Requests);
         Assert.Single(rootConfiguration.Requests);

@@ -87,7 +87,7 @@ public sealed class InstallerOriginalRestorationActionTests
         Task running = viewModel.RestoreOriginalCommand.ExecuteAsync();
         try
         {
-            await admitted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await admitted.Task.WaitAsync(TestTimeouts.Completion);
             viewModel.CancelCommand.Execute(null);
             Assert.True(viewModel.IsBusy);
             Assert.True(viewModel.IsCancellationRequested);

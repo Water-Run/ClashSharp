@@ -38,7 +38,7 @@ public sealed partial class ClashDataPackageServiceTests
             await File.WriteAllTextAsync(profilePath, "complete new configuration", CancellationToken.None);
             return true;
         }, CancellationToken.None);
-        await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await entered.Task.WaitAsync(TestTimeouts.Completion);
         Task export = exports.ExecuteAsync(token => service.ExportAsync(destination, scope, token), CancellationToken.None);
         try
         {
@@ -48,8 +48,8 @@ public sealed partial class ClashDataPackageServiceTests
         finally
         {
             finishMutation.TrySetResult();
-            await mutation.WaitAsync(TimeSpan.FromSeconds(10));
-            await export.WaitAsync(TimeSpan.FromSeconds(10));
+            await mutation.WaitAsync(TestTimeouts.Completion);
+            await export.WaitAsync(TestTimeouts.Completion);
         }
 
         XElement root = AssertRoot(XDocument.Load(destination), scope);
@@ -103,7 +103,7 @@ public sealed partial class ClashDataPackageServiceTests
             entered.SetResult();
             await finishExport.Task;
         }, cancellation.Token);
-        await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await entered.Task.WaitAsync(TestTimeouts.Completion);
         try
         {
             cancellation.Cancel();
@@ -113,7 +113,7 @@ public sealed partial class ClashDataPackageServiceTests
         finally
         {
             finishExport.TrySetResult();
-            await export.WaitAsync(TimeSpan.FromSeconds(10));
+            await export.WaitAsync(TestTimeouts.Completion);
         }
         using MutationAdmissionLease resumed = admission.AcquireOrdinary();
         admission.EnsureActiveLease(resumed);

@@ -121,13 +121,13 @@ public sealed class PageLoadSessionTests
             started.SetResult();
             await release.Task;
         });
-        await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await started.Task.WaitAsync(TestTimeouts.Completion);
         await session.RunAsync(_ => Task.CompletedTask);
 
         Task drain = session.DrainAsync();
         Assert.False(drain.IsCompleted);
         release.SetResult();
-        await drain.WaitAsync(TimeSpan.FromSeconds(5));
+        await drain.WaitAsync(TestTimeouts.Completion);
         await oldRead;
         Assert.True(session.DrainAsync().IsCompletedSuccessfully);
     }
@@ -163,7 +163,7 @@ public sealed class PageLoadSessionTests
             started.SetResult();
             await release.Task;
         });
-        await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await started.Task.WaitAsync(TestTimeouts.Completion);
         bool invoked = false;
         await session.RunAsync(_ =>
         {
@@ -171,7 +171,7 @@ public sealed class PageLoadSessionTests
             return Task.CompletedTask;
         });
         release.SetResult();
-        await session.DrainAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        await session.DrainAsync().WaitAsync(TestTimeouts.Completion);
         await oldRead;
 
         Assert.True(invoked);
@@ -192,11 +192,11 @@ public sealed class PageLoadSessionTests
             started.SetResult();
             await release.Task;
         });
-        await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await started.Task.WaitAsync(TestTimeouts.Completion);
 
         session.Cancel();
         release.SetResult();
-        await session.DrainAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        await session.DrainAsync().WaitAsync(TestTimeouts.Completion);
         await read;
 
         Assert.IsType<AggregateException>(Assert.Single(errors.Errors).Exception);
@@ -215,13 +215,13 @@ public sealed class PageLoadSessionTests
             started.SetResult();
             await release.Task;
         });
-        await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await started.Task.WaitAsync(TestTimeouts.Completion);
 
         await Assert.ThrowsAsync<AggregateException>(
             () => session.RunAsync(_ => Task.CompletedTask));
         release.SetResult();
         await oldRead;
-        await session.DrainAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        await session.DrainAsync().WaitAsync(TestTimeouts.Completion);
         await session.RunAsync(_ => Task.CompletedTask);
         Assert.True(session.DrainAsync().IsCompletedSuccessfully);
     }

@@ -43,11 +43,11 @@ public sealed class MihomoControllerRuntimeTests
             4096,
             CancellationToken.None);
         await server.WaitForConnectionAsync(CancellationToken.None)
-            .WaitAsync(TimeSpan.FromSeconds(5));
+            .WaitAsync(TestTimeouts.Completion);
         byte[] buffer = new byte[1];
         int bytesRead = await server.ReadAsync(buffer, CancellationToken.None)
             .AsTask()
-            .WaitAsync(TimeSpan.FromSeconds(5));
+            .WaitAsync(TestTimeouts.Completion);
 
         HttpRequestException failure = await Assert.ThrowsAsync<HttpRequestException>(
             () => request);
@@ -78,7 +78,7 @@ public sealed class MihomoControllerRuntimeTests
             null,
             4096,
             CancellationToken.None);
-        string request = await serverTask.WaitAsync(TimeSpan.FromSeconds(5));
+        string request = await serverTask.WaitAsync(TestTimeouts.Completion);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal(

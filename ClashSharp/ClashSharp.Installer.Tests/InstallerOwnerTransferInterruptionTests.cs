@@ -101,7 +101,7 @@ public sealed class InstallerOwnerTransferInterruptionTests
             await release.Task;
         };
         Task<InstallerTransactionSnapshot> running = world.RunAsync(CancellationToken.None);
-        await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await entered.Task.WaitAsync(TestTimeouts.Completion);
 
         InstallerProtocolException concurrent = await Assert.ThrowsAsync<InstallerProtocolException>(() =>
             world.Coordinator.ResumeAsync(expected, CancellationToken.None));

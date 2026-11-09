@@ -88,7 +88,7 @@ public sealed partial class ProfileAndLinkLifecycleViewModelTests
         Task old = viewModel.LoadAsync(CancellationToken.None);
         try
         {
-            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await entered.Task.WaitAsync(TestTimeouts.Completion);
             catalog.Read = () => [CreateLink("new")];
             await viewModel.ReloadForDataChangeAsync(CancellationToken.None);
         }

@@ -110,7 +110,7 @@ public sealed class CoreConfigurationValidatorTests
         using Process native = Process.GetProcessById(int.Parse(await File.ReadAllTextAsync(marker), CultureInfo.InvariantCulture));
         cancellation.Cancel();
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => validation.WaitAsync(TimeSpan.FromSeconds(10)));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => validation.WaitAsync(TestTimeouts.Completion));
 
         Assert.True(native.HasExited);
         AssertNoTemporaryAssets(fixture);

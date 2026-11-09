@@ -194,7 +194,7 @@ public sealed class CoreConfigurationServiceTests
             "Failed",
             ProfileConfiguration("failed-node"),
             CancellationToken.None);
-        await failed.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await failed.Entered.Task.WaitAsync(TestTimeouts.Completion);
 
         Task<ProfileImportResult> successfulImport = service.ImportProfileConfigurationAsync(
             profileId,
@@ -229,7 +229,7 @@ public sealed class CoreConfigurationServiceTests
             "First",
             ProfileConfiguration("first-node"),
             CancellationToken.None);
-        await first.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await first.Entered.Task.WaitAsync(TestTimeouts.Completion);
 
         Task<ProfileImportResult> secondImport = service.ImportProfileConfigurationAsync(
             profileId,
@@ -264,7 +264,7 @@ public sealed class CoreConfigurationServiceTests
             "Cancelled",
             ProfileConfiguration("cancelled-node"),
             cancellation.Token);
-        await cancelled.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await cancelled.Entered.Task.WaitAsync(TestTimeouts.Completion);
 
         Task<ProfileImportResult> successfulImport = service.ImportProfileConfigurationAsync(
             profileId,
@@ -295,14 +295,14 @@ public sealed class CoreConfigurationServiceTests
             "Alpha",
             ProfileConfiguration("alpha-node"),
             CancellationToken.None);
-        await alpha.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await alpha.Entered.Task.WaitAsync(TestTimeouts.Completion);
 
         Task<ProfileImportResult> betaImport = service.ImportProfileConfigurationAsync(
             "beta",
             "Beta",
             ProfileConfiguration("beta-node"),
             CancellationToken.None);
-        await beta.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await beta.Entered.Task.WaitAsync(TestTimeouts.Completion);
 
         alpha.Release();
         beta.Release();
@@ -360,7 +360,7 @@ public sealed class CoreConfigurationServiceTests
             "Updated",
             ProfileConfiguration("new-node"),
             CancellationToken.None);
-        await validator.ImportEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await validator.ImportEntered.Task.WaitAsync(TestTimeouts.Completion);
 
         Task<ProfileImportResult> validation = service.ValidateImportedProfileAsync(
             profileId,

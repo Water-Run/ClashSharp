@@ -68,7 +68,7 @@ public sealed partial class SettingsViewModelTests
         Assert.True(store.NotificationEnabled);
         Assert.True(viewModel.NotificationEnabled);
         release.SetResult();
-        await operation.WaitAsync(TimeSpan.FromSeconds(5));
+        await operation.WaitAsync(TestTimeouts.Completion);
 
         Assert.False(viewModel.NotificationEnabled);
         Assert.False(store.NotificationEnabled);
@@ -128,7 +128,7 @@ public sealed partial class SettingsViewModelTests
         TestApplicationErrorSink errors = new();
         PageOperationSession session = new(errors, "preferences");
         Task first = session.RunAsync(token => viewModel.ApplyPreferenceAsync(SettingsRegistry.Keys.NotificationEnabled, false, token));
-        await committed.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await committed.Task.WaitAsync(TestTimeouts.Completion);
         Task queued = session.RunAsync(token => viewModel.ApplyPreferenceAsync(SettingsRegistry.Keys.NotificationEnabled, true, token));
 
         session.Cancel();
@@ -137,7 +137,7 @@ public sealed partial class SettingsViewModelTests
         Assert.False(store.NotificationEnabled);
         Assert.True(viewModel.NotificationEnabled);
         release.SetResult();
-        await Task.WhenAll(first, queued, drain).WaitAsync(TimeSpan.FromSeconds(5));
+        await Task.WhenAll(first, queued, drain).WaitAsync(TestTimeouts.Completion);
 
         Assert.False(viewModel.NotificationEnabled);
         Assert.False(store.NotificationEnabled);

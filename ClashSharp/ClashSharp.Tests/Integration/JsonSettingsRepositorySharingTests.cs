@@ -26,7 +26,7 @@ public sealed class JsonSettingsRepositorySharingTests
         Task<SettingsPersistenceResult> save = repository.SaveAsync(changed, current.EnvelopeRevision, CancellationToken.None);
         try
         {
-            await blocker.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await blocker.Entered.Task.WaitAsync(TestTimeouts.Completion);
             await Task.Delay(40);
             Assert.False(save.IsCompleted);
         }
@@ -53,7 +53,7 @@ public sealed class JsonSettingsRepositorySharingTests
         JsonSettingsRepository repository = new(generation, SettingsRegistry.Default, blocker);
 
         SettingsPersistenceResult result = await repository.SaveAsync(
-            SettingsEnvelopeTestData.CreatePendingEnvelope([("AppThemeMode", "Dark")]), 1, CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5));
+            SettingsEnvelopeTestData.CreatePendingEnvelope([("AppThemeMode", "Dark")]), 1, CancellationToken.None).WaitAsync(TestTimeouts.Completion);
 
         Assert.Equal(SettingsPersistenceStatus.Unavailable, result.Status);
         blocker.Release();
@@ -74,7 +74,7 @@ public sealed class JsonSettingsRepositorySharingTests
         JsonSettingsRepository repository = new(generation, SettingsRegistry.Default, blocker);
         Task<SettingsPersistenceResult> save = repository.SaveAsync(
             SettingsEnvelopeTestData.CreatePendingEnvelope([("AppThemeMode", "Dark")]), 1, caller.Token);
-        await blocker.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await blocker.Entered.Task.WaitAsync(TestTimeouts.Completion);
         caller.Cancel();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => save);
@@ -112,7 +112,7 @@ public sealed class JsonSettingsRepositorySharingTests
         using FileStream reader = new(repository.PrimaryPath, FileMode.Open, FileAccess.Read, FileShare.Read);
 
         IOException failure = await Assert.ThrowsAsync<IOException>(() =>
-            JsonSettingsRepository.FlushPromotedFileAsync(repository.PrimaryPath).WaitAsync(TimeSpan.FromSeconds(5)));
+            JsonSettingsRepository.FlushPromotedFileAsync(repository.PrimaryPath).WaitAsync(TestTimeouts.Completion));
 
         Assert.True((failure.HResult & 0xFFFF) is 32 or 33 || failure.InnerException is System.ComponentModel.Win32Exception { NativeErrorCode: 32 or 33 });
         reader.Dispose();

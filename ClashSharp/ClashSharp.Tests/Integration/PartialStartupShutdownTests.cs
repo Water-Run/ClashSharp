@@ -180,7 +180,7 @@ public sealed class PartialStartupShutdownTests
         Task<RuntimeShutdownResult> stopping = lifecycle.ShutdownAsync(CancellationToken.None);
         try
         {
-            await closing.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await closing.Task.WaitAsync(TestTimeouts.Completion);
             Assert.Throws<InvalidOperationException>(() => state.Runtime.RegisterParticipant(new Producer("late", state)));
             Assert.Throws<InvalidOperationException>(state.BindNetwork);
         }

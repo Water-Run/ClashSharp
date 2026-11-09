@@ -618,7 +618,7 @@ public sealed partial class SettingsViewModelTests
         finally
         {
             release.TrySetResult();
-            await operation.WaitAsync(TimeSpan.FromSeconds(5));
+            await operation.WaitAsync(TestTimeouts.Completion);
         }
 
         Assert.Equal(!baseline, store.LaunchAtStartupEnabled);
@@ -683,7 +683,7 @@ public sealed partial class SettingsViewModelTests
         viewModel.Load();
         viewModel.SetLaunchAtStartupEnabled(!baseline);
         Task operation = Assert.IsAssignableFrom<Task>(viewModel.ApplyLaunchAtStartupCommand.ExecutionTask);
-        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await entered.Task.WaitAsync(TestTimeouts.Completion);
         try
         {
             viewModel.SetLaunchAtStartupEnabled(baseline);
@@ -693,7 +693,7 @@ public sealed partial class SettingsViewModelTests
         finally
         {
             release.TrySetResult();
-            await operation.WaitAsync(TimeSpan.FromSeconds(5));
+            await operation.WaitAsync(TestTimeouts.Completion);
         }
 
         Assert.Equal([!baseline, baseline], applied);

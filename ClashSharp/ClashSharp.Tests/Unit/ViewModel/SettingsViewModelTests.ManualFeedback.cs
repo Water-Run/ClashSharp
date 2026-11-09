@@ -47,7 +47,7 @@ public sealed partial class SettingsViewModelTests
         finally
         {
             release.Set();
-            await active.WaitAsync(TimeSpan.FromSeconds(5));
+            await active.WaitAsync(TestTimeouts.Completion);
         }
         Assert.False(model.IsConnectionTestRunning);
     }

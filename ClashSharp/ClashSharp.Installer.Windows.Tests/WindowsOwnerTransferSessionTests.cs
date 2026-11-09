@@ -34,7 +34,7 @@ public sealed partial class WindowsOwnerTransferAuthorityTests
             Assert.Equal(InstallerMachineHelperOutcome.Succeeded, result.Outcome);
             state = result.ValidateAgainst(command);
         }
-        await pair.Exit.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await pair.Exit.Task.WaitAsync(TestTimeouts.Completion);
 
         Assert.Null(pair.HostFailure);
         Assert.Equal(1, pair.Launches);
@@ -145,7 +145,7 @@ public sealed partial class WindowsOwnerTransferAuthorityTests
         Task pending = pair.StartAsync((_, _) => Task.FromResult(true), cancellationToken: cancellation.Token);
         try
         {
-            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await entered.Task.WaitAsync(TestTimeouts.Completion);
             cancellation.Cancel();
             Assert.False(pending.IsCompleted);
             Assert.False(pair.Exit.Task.IsCompleted);
@@ -181,7 +181,7 @@ public sealed partial class WindowsOwnerTransferAuthorityTests
             return Task.FromResult(true);
         }, operation: InstallerOperation.Repair);
         await handoff.Broker.DisposeAsync();
-        await pair.Exit.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await pair.Exit.Task.WaitAsync(TestTimeouts.Completion);
 
         Assert.Equal(InstallerOperation.Install, offered);
         Assert.Equal(InstallerOperation.Install, handoff.Continuation.Journal.Operation);

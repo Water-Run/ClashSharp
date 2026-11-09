@@ -100,7 +100,7 @@ public sealed class ProductionInstallerRuntimeContractTests
         Assert.False(call.IsCompleted);
         Assert.True(await Task.Run(() => backend.Entered.Wait(TimeSpan.FromSeconds(10))));
         hold.Set();
-        await call.WaitAsync(TimeSpan.FromSeconds(10));
+        await call.WaitAsync(TestTimeouts.Completion);
 
         Assert.Equal(1, backend.Calls);
         Assert.NotEqual(caller, backend.LastThread);

@@ -168,7 +168,7 @@ public sealed class InstallerShellViewModelOutcomeTests
             using InstallerShellViewModel viewModel = new(runtime);
             Task execution = viewModel.RetiredUninstallCommand.ExecuteAsync();
             viewModel.ConfirmRetiredUninstallCommand.Execute(null);
-            await execution.WaitAsync(TimeSpan.FromSeconds(10));
+            await execution.WaitAsync(TestTimeouts.Completion);
 
             Assert.False(viewModel.IsBusy);
             Assert.Equal(code, viewModel.DiagnosticCode);

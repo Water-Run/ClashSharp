@@ -51,7 +51,7 @@ public sealed class RecoveryWatchdogStartupFailureTests
         Assert.NotNull(journal.Current);
         scope.AssertLocksHeld();
         stopped.SetResult();
-        await preparation.WaitAsync(TimeSpan.FromSeconds(5));
+        await preparation.WaitAsync(TestTimeouts.Completion);
 
         Assert.Equal(expected, registry.Current);
         Assert.Null(journal.Current);

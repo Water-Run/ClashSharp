@@ -102,17 +102,17 @@ public sealed partial class GenerationSettingsAuthorityTests
         Task<MutationAdmissionLease>? drain = null;
         try
         {
-            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await entered.Task.WaitAsync(TestTimeouts.Completion);
             cancellation.Cancel();
             drain = fixture.Admission.CloseAndDrainAsync(MutationAdmissionClosure.Destructive, CancellationToken.None).AsTask();
             Assert.False(drain.IsCompleted);
             Assert.False(command.IsCompleted);
         }
         finally { release.TrySetResult(); }
-        NetworkTakeoverResult result = await command.WaitAsync(TimeSpan.FromSeconds(5));
+        NetworkTakeoverResult result = await command.WaitAsync(TestTimeouts.Completion);
         Assert.Equal(ClashSharpMode.Standby, result.Mode);
         Assert.True(result.CoreRunning);
-        await using MutationAdmissionLease exclusive = await drain!.WaitAsync(TimeSpan.FromSeconds(5));
+        await using MutationAdmissionLease exclusive = await drain!.WaitAsync(TestTimeouts.Completion);
     }
 
     [Theory]

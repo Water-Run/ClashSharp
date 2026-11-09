@@ -64,7 +64,7 @@ public sealed class InstallerShutdownPresentationTests
         bool completionObserved = false;
         try
         {
-            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await entered.Task.WaitAsync(TestTimeouts.Completion);
             viewModel.PropertyChanged += (_, args) =>
             {
                 if (args.PropertyName == nameof(viewModel.IsBusy) && !viewModel.IsBusy)
@@ -85,13 +85,13 @@ public sealed class InstallerShutdownPresentationTests
         finally
         {
             drain.TrySetResult();
-            await active.WaitAsync(TimeSpan.FromSeconds(5));
+            await active.WaitAsync(TestTimeouts.Completion);
         }
 
         Assert.True(completionObserved);
         Assert.NotNull(reenteredRefresh);
         Assert.NotNull(reenteredMutation);
-        await Task.WhenAll(reenteredRefresh, reenteredMutation).WaitAsync(TimeSpan.FromSeconds(5));
+        await Task.WhenAll(reenteredRefresh, reenteredMutation).WaitAsync(TestTimeouts.Completion);
         await viewModel.InitializeAsync();
         Assert.Equal(1, runtime.InspectionCount);
         Assert.Equal(inspection ? 0 : 1, runtime.Operations.Count);
@@ -119,9 +119,9 @@ public sealed class InstallerShutdownPresentationTests
         };
         using var viewModel = new InstallerShellViewModel(runtime);
         Task active = viewModel.InitializeAsync();
-        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await entered.Task.WaitAsync(TestTimeouts.Completion);
         viewModel.RequestCancellation();
-        await active.WaitAsync(TimeSpan.FromSeconds(5));
+        await active.WaitAsync(TestTimeouts.Completion);
         runtime.Inspect = _ => Task.FromResult(InstallerPresentationTestData.Readiness());
 
         await viewModel.RefreshCommand.ExecuteAsync();

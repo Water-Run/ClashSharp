@@ -165,7 +165,7 @@ public sealed class InstallerArchivedCertificateRemovalTests
             token.ThrowIfCancellationRequested();
         };
         Task operation = fixture.Removal.RemoveAsync(cancellation.Token);
-        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await entered.Task.WaitAsync(TestTimeouts.Completion);
         cancellation.Cancel();
         Assert.False(operation.IsCompleted);
         await Assert.ThrowsAsync<InstallerProtocolException>(() => fixture.Removal.RemoveAsync(CancellationToken.None));

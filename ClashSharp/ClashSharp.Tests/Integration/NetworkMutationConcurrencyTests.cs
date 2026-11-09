@@ -27,7 +27,7 @@ public sealed class NetworkMutationConcurrencyTests
         port = 18390;
         settings.Dispose();
 
-        var result = await operation.WaitAsync(TimeSpan.FromSeconds(5));
+        var result = await operation.WaitAsync(TestTimeouts.Completion);
 
         Assert.True(captured);
         Assert.Equal(MutationOutcome.Succeeded, result.Outcome);
@@ -45,12 +45,12 @@ public sealed class NetworkMutationConcurrencyTests
         var operation = maintenance.ApplyAsync(() => NetworkIntent.RecoverStartupProxy(ClashSharpMode.Disabled, false, 7890), CancellationToken.None);
         try
         {
-            await fixture.Adapter.FirstStageEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await fixture.Adapter.FirstStageEntered.Task.WaitAsync(TestTimeouts.Completion);
             Assert.Throws<MutationAdmissionRejectedException>(() => fixture.Barrier.AcquireOrdinary());
             Assert.False(operation.IsCompleted);
         }
         finally { fixture.Adapter.ReleaseFirstStage.TrySetResult(null); }
-        Assert.Equal(MutationOutcome.Succeeded, (await operation.WaitAsync(TimeSpan.FromSeconds(5))).Outcome);
+        Assert.Equal(MutationOutcome.Succeeded, (await operation.WaitAsync(TestTimeouts.Completion)).Outcome);
         using var next = fixture.Barrier.AcquireOrdinary();
     }
 

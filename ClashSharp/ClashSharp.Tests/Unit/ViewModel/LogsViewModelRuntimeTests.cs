@@ -42,7 +42,7 @@ public sealed partial class LogsViewModelTests
         try
         {
             Assert.False(watch.IsCompleted);
-            await published.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await published.Task.WaitAsync(TestTimeouts.Completion);
             Assert.Equal(2, attempts);
             Assert.Equal(serviceHost ? "Service" : "Core", Assert.Single(viewModel.RecentLogs).Record.Source);
             Assert.Equal("recovered", viewModel.RecentLogs[0].Message);
@@ -88,12 +88,12 @@ public sealed partial class LogsViewModelTests
         {
             if (fatalCancellation)
             {
-                AggregateException observed = await Assert.ThrowsAsync<AggregateException>(() => watch.WaitAsync(TimeSpan.FromSeconds(5)));
+                AggregateException observed = await Assert.ThrowsAsync<AggregateException>(() => watch.WaitAsync(TestTimeouts.Completion));
                 Assert.Contains(failure, observed.Flatten().InnerExceptions);
             }
             else
             {
-                Assert.Same(failure, await Assert.ThrowsAsync<IOException>(() => watch.WaitAsync(TimeSpan.FromSeconds(5))));
+                Assert.Same(failure, await Assert.ThrowsAsync<IOException>(() => watch.WaitAsync(TestTimeouts.Completion)));
             }
             Assert.True(watch.IsFaulted);
             Assert.Equal(1, attempts);
@@ -146,11 +146,11 @@ public sealed partial class LogsViewModelTests
         try
         {
             fail.SetResult();
-            await cancellationObserved.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await cancellationObserved.Task.WaitAsync(TestTimeouts.Completion);
             Assert.False(lifetime.IsCancellationRequested);
             Assert.False(watch.IsCompleted);
             releaseCleanup.SetResult();
-            Assert.Same(failure, await Assert.ThrowsAsync<FormatException>(() => watch.WaitAsync(TimeSpan.FromSeconds(5))));
+            Assert.Same(failure, await Assert.ThrowsAsync<FormatException>(() => watch.WaitAsync(TestTimeouts.Completion)));
         }
         finally
         {
@@ -190,7 +190,7 @@ public sealed partial class LogsViewModelTests
         try
         {
             release.SetResult();
-            AggregateException observed = await Assert.ThrowsAsync<AggregateException>(() => watch.WaitAsync(TimeSpan.FromSeconds(5)));
+            AggregateException observed = await Assert.ThrowsAsync<AggregateException>(() => watch.WaitAsync(TestTimeouts.Completion));
             Assert.Contains(coreFailure, observed.Flatten().InnerExceptions);
             Assert.Contains(hostFailure, observed.Flatten().InnerExceptions);
             Assert.True(ExceptionGraphClassifier.IsProcessFatal(observed));
@@ -240,7 +240,7 @@ public sealed partial class LogsViewModelTests
         try
         {
             fail.SetResult();
-            AggregateException observed = await Assert.ThrowsAsync<AggregateException>(() => watch.WaitAsync(TimeSpan.FromSeconds(5)));
+            AggregateException observed = await Assert.ThrowsAsync<AggregateException>(() => watch.WaitAsync(TestTimeouts.Completion));
             Assert.Contains(sourceFailure, observed.Flatten().InnerExceptions);
             Assert.Contains(callbackFailure, observed.Flatten().InnerExceptions);
         }
@@ -283,7 +283,7 @@ public sealed partial class LogsViewModelTests
         lifetime.Cancel();
         release.SetResult();
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => watch.WaitAsync(TimeSpan.FromSeconds(5)));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => watch.WaitAsync(TestTimeouts.Completion));
 
         Assert.True(coreDisposed);
         Assert.True(hostReturned);

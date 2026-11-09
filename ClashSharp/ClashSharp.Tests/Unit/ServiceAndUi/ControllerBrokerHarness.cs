@@ -181,7 +181,7 @@ internal sealed class FakeControllerPipeServer : IAsyncDisposable
         await _pipe.DisposeAsync();
         try
         {
-            await _loop.WaitAsync(TimeSpan.FromSeconds(5));
+            await _loop.WaitAsync(TestTimeouts.Completion);
         }
         catch (TimeoutException)
         {

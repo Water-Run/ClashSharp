@@ -173,7 +173,7 @@ public sealed class InstallerOriginalRestorationCoordinatorTests
         Task<InstallerExecutionResult> restoring = coordinator.RestoreOriginalAsync(ports.Request, null, CancellationToken.None);
         try
         {
-            await admitted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await admitted.Task.WaitAsync(TestTimeouts.Completion);
             InstallerExecutionResult concurrent = await coordinator.ExecuteAsync(ports.Request, null, CancellationToken.None);
             Assert.Equal("installer.concurrent_action_rejected", concurrent.DiagnosticCode);
         }

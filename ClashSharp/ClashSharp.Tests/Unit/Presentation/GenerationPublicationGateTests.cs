@@ -13,14 +13,14 @@ public sealed class GenerationPublicationGateTests
         Assert.False(first.IsCompleted);
         Assert.False(gate.Hold());
         gate.Publish();
-        await first.WaitAsync(TimeSpan.FromSeconds(5));
+        await first.WaitAsync(TestTimeouts.Completion);
         Assert.True(gate.IsPublished);
 
         Assert.True(gate.Hold());
         Task second = gate.WaitAsync(CancellationToken.None);
         Assert.False(second.IsCompleted);
         gate.Publish();
-        await second.WaitAsync(TimeSpan.FromSeconds(5));
+        await second.WaitAsync(TestTimeouts.Completion);
     }
 
     [Fact]
@@ -35,7 +35,7 @@ public sealed class GenerationPublicationGateTests
         Assert.False(retained.IsCompleted);
         Assert.False(gate.IsPublished);
         gate.Publish();
-        await retained.WaitAsync(TimeSpan.FromSeconds(5));
+        await retained.WaitAsync(TestTimeouts.Completion);
     }
 
     [Fact]

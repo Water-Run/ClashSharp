@@ -120,7 +120,7 @@ public sealed class WindowsOwnerTransferStartupBlockTests
         Task pending = fixture.Startup.ApplyAndVerifyAsync(fixture.Journal, cancellation.Token);
         try
         {
-            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await entered.Task.WaitAsync(TestTimeouts.Completion);
             cancellation.Cancel();
             Assert.False(pending.IsCompleted);
             Assert.True(fixture.Native.LiveLeases > 0);

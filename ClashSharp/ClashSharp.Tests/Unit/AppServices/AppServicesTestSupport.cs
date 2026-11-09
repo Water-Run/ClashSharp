@@ -170,8 +170,8 @@ internal sealed class LoopbackHttpServer : IAsyncDisposable
         _listener.Abort();
         try
         {
-            await _acceptLoop.WaitAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(false);
-            await Task.WhenAll(_inflight.Keys).WaitAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(false);
+            await _acceptLoop.WaitAsync(TestTimeouts.Completion).ConfigureAwait(false);
+            await Task.WhenAll(_inflight.Keys).WaitAsync(TestTimeouts.Completion).ConfigureAwait(false);
         }
         catch (Exception)
         {

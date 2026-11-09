@@ -98,12 +98,12 @@ public sealed class ReleaseAuditRegressionTests
         WindowsNetworkDiagnosticService diagnostics = new(new ObservedSettings(), environment, new NativeProcesses(),
             new WindowsDiagnosticMutationJournalFileStore(Path.Combine(data.Path, "journal.json")), key => key, admission);
         Task write = Task.Run(() => diagnostics.ApplyAsync(WindowsDiagnosticTarget.Terminal, CancellationToken.None));
-        await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await entered.Task.WaitAsync(TestTimeouts.Completion);
         Task<MutationAdmissionLease> drain = admission.CloseAndDrainAsync(MutationAdmissionClosure.Shutdown, CancellationToken.None).AsTask();
         try { Assert.False(drain.IsCompleted); }
         finally { release.Set(); }
         try { await write; } catch (OperationCanceledException) { }
-        (await drain.WaitAsync(TimeSpan.FromSeconds(10))).Dispose();
+        (await drain.WaitAsync(TestTimeouts.Completion)).Dispose();
         environment.BeforeWrite = null;
         await diagnostics.RestoreForDataRemovalAsync(CancellationToken.None);
         Assert.Empty(environment.Values);

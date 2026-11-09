@@ -24,7 +24,7 @@ public sealed class InstallerOwnerTransferPresentationTests
         Task execution = viewModel.OwnerTransferCommand.ExecuteAsync();
         try
         {
-            await displayed.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await displayed.Task.WaitAsync(TestTimeouts.Completion);
             Assert.True(viewModel.IsBusy);
             Assert.False(execution.IsCompleted);
             Assert.False(viewModel.IsCancelActionVisible);
@@ -34,7 +34,7 @@ public sealed class InstallerOwnerTransferPresentationTests
             Assert.Equal(recovery ? "继续切换到当前账户？" : "切换到当前账户？", viewModel.OwnerTransferConfirmationTitle);
             Assert.Null(runtime.Decision);
             (accepted ? viewModel.ConfirmOwnerTransferCommand : viewModel.DeclineOwnerTransferCommand).Execute(null);
-            await execution.WaitAsync(TimeSpan.FromSeconds(5));
+            await execution.WaitAsync(TestTimeouts.Completion);
         }
         finally
         {
@@ -63,9 +63,9 @@ public sealed class InstallerOwnerTransferPresentationTests
         Task execution = viewModel.OwnerTransferCommand.ExecuteAsync();
         try
         {
-            await displayed.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await displayed.Task.WaitAsync(TestTimeouts.Completion);
             viewModel.RequestCancellation();
-            await draining.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await draining.Task.WaitAsync(TestTimeouts.Completion);
             Assert.False(viewModel.IsOwnerTransferConfirmationVisible);
             Assert.True(viewModel.IsBusy);
             Assert.False(execution.IsCompleted);
@@ -91,7 +91,7 @@ public sealed class InstallerOwnerTransferPresentationTests
         Task execution = viewModel.OwnerTransferCommand.ExecuteAsync();
         try
         {
-            await displayed.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await displayed.Task.WaitAsync(TestTimeouts.Completion);
             await viewModel.OwnerTransferCommand.ExecuteAsync();
             Assert.Equal(1, runtime.TransferCalls);
             viewModel.DeclineOwnerTransferCommand.Execute(null);

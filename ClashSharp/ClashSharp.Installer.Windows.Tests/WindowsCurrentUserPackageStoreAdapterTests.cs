@@ -287,7 +287,7 @@ public sealed class WindowsCurrentUserPackageStoreAdapterTests
         using var cancellation = new CancellationTokenSource();
 
         Task operation = adapter.DeployAsync(request, lease, cancellation.Token);
-        await facade.DeploymentStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await facade.DeploymentStarted.Task.WaitAsync(TestTimeouts.Completion);
         cancellation.Cancel();
 
         Assert.False(operation.IsCompleted);
@@ -473,7 +473,7 @@ public sealed class WindowsCurrentUserPackageStoreAdapterTests
             lease,
             Installed(fixture),
             cancellation.Token);
-        await facade.RemovalStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await facade.RemovalStarted.Task.WaitAsync(TestTimeouts.Completion);
         cancellation.Cancel();
 
         Assert.False(operation.IsCompleted);

@@ -31,7 +31,7 @@ public sealed class ProfileCatalogServiceTests
             }));
 
         Assert.Equal(1, reports);
-        await using MutationAdmissionLease closed = await drain!.WaitAsync(TimeSpan.FromSeconds(5));
+        await using MutationAdmissionLease closed = await drain!.WaitAsync(TestTimeouts.Completion);
     }
 
     [Fact]
@@ -80,13 +80,13 @@ public sealed class ProfileCatalogServiceTests
         Task<ProfileImportResult> import = catalog.ImportSubscriptionLinkAsync(link, lifetime.Token);
         try
         {
-            await headers.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await headers.Task.WaitAsync(TestTimeouts.Completion);
             bool changed = delete
-                ? await catalog.TryDeleteSubscriptionLinkAsync(link.Id, CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5))
+                ? await catalog.TryDeleteSubscriptionLinkAsync(link.Id, CancellationToken.None).WaitAsync(TestTimeouts.Completion)
                 : await catalog.TryUpdateSubscriptionLinkAsync(link.Id, "Edited", link.Uri + "?revision=2",
-                    true, 24, CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5));
+                    true, 24, CancellationToken.None).WaitAsync(TestTimeouts.Completion);
             Assert.True(changed);
-            await catalog.AddSubscriptionLinkAsync("Other", "https://other.invalid/profile", CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5));
+            await catalog.AddSubscriptionLinkAsync("Other", "https://other.invalid/profile", CancellationToken.None).WaitAsync(TestTimeouts.Completion);
             release.SetResult();
             await Assert.ThrowsAsync<InvalidOperationException>(() => import);
             Assert.Empty(core.Imports);
@@ -383,10 +383,10 @@ public sealed class ProfileCatalogServiceTests
         Task import = service.ImportSubscriptionLinkAsync(baseline, caller.Token);
         try
         {
-            await headersSent.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await headersSent.Task.WaitAsync(TestTimeouts.Completion);
             if (cancelCaller) { await caller.CancelAsync(); }
             await Assert.ThrowsAnyAsync<OperationCanceledException>(
-                () => import.WaitAsync(TimeSpan.FromSeconds(5)));
+                () => import.WaitAsync(TestTimeouts.Completion));
 
             ProfileSubscriptionLink failed = Assert.Single(service.GetSubscriptionLinks());
             Assert.Equal(cancelCaller ? "ProfileCatalog.Status.Canceled" : "ProfileCatalog.Subscription.UpdateFailed", failed.Status);
@@ -448,9 +448,9 @@ public sealed class ProfileCatalogServiceTests
         Task check = catalog.CheckSubscriptionLinkAsync(link, caller.Token);
         try
         {
-            await accepted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await accepted.Task.WaitAsync(TestTimeouts.Completion);
             await caller.CancelAsync();
-            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => check.WaitAsync(TimeSpan.FromSeconds(5)));
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => check.WaitAsync(TestTimeouts.Completion));
             Assert.Equal("ProfileCatalog.Status.Canceled", Assert.Single(catalog.GetSubscriptionLinks()).Status);
             using JsonDocument after = JsonDocument.Parse(File.ReadAllText(file.Path));
             Assert.Equal(scheduleBefore, after.RootElement.GetProperty("SubscriptionSchedules")[0].GetRawText());
@@ -492,10 +492,10 @@ public sealed class ProfileCatalogServiceTests
         Task<MutationAdmissionLease>? closing = null;
         try
         {
-            await headers.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await headers.Task.WaitAsync(TestTimeouts.Completion);
             if (revokeAdmission) { closing = admission.CloseAndDrainAsync(MutationAdmissionClosure.Shutdown, CancellationToken.None).AsTask(); }
             else { await caller.CancelAsync(); }
-            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => import.WaitAsync(TimeSpan.FromSeconds(5)));
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => import.WaitAsync(TestTimeouts.Completion));
             Assert.Equal(!revokeAdmission, caller.IsCancellationRequested);
             Assert.Equal("ProfileCatalog.Status.Canceled", Assert.Single(catalog.GetSubscriptionLinks()).Status);
             using JsonDocument after = JsonDocument.Parse(File.ReadAllText(file.Path));
@@ -508,7 +508,7 @@ public sealed class ProfileCatalogServiceTests
             await server.CancelAsync();
             try { await import; } catch (OperationCanceledException) { }
             try { await response; } catch (OperationCanceledException) { }
-            if (closing is not null) { (await closing.WaitAsync(TimeSpan.FromSeconds(5))).Dispose(); }
+            if (closing is not null) { (await closing.WaitAsync(TestTimeouts.Completion)).Dispose(); }
         }
     }
 
@@ -540,9 +540,9 @@ public sealed class ProfileCatalogServiceTests
         Task<MutationAdmissionLease>? closing = null;
         try
         {
-            await headers.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await headers.Task.WaitAsync(TestTimeouts.Completion);
             closing = admission.CloseAndDrainAsync(MutationAdmissionClosure.Shutdown, CancellationToken.None).AsTask();
-            await pass.WaitAsync(TimeSpan.FromSeconds(5));
+            await pass.WaitAsync(TestTimeouts.Completion);
             Assert.Empty(levels);
             ProfileSubscriptionLink second = Assert.Single(catalog.GetSubscriptionLinks(), link => link.Name == "second");
             Assert.Equal("ProfileCatalog.Status.Added", second.Status);
@@ -554,8 +554,8 @@ public sealed class ProfileCatalogServiceTests
         {
             await server.CancelAsync();
             try { await response; } catch (OperationCanceledException) { }
-            await pass.WaitAsync(TimeSpan.FromSeconds(5));
-            if (closing is not null) { (await closing.WaitAsync(TimeSpan.FromSeconds(5))).Dispose(); }
+            await pass.WaitAsync(TestTimeouts.Completion);
+            if (closing is not null) { (await closing.WaitAsync(TestTimeouts.Completion)).Dispose(); }
         }
     }
 
@@ -718,7 +718,7 @@ public sealed class ProfileCatalogServiceTests
         ProfileCatalogService service = CreateService(tempFile.Path, settings, runtime: runtime);
         IReadOnlyList<ConfigurationProfile> snapshot = service.GetProfiles();
         Task<bool> activation = service.TryApplyActiveProfileAsync(ProfileCatalogIds.BuiltInDirect, CancellationToken.None);
-        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await entered.Task.WaitAsync(TestTimeouts.Completion);
         Task retirement = service.DisposeAsync().AsTask();
         try
         {
@@ -733,7 +733,7 @@ public sealed class ProfileCatalogServiceTests
         }
 
         Assert.True(await activation);
-        await retirement.WaitAsync(TimeSpan.FromSeconds(5));
+        await retirement.WaitAsync(TestTimeouts.Completion);
         await service.DisposeAsync();
         Assert.Equal(ProfileCatalogIds.BuiltInDirect, settings.ActiveProfileId);
         Assert.Equal(ProfileCatalogIds.BuiltInDirect, Assert.Single(snapshot).Id);
@@ -758,7 +758,7 @@ public sealed class ProfileCatalogServiceTests
         };
         ProfileCatalogService service = CreateService(tempFile.Path, settings, runtime: runtime);
         Task<bool> activation = service.TryApplyActiveProfileAsync(ProfileCatalogIds.BuiltInDirect, CancellationToken.None);
-        await compensating.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await compensating.Task.WaitAsync(TestTimeouts.Completion);
         Task retirement = service.DisposeAsync().AsTask();
         try
         {
@@ -770,7 +770,7 @@ public sealed class ProfileCatalogServiceTests
         }
 
         await Assert.ThrowsAsync<IOException>(() => activation);
-        await retirement.WaitAsync(TimeSpan.FromSeconds(5));
+        await retirement.WaitAsync(TestTimeouts.Completion);
         Assert.Equal(2, attempts);
         Assert.Equal(ProfileCatalogIds.BuiltInDirect, settings.ActiveProfileId);
     }
@@ -789,7 +789,7 @@ public sealed class ProfileCatalogServiceTests
             await release.Task;
             return true;
         }, CancellationToken.None);
-        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await entered.Task.WaitAsync(TestTimeouts.Completion);
         ProfileCatalogService service = CreateService(tempFile.Path, new FakeProfileCatalogSettings(),
             coordinator: new ProfileCatalogMutationCoordinator(admission, gate));
         Task<ProfileSubscriptionLink> mutation = service.AddSubscriptionLinkAsync("accepted", "https://example.test/accepted", CancellationToken.None);
@@ -806,7 +806,7 @@ public sealed class ProfileCatalogServiceTests
 
         Assert.True(await blocker);
         ProfileSubscriptionLink link = await mutation;
-        await retirement.WaitAsync(TimeSpan.FromSeconds(5));
+        await retirement.WaitAsync(TestTimeouts.Completion);
         await using ProfileCatalogService reopened = CreateService(tempFile.Path, new FakeProfileCatalogSettings());
         Assert.Equal(link.Id, Assert.Single(reopened.GetSubscriptionLinks()).Id);
     }

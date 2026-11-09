@@ -437,7 +437,7 @@ public sealed class SettingsResetCoordinatorTests
         Task reset = ExecuteAsync(operation, cancellationToken: cancellation.Token);
         try
         {
-            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await entered.Task.WaitAsync(TestTimeouts.Completion);
             if (cancelCaller) { cancellation.Cancel(); }
             Assert.False(reset.IsCompleted);
             Assert.False(operation.Disposed);
@@ -446,7 +446,7 @@ public sealed class SettingsResetCoordinatorTests
             Assert.Empty(operation.Published);
         }
         finally { release.TrySetResult(); }
-        Assert.Same(activationFailure, await Assert.ThrowsAsync<IOException>(() => reset.WaitAsync(TimeSpan.FromSeconds(5))));
+        Assert.Same(activationFailure, await Assert.ThrowsAsync<IOException>(() => reset.WaitAsync(TestTimeouts.Completion)));
         Assert.Equal(Baseline, operation.Current);
         Assert.Equal(AllParticipants.Concat(AllParticipants), operation.Applied.Select(call => call.Participant));
         Assert.All(operation.Applied.Skip(AllParticipants.Length), call => Assert.Equal(Baseline, call.Snapshot));

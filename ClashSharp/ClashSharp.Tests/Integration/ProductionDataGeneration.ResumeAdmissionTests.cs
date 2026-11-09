@@ -34,7 +34,7 @@ public sealed partial class ProductionDataGenerationTests
         Task replacement = fixture.CreateReplacementCoordinator().ResetAllSettingsAsync(CancellationToken.None);
         try
         {
-            await baselineProducer.ResumeEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await baselineProducer.ResumeEntered.Task.WaitAsync(TestTimeouts.Completion);
             Assert.Equal(1, baselineProducer.QuiesceCount);
             Assert.False(replacement.IsCompleted);
             Assert.Equal(MutationAdmissionState.Closing, fixture.Admission.State);
@@ -65,7 +65,7 @@ public sealed partial class ProductionDataGenerationTests
         Task replacement = fixture.CreateReplacementCoordinator().ResetAllSettingsAsync(cancellation.Token);
         try
         {
-            await producer.QuiesceEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await producer.QuiesceEntered.Task.WaitAsync(TestTimeouts.Completion);
             cancellation.Cancel();
             Assert.False(producer.QuiesceToken.CanBeCanceled);
             Assert.False(replacement.IsCompleted);

@@ -37,7 +37,7 @@ public sealed partial class StatisticsRefreshViewModelTests
         Task load = viewModel.LoadAsync(CancellationToken.None);
         try
         {
-            await gate.Entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await gate.Entered.Task.WaitAsync(TestTimeouts.Completion);
             Assert.True(viewModel.IsLoading);
             Assert.False(viewModel.CanRefresh);
             Assert.False(viewModel.HasSnapshot);
@@ -259,7 +259,7 @@ public sealed partial class StatisticsRefreshViewModelTests
         Task oldLoad = viewModel.LoadAsync(CancellationToken.None);
         try
         {
-            await gate.Entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await gate.Entered.Task.WaitAsync(TestTimeouts.Completion);
             store.ReadSummary = () => Summary(2);
             await viewModel.LoadAsync(CancellationToken.None);
             Assert.Equal("2 connections", viewModel.ConnectionCountText);
@@ -287,10 +287,10 @@ public sealed partial class StatisticsRefreshViewModelTests
         Task newLoad = Task.CompletedTask;
         try
         {
-            await first.Entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await first.Entered.Task.WaitAsync(TestTimeouts.Completion);
             store.ReadSummary = () => second.Read(Summary(2));
             newLoad = viewModel.LoadAsync(CancellationToken.None);
-            await second.Entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await second.Entered.Task.WaitAsync(TestTimeouts.Completion);
             first.Release();
             await oldLoad;
 
@@ -323,7 +323,7 @@ public sealed partial class StatisticsRefreshViewModelTests
         Task load = viewModel.LoadAsync(cancellation.Token);
         try
         {
-            await gate.Entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await gate.Entered.Task.WaitAsync(TestTimeouts.Completion);
             cancellation.Cancel();
         }
         finally

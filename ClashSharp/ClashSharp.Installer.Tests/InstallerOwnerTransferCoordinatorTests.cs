@@ -162,7 +162,7 @@ public sealed class InstallerOwnerTransferCoordinatorTests
         Task<InstallerTransactionSnapshot> pending = coordinator.ResumeAsync(original, cancellation.Token);
         try
         {
-            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await entered.Task.WaitAsync(TestTimeouts.Completion);
             cancellation.Cancel();
             Assert.False(pending.IsCompleted);
             InstallerProtocolException failure = await Assert.ThrowsAsync<InstallerProtocolException>(() =>

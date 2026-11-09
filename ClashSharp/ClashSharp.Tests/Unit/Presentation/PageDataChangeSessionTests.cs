@@ -30,10 +30,10 @@ public sealed class PageDataChangeSessionTests
         Assert.True(session.IsInvalidated);
         Assert.False(entered.Task.IsCompleted);
         ui.RunAll();
-        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await entered.Task.WaitAsync(TestTimeouts.Completion);
         Assert.True(session.IsInvalidated);
         release.SetResult();
-        await session.DrainAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        await session.DrainAsync().WaitAsync(TestTimeouts.Completion);
         Assert.False(session.IsInvalidated);
         Assert.Empty(errors.Reported);
         session.Stop();
@@ -50,7 +50,7 @@ public sealed class PageDataChangeSessionTests
         TaskCompletionSource finish = new(TaskCreationOptions.RunContinuationsAsynchronously);
         CancellationToken oldToken = default;
         Task old = actions.RunAsync(async token => { oldToken = token; entered.SetResult(); await finish.Task; });
-        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await entered.Task.WaitAsync(TestTimeouts.Completion);
         bool reloaded = false;
         Session session = new(source.Subscribe, ui.Post, [actions.Cancel], async token =>
         {
@@ -65,7 +65,7 @@ public sealed class PageDataChangeSessionTests
         Assert.False(old.IsCompleted);
         Assert.False(reloaded);
         finish.SetResult();
-        await session.DrainAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        await session.DrainAsync().WaitAsync(TestTimeouts.Completion);
         Assert.True(reloaded);
         Assert.True(old.IsCompleted);
         session.Stop();
@@ -82,7 +82,7 @@ public sealed class PageDataChangeSessionTests
         source.Publish();
         source.Publish();
         ui.RunAll();
-        await session.DrainAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        await session.DrainAsync().WaitAsync(TestTimeouts.Completion);
         Assert.Equal(1, reloads);
         Assert.False(session.IsInvalidated);
         session.Stop();
@@ -128,9 +128,9 @@ public sealed class PageDataChangeSessionTests
         session.Start();
         source.Publish();
         ui.RunAll();
-        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await entered.Task.WaitAsync(TestTimeouts.Completion);
         session.Stop();
-        await session.DrainAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        await session.DrainAsync().WaitAsync(TestTimeouts.Completion);
         Assert.True(finished.Task.IsCompleted);
         Assert.Equal(0, source.Subscribers);
     }
@@ -150,7 +150,7 @@ public sealed class PageDataChangeSessionTests
         source.Publish();
         Assert.True(canceled);
         ui.RunAll();
-        await session.DrainAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        await session.DrainAsync().WaitAsync(TestTimeouts.Completion);
         Assert.True(reloaded);
         Assert.Same(failure, Assert.Single(errors.Reported));
         session.Stop();

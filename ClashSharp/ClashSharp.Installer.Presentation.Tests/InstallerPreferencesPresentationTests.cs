@@ -25,7 +25,7 @@ public sealed class InstallerPreferencesPresentationTests
         Task active = model.PrimaryActionCommand.ExecuteAsync();
         try
         {
-            InstallerPreferences snapshot = await runtime.Accepted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            InstallerPreferences snapshot = await runtime.Accepted.Task.WaitAsync(TestTimeouts.Completion);
             Assert.False(snapshot.CreateDesktopShortcut);
             Assert.True(snapshot.EnableMcpServer);
             model.CreateDesktopShortcut = true;
@@ -36,7 +36,7 @@ public sealed class InstallerPreferencesPresentationTests
         finally
         {
             runtime.Release.TrySetResult();
-            await active.WaitAsync(TimeSpan.FromSeconds(5));
+            await active.WaitAsync(TestTimeouts.Completion);
         }
     }
 
@@ -136,7 +136,7 @@ public sealed class InstallerPreferencesPresentationTests
         Task active = model.PrimaryActionCommand.ExecuteAsync();
         try
         {
-            InstallerPreferences accepted = await runtime.Accepted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            InstallerPreferences accepted = await runtime.Accepted.Task.WaitAsync(TestTimeouts.Completion);
             Assert.False(model.ResetInstallPreferencesCommand.CanExecute(null));
             model.ResetInstallPreferencesCommand.Execute(null);
             Assert.True(model.EnableMcpServer);
@@ -177,7 +177,7 @@ public sealed class InstallerPreferencesPresentationTests
         Task active = model.OwnerTransferCommand.ExecuteAsync();
         try
         {
-            await confirmationVisible.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await confirmationVisible.Task.WaitAsync(TestTimeouts.Completion);
             model.EnableMcpServer = false;
             Assert.True(model.EnableMcpServer);
             Assert.True(runtime.Snapshot!.EnableMcpServer);

@@ -272,10 +272,10 @@ public sealed class StartupSettingsCoordinatorTests
         finally
         {
             release.TrySetResult();
-            await apply.WaitAsync(TimeSpan.FromSeconds(5));
+            await apply.WaitAsync(TestTimeouts.Completion);
         }
 
-        await using MutationAdmissionLease exclusive = await drain.WaitAsync(TimeSpan.FromSeconds(5));
+        await using MutationAdmissionLease exclusive = await drain.WaitAsync(TestTimeouts.Completion);
         Assert.True(probe.Preference);
         Assert.True(probe.Registration);
         Assert.All(probe.MutationTokens, token => Assert.False(token.CanBeCanceled));
@@ -306,17 +306,17 @@ public sealed class StartupSettingsCoordinatorTests
                 cancellation.Cancel();
             }
 
-            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => second.WaitAsync(TimeSpan.FromSeconds(5)));
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => second.WaitAsync(TestTimeouts.Completion));
             Assert.Equal(1, probe.PreferenceReads);
             Assert.True(Assert.Single(probe.Applied));
         }
         finally
         {
             release.TrySetResult();
-            await first.WaitAsync(TimeSpan.FromSeconds(5));
+            await first.WaitAsync(TestTimeouts.Completion);
             if (drain is not null)
             {
-                await using MutationAdmissionLease exclusive = await drain.WaitAsync(TimeSpan.FromSeconds(5));
+                await using MutationAdmissionLease exclusive = await drain.WaitAsync(TestTimeouts.Completion);
             }
         }
     }
@@ -339,7 +339,7 @@ public sealed class StartupSettingsCoordinatorTests
         finally
         {
             release.TrySetResult();
-            await Task.WhenAll(first, second).WaitAsync(TimeSpan.FromSeconds(5));
+            await Task.WhenAll(first, second).WaitAsync(TestTimeouts.Completion);
         }
 
         admission.EnsureActiveLease(caller);

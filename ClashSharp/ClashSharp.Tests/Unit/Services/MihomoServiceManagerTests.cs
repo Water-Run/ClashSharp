@@ -182,8 +182,8 @@ public sealed class MihomoServiceManagerTests
         Task<MihomoServiceStatus> refresh = Task.Run(() => manager.GetStatusAsync(CancellationToken.None));
         try
         {
-            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
-            MihomoServiceStatus cached = await Task.Run(manager.GetLatestStatus).WaitAsync(TimeSpan.FromSeconds(5));
+            await entered.Task.WaitAsync(TestTimeouts.Completion);
+            MihomoServiceStatus cached = await Task.Run(manager.GetLatestStatus).WaitAsync(TestTimeouts.Completion);
 
             Assert.False(cached.IsKnown);
             Assert.Equal(MihomoServiceIpcEndpoint.AssociationInvalidCode, cached.ProvisioningFailureCode);

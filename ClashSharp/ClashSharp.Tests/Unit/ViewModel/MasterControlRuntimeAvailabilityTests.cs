@@ -28,7 +28,7 @@ public sealed partial class MasterControlViewModelTests
         finally
         {
             pending.TrySetResult(MasterControlRuntimeSnapshot.Unavailable);
-            await load.WaitAsync(TimeSpan.FromSeconds(5));
+            await load.WaitAsync(TestTimeouts.Completion);
         }
     }
 
@@ -146,7 +146,7 @@ public sealed partial class MasterControlViewModelTests
         Task load = viewModel.LoadAsync(cancellation.Token);
         cancellation.Cancel();
         pending.SetResult(MasterControlRuntimeSnapshot.Unavailable);
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => load.WaitAsync(TimeSpan.FromSeconds(5)));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => load.WaitAsync(TestTimeouts.Completion));
 
         Assert.Equal("4", Tile(viewModel, "profile-count").Value);
         Assert.Equal("3 KB", Tile(viewModel, "traffic-total").Value);

@@ -605,7 +605,7 @@ public sealed class InstallerShellViewModelTests
         Task active = inspection ? viewModel.InitializeAsync() : viewModel.PrimaryActionCommand.ExecuteAsync();
         try
         {
-            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await entered.Task.WaitAsync(TestTimeouts.Completion);
             // This is the Window's close contract: request cancellation, dispose after IsBusy clears.
             viewModel.PropertyChanged += (_, args) =>
             {
@@ -627,7 +627,7 @@ public sealed class InstallerShellViewModelTests
         finally
         {
             drain.TrySetResult();
-            await active.WaitAsync(TimeSpan.FromSeconds(5));
+            await active.WaitAsync(TestTimeouts.Completion);
         }
         Assert.False(viewModel.IsBusy);
         Assert.Equal("installer.cancelled", viewModel.DiagnosticCode);
@@ -669,7 +669,7 @@ public sealed class InstallerShellViewModelTests
         Task active = inspection ? viewModel.InitializeAsync() : viewModel.PrimaryActionCommand.ExecuteAsync();
         try
         {
-            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await entered.Task.WaitAsync(TestTimeouts.Completion);
             viewModel.Dispose();
             viewModel.Dispose();
             Assert.False(active.IsCompleted);
@@ -678,7 +678,7 @@ public sealed class InstallerShellViewModelTests
         finally
         {
             drain.TrySetResult();
-            await active.WaitAsync(TimeSpan.FromSeconds(5));
+            await active.WaitAsync(TestTimeouts.Completion);
         }
         Assert.Equal(1, runtime.DisposeCount);
     }

@@ -98,7 +98,7 @@ public sealed partial class ProductionInstallerRuntimeTests
         finally
         {
             release.Set();
-            await execution.WaitAsync(TimeSpan.FromSeconds(5));
+            await execution.WaitAsync(TestTimeouts.Completion);
         }
         Assert.Equal([InstallerOperation.Repair], backend.Operations);
     }

@@ -437,14 +437,14 @@ public sealed class MihomoServiceControllerBrokerTests
         Task<MihomoServiceIpcResponse> brokerCall = processor.ProcessAsync(
             request,
             CancellationToken.None);
-        await transport.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await transport.Entered.Task.WaitAsync(TestTimeouts.Completion);
         Task<MihomoChildOperationResult> stop = context.Supervisor.StopAsync(
             CancellationToken.None);
         Assert.False(stop.IsCompleted);
         transport.Release.SetResult(null);
 
-        MihomoServiceIpcResponse response = await brokerCall.WaitAsync(TimeSpan.FromSeconds(5));
-        MihomoChildOperationResult stopped = await stop.WaitAsync(TimeSpan.FromSeconds(5));
+        MihomoServiceIpcResponse response = await brokerCall.WaitAsync(TestTimeouts.Completion);
+        MihomoChildOperationResult stopped = await stop.WaitAsync(TestTimeouts.Completion);
         Assert.True(response.Succeeded);
         Assert.Equal(MihomoServiceChildState.Running, response.Snapshot!.ChildState);
         Assert.Equal(74, response.Snapshot.ActiveGeneration);

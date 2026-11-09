@@ -179,7 +179,7 @@ public sealed class DispatcherOperationPolicyTests
         }
 
         fallbackCompletion.SetResult();
-        await operation.WaitAsync(TimeSpan.FromSeconds(1));
+        await operation.WaitAsync(TestTimeouts.Completion);
 
         Assert.Equal(0, rejectingContext.PostCount);
     }

@@ -45,7 +45,7 @@ public sealed class InstallerMachineHelperAuthorityLoopCleanupTests
 
         try
         {
-            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await entered.Task.WaitAsync(TestTimeouts.Completion);
             Assert.False(running.IsCompleted);
             Assert.Equal(0, stream.Output.Length);
         }
@@ -53,7 +53,7 @@ public sealed class InstallerMachineHelperAuthorityLoopCleanupTests
         {
             release.TrySetResult();
         }
-        await running.WaitAsync(TimeSpan.FromSeconds(5));
+        await running.WaitAsync(TestTimeouts.Completion);
 
         Assert.Equal(1, calls);
         Assert.Null(store.Current);

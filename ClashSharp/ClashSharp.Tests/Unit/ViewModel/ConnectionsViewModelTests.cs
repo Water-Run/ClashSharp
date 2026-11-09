@@ -108,7 +108,7 @@ public sealed partial class ConnectionsViewModelTests
             Assert.Equal("Core stopped", page.EmptyStateText);
             Assert.Empty(log.Entries);
             state = new(ClashSharpMode.Standby, true, false, false, 10000, "running");
-            await failed.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await failed.Task.WaitAsync(TestTimeouts.Completion);
             Assert.Equal("Unavailable", page.EmptyStateText);
             Assert.Single(log.Entries);
         }
@@ -430,7 +430,7 @@ public sealed partial class ConnectionsViewModelTests
         using CancellationTokenSource cancellation = new();
 
         Task watch = viewModel.WatchConnectionsAsync(cancellation.Token);
-        await applied.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        await applied.Task.WaitAsync(TestTimeouts.Completion);
         cancellation.Cancel();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => watch);
@@ -572,7 +572,7 @@ public sealed partial class ConnectionsViewModelTests
             Assert.Equal("Unavailable", viewModel.ConnectionStatusText);
             Assert.Empty(viewModel.Connections);
             Assert.False(viewModel.CanCloseConnections);
-            await recovered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await recovered.Task.WaitAsync(TestTimeouts.Completion);
             Assert.Equal(3, client.StreamCallCount);
             Assert.True(viewModel.CanCloseConnections);
             Assert.Equal("HOST", viewModel.SearchText);
@@ -696,7 +696,7 @@ public sealed partial class ConnectionsViewModelTests
                 }
             };
 
-            await unavailableAgain.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await unavailableAgain.Task.WaitAsync(TestTimeouts.Completion);
 
             Assert.Empty(viewModel.Connections);
             Assert.False(viewModel.CanCloseConnections);

@@ -57,14 +57,14 @@ public sealed class RuntimeLifecycleSupervisedLoopTests
         try
         {
             await loop.StartAsync(CancellationToken.None);
-            await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await started.Task.WaitAsync(TestTimeouts.Completion);
             shutdown = coordinator.ShutdownAsync(cancellation.Token);
-            await cancellationReached.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await cancellationReached.Task.WaitAsync(TestTimeouts.Completion);
             if (callerCancels) { cancellation.Cancel(); }
-            await participant.Interrupted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await participant.Interrupted.Task.WaitAsync(TestTimeouts.Completion);
             // Only release after Quiesce has actually failed, avoiding a completion/cancellation race.
             if (releaseBeforeRecoveryEnds) { release.TrySetResult(); }
-            RuntimeShutdownResult result = await shutdown.WaitAsync(TimeSpan.FromSeconds(5));
+            RuntimeShutdownResult result = await shutdown.WaitAsync(TestTimeouts.Completion);
 
             Assert.Equal(1, participant.ResumeCalls);
             Assert.True(participant.ResumedPriorState!.WasRunning);
@@ -74,7 +74,7 @@ public sealed class RuntimeLifecycleSupervisedLoopTests
                 Assert.Equal(RuntimeShutdownOutcome.Aborted, result.Outcome);
                 Assert.Equal(callerCancels ? "shutdown-cancelled" : "quiescence-timeout", result.ErrorCode);
                 Assert.Empty(result.DegradedParticipants);
-                await resumed.Task.WaitAsync(TimeSpan.FromSeconds(5));
+                await resumed.Task.WaitAsync(TestTimeouts.Completion);
                 Assert.True(loop.IsRunning);
                 Assert.Equal(2, Volatile.Read(ref calls));
             }
@@ -90,8 +90,8 @@ public sealed class RuntimeLifecycleSupervisedLoopTests
         {
             release.TrySetResult();
             cancellation.Cancel();
-            if (shutdown is not null) { await shutdown.WaitAsync(TimeSpan.FromSeconds(5)); }
-            await loop.StopAsync(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5));
+            if (shutdown is not null) { await shutdown.WaitAsync(TestTimeouts.Completion); }
+            await loop.StopAsync(CancellationToken.None).WaitAsync(TestTimeouts.Completion);
         }
     }
 
