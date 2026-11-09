@@ -17,6 +17,27 @@ public static partial class PersistedLogText
     public static string Normalize(string text)
     {
         ArgumentNullException.ThrowIfNull(text);
+        // Control characters become spaces only after redaction, so a key and separator split by a line
+        // break (for example "password" NEWLINE "=value") can turn into a credential field during the
+        // final normalization. Repeat until the text is stable so that persisted text never contains
+        // a field that a later pass (for example a re-persisted log line) would still redact.
+        string current = NormalizeOnce(text);
+        for (int pass = 0; pass < 3; pass++)
+        {
+            string next = NormalizeOnce(current);
+            if (string.Equals(next, current, StringComparison.Ordinal))
+            {
+                break;
+            }
+
+            current = next;
+        }
+
+        return current;
+    }
+
+    private static string NormalizeOnce(string text)
+    {
         int length = Math.Min(text.Length, RuntimeLogText.MaximumCharacters);
         if (length < text.Length && length > 0 && char.IsHighSurrogate(text[length - 1]) && char.IsLowSurrogate(text[length]))
         {
