@@ -37,24 +37,44 @@ public sealed partial class InstallerContractPropertyTests
     {
         Random random = new(Seed + 1);
         string[] atoms = ["S", "s", "1", "5", "21", "0", "00", "18", "32", "544", "4294967295", "4294967296", "281474976710655", "281474976710656", "-", "", " ", "x", "١"];
-        string[] known = ["S-1-1-0", "S-1-5-2", "S-1-5-7", "S-1-5-18", "S-1-5-32-544"];
+        string[] numericAtoms = ["0", "1", "1001", "500", "4294967295", "4294967296", "00", "x"];
+        string[] accountPrefixes = ["S-1-5-21-", "S-1-12-1-"];
+        // Well-known groups, service and logon-session identities: never an account to grant rights to.
+        string[] notAccounts =
+        [
+            "S-1-1-0", "S-1-5-2", "S-1-5-4", "S-1-5-7", "S-1-5-11", "S-1-5-18", "S-1-5-19", "S-1-5-20",
+            "S-1-5-32-544", "S-1-5-32-545", "S-1-5-32-546", "S-1-5-80-1-2-3-4-5", "S-1-5-5-0-1234", "S-1-15-2-1-2-3-4-5-6-7",
+            "S-1-5-21-4294967295", "S-1-5-21-1-2-3", "S-1-12-1-1-2-3",
+        ];
         int accepted = 0;
         for (int attempt = 0; attempt < 30000; attempt++)
         {
-            string candidate = attempt % 3 == 0
-                ? "S-1-5-21-" + string.Join('-', Enumerable.Range(0, random.Next(0, 17)).Select(_ => atoms[random.Next(atoms.Length)]))
-                : string.Join('-', Enumerable.Range(0, random.Next(0, 22)).Select(_ => atoms[random.Next(atoms.Length)]));
-            bool expected = SidOracle(candidate) && !known.Contains(candidate, StringComparer.Ordinal);
+            string candidate = (attempt % 3) switch
+            {
+                0 => "S-1-5-21-" + string.Join('-', Enumerable.Range(0, random.Next(0, 17)).Select(_ => atoms[random.Next(atoms.Length)])),
+                1 => accountPrefixes[random.Next(accountPrefixes.Length)]
+                    + string.Join('-', Enumerable.Range(0, 4).Select(_ => numericAtoms[random.Next(numericAtoms.Length)])),
+                _ => string.Join('-', Enumerable.Range(0, random.Next(0, 22)).Select(_ => atoms[random.Next(atoms.Length)])),
+            };
+            // A target is exactly one account: a well-formed SID that is also a local, domain or Azure AD user.
+            bool expected = SidOracle(candidate) && IsUserAccountShape(candidate);
 
             Assert.Equal(expected, Accepts(() => InstallerProtocolValidation.ValidateTargetSid(candidate)));
             accepted += expected ? 1 : 0;
         }
 
         Assert.True(accepted > 100, "The generator must exercise accepted SIDs too.");
-        foreach (string sid in known)
+        foreach (string sid in notAccounts)
         {
-            Assert.False(Accepts(() => InstallerProtocolValidation.ValidateTargetSid(sid)));
+            Assert.False(Accepts(() => InstallerProtocolValidation.ValidateTargetSid(sid)), sid + " was accepted as a target account.");
         }
+    }
+
+    private static bool IsUserAccountShape(string candidate)
+    {
+        string[] parts = candidate.Split('-');
+        return parts.Length == 8 && parts[0] == "S" && parts[1] == "1"
+            && (parts[2] == "5" && parts[3] == "21" || parts[2] == "12" && parts[3] == "1");
     }
 
     [Fact]

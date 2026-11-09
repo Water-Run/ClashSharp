@@ -42,13 +42,20 @@ public static class InstallerProtocolValidation
             && ulong.Parse(parts[2], CultureInfo.InvariantCulture) <= 0x0000_ffff_ffff_ffff
             && parts.Skip(3).All(static part =>
                 uint.TryParse(part, NumberStyles.None, CultureInfo.InvariantCulture, out _));
-        bool explicitlyPrivilegedOrNoninteractive = value is
-            "S-1-1-0" or
-            "S-1-5-2" or
-            "S-1-5-7" or
-            "S-1-5-18" or
-            "S-1-5-32-544";
-        if (!canonicalRanges || explicitlyPrivilegedOrNoninteractive)
+        // The target is exactly one interactive user account. Well-known groups, service and logon-session
+        // identities are not accounts, and a deny-list can never name them all: accepting one would let a
+        // mistaken caller grant a whole group (for example Authenticated Users) rights meant for one user.
+        // Local, domain and Microsoft-account users are S-1-5-21-<three domain sub-authorities>-<RID> and
+        // Azure AD users are S-1-12-1-<four sub-authorities>; both have eight parts when split.
+        bool isLocalOrDomainUser = parts.Length == 8
+            && string.Equals(parts[1], "1", StringComparison.Ordinal)
+            && string.Equals(parts[2], "5", StringComparison.Ordinal)
+            && string.Equals(parts[3], "21", StringComparison.Ordinal);
+        bool isAzureAdUser = parts.Length == 8
+            && string.Equals(parts[1], "1", StringComparison.Ordinal)
+            && string.Equals(parts[2], "12", StringComparison.Ordinal)
+            && string.Equals(parts[3], "1", StringComparison.Ordinal);
+        if (!canonicalRanges || !(isLocalOrDomainUser || isAzureAdUser))
         {
             throw new InstallerProtocolException("installer.request.target_sid_invalid");
         }

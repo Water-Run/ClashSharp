@@ -589,7 +589,7 @@ public sealed class WindowsServiceStateUniverseTests
         foreach (string sid in new[]
         {
             TargetSid, "S-1-5-21-1-2-3-500", "S-1-5-21-4294967295-4294967295-4294967295-4294967295",
-            "S-1-12-1-1234567890-1234567890-1234567890-1234567890", "S-1-5-21-1-2-3-1001-2-3-4-5-6-7-8",
+            "S-1-12-1-1234567890-1234567890-1234567890-1234567890",
         })
         {
             string dacl = WindowsServiceConfigurationVerifier.BuildExpectedDaclSddl(sid);
@@ -627,7 +627,7 @@ public sealed class WindowsServiceStateUniverseTests
         }
     }
 
-    [Fact(Skip = "DEFECT: InstallerProtocolValidation.ValidateTargetSid is a deny-list of five well-known SIDs, so group SIDs such as S-1-5-11 (Authenticated Users) or S-1-5-32-545 (Users) are accepted as a 'target account' and BuildExpectedDaclSddl would grant that whole group service query rights. Callers pass the authenticated token user today; the descriptor builder itself does not enforce an account SID.")]
+    [Fact]
     public void ServiceDescriptorBuilderRefusesGroupSidsAsTheTargetAccount()
     {
         foreach (string group in new[] { "S-1-5-11", "S-1-5-32-545", "S-1-5-32-546", "S-1-5-4", "S-1-5-19", "S-1-5-20", "S-1-1-1" })

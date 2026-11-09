@@ -266,9 +266,10 @@ public sealed class InstallerMachineHelperResultTests
     [Fact]
     public void MaximumBoundedJournalFitsBothCommandAndResultFrames()
     {
+        // The longest SID the validator accepts: a user account with every sub-authority at its maximum.
         string maximumSid = string.Concat(
-            "S-1-281474976710655-",
-            string.Join("-", Enumerable.Repeat("4294967295", 15)));
+            "S-1-5-21-",
+            string.Join("-", Enumerable.Repeat("4294967295", 4)));
         var request = new InstallerRequest(
             InstallerOperation.Install,
             maximumSid,

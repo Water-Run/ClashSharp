@@ -30,7 +30,8 @@ public sealed class InstallerProtocolValidationTests
 
     [Theory]
     [InlineData("S-1-5-21-100-200-300-1001")]
-    [InlineData("S-1-5-21-4294967295")]
+    [InlineData("S-1-5-21-4294967295-4294967295-4294967295-4294967295")]
+    [InlineData("S-1-12-1-1234567890-1234567890-1234567890-1234567890")]
     public void CanonicalSidTextIsAccepted(string value) =>
         InstallerProtocolValidation.ValidateTargetSid(value);
 
