@@ -19,7 +19,7 @@ public sealed class WindowsCurrentUserCertificateStoreAdapterTests
         Assert.True(hostedCi || sandbox, "Certificate mutation tests require disposable hosted CI or Windows Sandbox.");
     }
 
-    [Theory]
+    [DisposableMachineTheory]
     [InlineData("current")]
     [InlineData("target")]
     [InlineData("archive")]
@@ -84,7 +84,7 @@ public sealed class WindowsCurrentUserCertificateStoreAdapterTests
         }
     }
 
-    [Fact]
+    [DisposableMachineFact]
     public async Task ExactCertificateRoundTripUsesOnlyCurrentUserTrustedPeople()
     {
         WindowsPayloadFixture.AssertWindows11X64();
@@ -108,7 +108,7 @@ public sealed class WindowsCurrentUserCertificateStoreAdapterTests
             await adapter.InspectAsync(request, lease, CancellationToken.None));
     }
 
-    [Fact]
+    [DisposableMachineFact]
     public async Task AdapterRejectsARequestNotBoundToTheLease()
     {
         WindowsPayloadFixture.AssertWindows11X64();
@@ -124,7 +124,7 @@ public sealed class WindowsCurrentUserCertificateStoreAdapterTests
         Assert.Equal("installer.release.request_changed", exception.DiagnosticCode);
     }
 
-    [Fact]
+    [DisposableMachineFact]
     public async Task AdapterRejectsAValidButDifferentTargetUser()
     {
         WindowsPayloadFixture.AssertWindows11X64();

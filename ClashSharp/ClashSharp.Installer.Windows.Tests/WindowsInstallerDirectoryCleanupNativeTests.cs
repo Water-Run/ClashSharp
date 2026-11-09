@@ -10,7 +10,7 @@ namespace ClashSharp.Installer.Windows.Tests;
 [Trait("Category", "IsolatedNativeDirectoryCleanup")]
 public sealed class WindowsInstallerDirectoryCleanupNativeTests
 {
-    [Fact]
+    [ElevatedRunnerFact]
     public async Task NativeCreationLedgerAndHandleDeletionCompleteAllSixRoles()
     {
         using var fixture = new Fixture();
@@ -27,7 +27,7 @@ public sealed class WindowsInstallerDirectoryCleanupNativeTests
         Assert.False(File.Exists(fixture.Layout.LedgerPath));
     }
 
-    [Fact]
+    [ElevatedRunnerFact]
     public async Task TerminalSurvivesRemovedRootsAndFreshProtectedStoreRecreatesOnlyOwnedWorkDirectories()
     {
         using var fixture = new Fixture();
@@ -68,7 +68,7 @@ public sealed class WindowsInstallerDirectoryCleanupNativeTests
         Assert.Null(await fixture.Ledger.LoadAsync(CancellationToken.None));
     }
 
-    [Theory]
+    [ElevatedRunnerTheory]
     [InlineData(false)]
     [InlineData(true)]
     public async Task ExistingOrReplacedDirectoriesAreNeverAdopted(bool replaceAfterCreation)
@@ -90,7 +90,7 @@ public sealed class WindowsInstallerDirectoryCleanupNativeTests
         Assert.True(report.HasRetained);
     }
 
-    [Theory]
+    [ElevatedRunnerTheory]
     [InlineData(false)]
     [InlineData(true)]
     public async Task OrdinaryChildrenAndDirectoryDataStreamsAreRetained(bool namedStream)
@@ -109,7 +109,7 @@ public sealed class WindowsInstallerDirectoryCleanupNativeTests
         Assert.True(Directory.Exists(product));
     }
 
-    [Fact]
+    [ElevatedRunnerFact]
     public async Task UntrustedLedgerIsRejectedWithoutReplacingItOrCreatingProductDirectories()
     {
         using var fixture = new Fixture();
