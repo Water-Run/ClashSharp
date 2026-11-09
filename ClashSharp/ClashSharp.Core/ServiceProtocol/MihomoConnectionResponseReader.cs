@@ -79,7 +79,8 @@ public sealed class MihomoConnectionResponseReader
             }
             if (reader.TokenType == JsonTokenType.PropertyName && reader.CurrentDepth == 1)
             {
-                _property = reader.GetString()!;
+                try { _property = reader.GetString()!; }
+                catch (InvalidOperationException failure) { throw new InvalidDataException("Invalid connection root properties.", failure); }
                 if (_rootKeys.Count >= 128 || !_rootKeys.Add(_property)) { throw new InvalidDataException("Invalid connection root properties."); }
             }
             else if (reader.CurrentDepth == 1)
