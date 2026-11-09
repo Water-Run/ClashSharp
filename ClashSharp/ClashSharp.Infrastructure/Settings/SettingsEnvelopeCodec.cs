@@ -113,6 +113,15 @@ internal static partial class SettingsEnvelopeCodec
                 "$",
                 exception);
         }
+        catch (InvalidOperationException exception)
+        {
+            // JsonElement.GetString reports invalid UTF-8 inside a string token this way. A corrupt
+            // file must classify as corrupt so the repository can fall back to its verified backup.
+            throw Error(
+                "settings.persistence.envelope.json_invalid",
+                "$",
+                exception);
+        }
         catch (Exception exception) when (
             exception is ArgumentException
                 or FormatException
