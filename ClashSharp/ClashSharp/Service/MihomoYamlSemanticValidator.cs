@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO;
 using ClashSharp.Model;
 using YamlDotNet.Core;
+using YamlDotNet.Core.Events;
 using YamlDotNet.RepresentationModel;
 
 namespace ClashSharp.Service;
@@ -52,6 +53,12 @@ internal static class MihomoYamlSemanticValidator
         "external-ui-url",
         "secret",
     };
+
+    /// <summary>
+    /// Deepest sequence/mapping nesting accepted. Real profiles nest a handful of levels, while the document
+    /// loader below recurses once per level and a few thousand levels overflow the stack of the calling thread.
+    /// </summary>
+    internal const int MaxNestingDepth = 128;
 
     /// <summary>Returns whether one root RawConfig key is exclusively controlled by Clash#.</summary>
     public static bool IsAppOwnedRuntimeKey(string key)
@@ -219,7 +226,7 @@ internal static class MihomoYamlSemanticValidator
         try
         {
             using StringReader reader = new(configurationText);
-            stream.Load(reader);
+            stream.Load(new NestingLimitedParser(new Parser(reader), MaxNestingDepth));
         }
         catch (YamlException exception)
         {
@@ -284,6 +291,36 @@ internal static class MihomoYamlSemanticValidator
         }
 
         return result;
+    }
+
+    /// <summary>Rejects container nesting beyond a fixed depth before the recursive document loader descends into it.</summary>
+    private sealed class NestingLimitedParser(IParser inner, int maximumDepth) : IParser
+    {
+        private int _depth;
+
+        public ParsingEvent? Current => inner.Current;
+
+        public bool MoveNext()
+        {
+            bool moved = inner.MoveNext();
+            if (inner.Current is SequenceStart or MappingStart)
+            {
+                _depth++;
+                if (_depth > maximumDepth)
+                {
+                    throw new YamlException(
+                        inner.Current.Start,
+                        inner.Current.End,
+                        "The document nests deeper than " + maximumDepth.ToString(CultureInfo.InvariantCulture) + " levels.");
+                }
+            }
+            else if (inner.Current is SequenceEnd or MappingEnd)
+            {
+                _depth--;
+            }
+
+            return moved;
+        }
     }
 
     private static void RequireScalar(
