@@ -44,6 +44,8 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
     private readonly StartupLaunchService _startupLaunch;
     private readonly IApplicationDataClearOperationFactory? _dataClearOperations;
 
+    private readonly ProxyModeAnnouncer _modeAnnouncer = new();
+
     internal ApplicationActionService(
         IRuntimeSettingsAuthority settings,
         MutationAdmissionBarrier admissionBarrier,
@@ -380,15 +382,18 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
         }
     }
 
+    /// <summary>
+    /// Announces a verified mode: a notification only when the mode changed, and the proxy-start trigger event only
+    /// when traffic takeover begins. Re-selecting the active mode repairs the runtime silently.
+    /// </summary>
     public Task PublishProxyModeAppliedAsync(ClashSharpMode mode, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        TryNotify(() => _notifications.NotifyProxyModeChanged(mode));
+        (bool modeChanged, bool proxyStarted) = _modeAnnouncer.Observe(mode);
+        // The operation itself succeeded either way; its generic success feedback must not be repeated.
         OperationNotificationRunner.MarkSuccessReported();
-        if (mode is ClashSharpMode.RuleTakeover or ClashSharpMode.FullTakeover)
-        {
-            _triggerEvents.Publish(new TriggerRuntimeEvent(TriggerEventKind.ProxyStarted));
-        }
+        if (modeChanged) { TryNotify(() => _notifications.NotifyProxyModeChanged(mode)); }
+        if (proxyStarted) { _triggerEvents.Publish(new TriggerRuntimeEvent(TriggerEventKind.ProxyStarted)); }
 
         return Task.CompletedTask;
     }
