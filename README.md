@@ -13,7 +13,7 @@
 
 **English** · [简体中文](./README-zh.md) · [繁體中文](./README-zh-Hant.md) · [한국어](./README-ko.md) · [Русский](./README-ru.md) · [فارسی](./README-fa.md)
 
-<img src="./docs/assets/screenshots/en/master.png" alt="Clash# Master Control in the light theme" width="80%" />
+<img src="./docs/assets/screenshots/en/master.png" alt="Clash# Master Control in the light theme" width="49%" />&nbsp;<img src="./docs/assets/screenshots/en/master-dark.png" alt="Clash# Master Control in the dark theme" width="49%" />
 
 </div>
 

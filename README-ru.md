@@ -13,7 +13,7 @@
 
 [English](./README.md) · [简体中文](./README-zh.md) · [繁體中文](./README-zh-Hant.md) · [한국어](./README-ko.md) · **Русский** · [فارسی](./README-fa.md)
 
-<img src="./docs/assets/screenshots/ru/master.png" alt="Страница «Управление» Clash# в светлой теме" width="80%" />
+<img src="./docs/assets/screenshots/ru/master.png" alt="Страница «Управление» Clash# в светлой теме" width="49%" />&nbsp;<img src="./docs/assets/screenshots/ru/master-dark.png" alt="Страница «Управление» Clash# в тёмной теме" width="49%" />
 
 </div>
 

@@ -13,7 +13,7 @@
 
 [English](./README.md) · [简体中文](./README-zh.md) · [繁體中文](./README-zh-Hant.md) · **한국어** · [Русский](./README-ru.md) · [فارسی](./README-fa.md)
 
-<img src="./docs/assets/screenshots/ko/master.png" alt="밝은 테마의 Clash# 메인 컨트롤" width="80%" />
+<img src="./docs/assets/screenshots/ko/master.png" alt="밝은 테마의 Clash# 메인 컨트롤" width="49%" />&nbsp;<img src="./docs/assets/screenshots/ko/master-dark.png" alt="어두운 테마의 Clash# 메인 컨트롤" width="49%" />
 
 </div>
 
@@ -120,6 +120,7 @@ Clash#는 각 모드를 네트워크에 미치는 작용에 따라 명명한다.
 
 로컬 MCP 서버는 Agent를 실제 상태, 설정, 프로필, 진단, 보관된 기록에 연결한다. 기본값은 꺼짐이며 루프백(`http://127.0.0.1:20000/mcp`)에서만 수신한다. 각 권한은 별도의 스위치이고, 프록시 제어에는 독립된 허가가 필요하며, Agent는 자신의 권한을 바꿀 수 없다.
 
+<img src="./docs/assets/screenshots/ko/settings-mcp.png" alt="MCP 서버 설정" width="100%" />
 
 1. **설정 › MCP 서버**에서 서버를 활성화하고 허용할 권한을 선택한다. 상태 읽기만 미리 선택되어 있다.
 2. **변경 적용**을 선택하고 실제 상태가 **실행 중**인지 확인한다.
@@ -159,7 +160,7 @@ Clash#는 각 모드를 네트워크에 미치는 작용에 따라 명명한다.
 
 **설정 › 데이터**는 Clash# 설정을 하나의 파일로 내보내며, 프록시 구성과 구독을 함께 포함할 수 있고, 다시 가져올 수 있다. 로그는 SQLite 데이터베이스로 따로 내보낸다. 트래픽, 연결, 노드 상태, 규칙 일치 통계는 프로필, 노드, 시간별로 로컬에 보관되며, 삭제하기 전에 정리 미리 보기를 제공한다.
 
-<img src="./docs/assets/screenshots/ko/statistics.png" alt="통계" width="100%" />
+<img src="./docs/assets/screenshots/ko/statistics.png" alt="통계" width="49%" />&nbsp;<img src="./docs/assets/screenshots/ko/settings-data.png" alt="데이터 설정" width="49%" />
 
 ## 설치
 

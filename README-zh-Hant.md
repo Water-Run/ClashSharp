@@ -13,7 +13,7 @@
 
 [English](./README.md) · [简体中文](./README-zh.md) · **繁體中文** · [한국어](./README-ko.md) · [Русский](./README-ru.md) · [فارسی](./README-fa.md)
 
-<img src="./docs/assets/screenshots/zh-Hant/master.png" alt="淺色主題下的 Clash# 主控頁" width="80%" />
+<img src="./docs/assets/screenshots/zh-Hant/master.png" alt="淺色主題下的 Clash# 主控頁" width="49%" />&nbsp;<img src="./docs/assets/screenshots/zh-Hant/master-dark.png" alt="深色主題下的 Clash# 主控頁" width="49%" />
 
 </div>
 
