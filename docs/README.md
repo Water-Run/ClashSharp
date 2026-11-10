@@ -1,9 +1,10 @@
 # ClashSharp 开发文档
 
-当前交付为产品源码 `fdb101e`／内部候选 `eb436a56`：完整 CI **7643／0／0**，签名生产与独立载荷检查通过。蓝机已按“保护数据→匹配卸载→安装→精确恢复”更新并启动，桌面 `Clash#` 为完整 11 成员解压目录。本轮完成 WinUI 3 Fluent 样式与交互收敛、RDP 剪贴板根因修复和通知级别收敛，详见[本轮记录](reviews/2026-11-04-fluent-production-pass.md)。
+当前交付为产品源码 `9f3444a5`：完整 CI **13,712／0／0**。最终内部候选 [42768133436](https://github.com/Water-Run/ClashSharp/actions/runs/42768133436) 已构建但尚未部署；蓝机现装 `9808c316` 候选，用户数据已还原。八语言 README 与截图仍在制作，README 尚未入库；最终候选上的真实数据验收也未完成。进度、已知问题和恢复步骤见[本轮记录](reviews/2026-11-10-release-pass.md)。
 
 | 入口 | 用途 |
 | --- | --- |
+| [发布级检验、缺口修复与文档（暂停）](reviews/2026-11-10-release-pass.md) | 当前源码与候选、测试增长、实机状态、截图与 README 进度、已知问题、恢复步骤 |
 | [Fluent 样式、交互与通知收敛](reviews/2026-11-04-fluent-production-pass.md) | 当前包、剪贴板根因、通知级别新策略、安装器调整与实机交付 |
 | [磁贴、关于页与当前冻结](reviews/2026-11-03-tile-reorder-and-about.md) | 当前包、数据保护、用户暂停及未验收项目 |
 | [手验反馈与通知覆盖清单](reviews/2026-11-02-manual-feedback-and-notification-matrix.md) | 当前修复范围、四档通知事件矩阵、实现和候选验证进度 |
