@@ -36,6 +36,7 @@ internal sealed class ProfileSubscriptionScheduler : IRuntimeParticipant
     private readonly Action<string, string, string, string?> _appendLog;
     private readonly SupervisedLoop _supervisor;
     private readonly Func<CancellationToken, Task> _waitForExecution;
+    private readonly Action? _afterPass;
 
     internal ProfileSubscriptionScheduler(
         IProfileSubscriptionSchedulerCatalog catalog,
@@ -43,12 +44,14 @@ internal sealed class ProfileSubscriptionScheduler : IRuntimeParticipant
         Action<string, string, string, string?> appendLog,
         ISupervisorClock? clock = null,
         SupervisorBackoffPolicy? backoff = null,
-        Func<CancellationToken, Task>? waitForExecution = null)
+        Func<CancellationToken, Task>? waitForExecution = null,
+        Action? afterPass = null)
     {
         _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
         _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
         _appendLog = appendLog ?? throw new ArgumentNullException(nameof(appendLog));
         _waitForExecution = waitForExecution ?? (_ => Task.CompletedTask);
+        _afterPass = afterPass;
         _supervisor = new SupervisedLoop(
             "profile-subscription-updates",
             UpdateDueSubscriptionsAsync,
@@ -154,6 +157,25 @@ internal sealed class ProfileSubscriptionScheduler : IRuntimeParticipant
                     "Automatic subscription update failed.",
                     $"{link.Id}:{exception.GetType().Name}");
             }
+        }
+
+        RunAfterPass();
+    }
+
+    /// <summary>
+    /// Runs the follow-up work that reads the freshly updated catalog, such as subscription reminders. It is
+    /// advisory: a failure is logged and never fails the update pass or the supervisor.
+    /// </summary>
+    private void RunAfterPass()
+    {
+        if (_afterPass is null) { return; }
+        try
+        {
+            _afterPass();
+        }
+        catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
+        {
+            _appendLog("Warning", "Profiles", "Subscription follow-up after an update pass failed.", exception.GetType().Name);
         }
     }
 }

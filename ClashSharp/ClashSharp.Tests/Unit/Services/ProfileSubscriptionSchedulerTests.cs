@@ -148,6 +148,52 @@ public sealed class ProfileSubscriptionSchedulerTests
         Assert.Empty(logs);
     }
 
+    [Fact]
+    public async Task FollowUpRunsOnceAfterEveryLinkOfThePassIncludingAFailedOne()
+    {
+        FakeSchedulerCatalog catalog = new([Link("a"), Link("b")]) { FailingLinkId = "a" };
+        List<string> order = [];
+        catalog.Imported = () => order.Add("import");
+        ProfileSubscriptionScheduler scheduler = new(catalog, TimeProvider.System, (_, _, _, _) => { },
+            afterPass: () => order.Add("after"));
+
+        await scheduler.UpdateDueSubscriptionsAsync(CancellationToken.None);
+
+        Assert.Equal(["import", "import", "after"], order);
+    }
+
+    [Fact]
+    public async Task AFailingFollowUpIsLoggedAndNeverFailsThePass()
+    {
+        FakeSchedulerCatalog catalog = new([Link("a")]);
+        List<string> logs = [];
+        ProfileSubscriptionScheduler scheduler = new(catalog, TimeProvider.System,
+            (level, _, message, detail) => logs.Add($"{level}:{message}:{detail}"),
+            afterPass: () => throw new InvalidOperationException("scripted follow-up failure"));
+
+        await scheduler.UpdateDueSubscriptionsAsync(CancellationToken.None);
+
+        Assert.Equal(["a"], catalog.ImportedLinkIds);
+        Assert.Contains(logs, line => line.StartsWith("Warning:", StringComparison.Ordinal)
+            && line.EndsWith(nameof(InvalidOperationException), StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task ACancelledPassDoesNotRunTheFollowUp()
+    {
+        FakeSchedulerCatalog catalog = new([Link("a")]);
+        using CancellationTokenSource cancellation = new();
+        catalog.Imported = cancellation.Cancel;
+        int followUps = 0;
+        ProfileSubscriptionScheduler scheduler = new(catalog, TimeProvider.System, (_, _, _, _) => { },
+            afterPass: () => followUps++);
+        catalog.ThrowWhenCancelled = true;
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => scheduler.UpdateDueSubscriptionsAsync(cancellation.Token));
+
+        Assert.Equal(0, followUps);
+    }
+
     private static ProfileSubscriptionLink Link(string id)
     {
         return new ProfileSubscriptionLink(
@@ -167,6 +213,8 @@ public sealed class ProfileSubscriptionSchedulerTests
         public Exception? Failure { get; init; }
         public int Reads { get; private set; }
         public Action? Imported { get; set; }
+
+        public bool ThrowWhenCancelled { get; set; }
 
         public List<string> ImportedLinkIds { get; } = [];
 
@@ -191,6 +239,7 @@ public sealed class ProfileSubscriptionSchedulerTests
         {
             ImportedLinkIds.Add(link.Id);
             Imported?.Invoke();
+            if (ThrowWhenCancelled) { cancellationToken.ThrowIfCancellationRequested(); }
             if (StringComparer.Ordinal.Equals(link.Id, FailingLinkId))
             {
                 throw Failure ?? new HttpRequestException("simulated failure");

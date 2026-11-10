@@ -86,13 +86,39 @@ internal sealed class AppDataGenerationRuntimeComposer(
             handoff, health => ReportHealth(repositories.Logs, health), () => publication.IsPublished);
         repositories.OwnSettingsParticipant(triggers);
         repositories.OwnProducer(triggers.Scheduler);
+        SubscriptionReminderMonitor reminders = new(() => ReadActiveSubscription(repositories), new LocalSubscriptionReminderStore(),
+            notifications.Show, getString, new DisplayFormatter(() => ReadDisplayFormatting(repositories.Session)), time);
         ProfileSubscriptionScheduler subscriptions = repositories.OwnProducer(new ProfileSubscriptionScheduler(
             new ProfileSubscriptionSchedulerCatalogAdapter(repositories.Profiles, notifications), time, repositories.Logs.AppendLog, producerClock,
-            waitForExecution: publication.WaitAsync));
+            waitForExecution: publication.WaitAsync, afterPass: reminders.Evaluate));
         repositories.AttachRuntime(new(repositories, admission, generations, sampling, scopedTakeover, triggers, definitions,
             new TriggerActionReconciler(repositories.Triggers, executor, admission), executions, context, network, observer, subscriptions,
             handoff, publication, recovery, mcp, processEpoch, exitRequested));
         return Task.CompletedTask;
+    }
+
+    /// <summary>Finds the subscription link behind the active profile, or null for a local or built-in profile.</summary>
+    private static ProfileSubscriptionLink? ReadActiveSubscription(AppDataGenerationRepositories repositories)
+    {
+        string activeProfileId = repositories.Session.Snapshot.Desired[SettingsRegistry.Keys.ActiveProfileId].Value.Get<string>();
+        if (string.IsNullOrEmpty(activeProfileId)) { return null; }
+        foreach (ProfileSubscriptionLink link in repositories.Profiles.GetSubscriptionLinks())
+        {
+            if (StringComparer.Ordinal.Equals("subscription-" + link.Id, activeProfileId)) { return link; }
+        }
+
+        return null;
+    }
+
+    /// <summary>Reads the applied unit and clock preferences, so reminders use the same units as the window.</summary>
+    private static DisplayFormattingOptions ReadDisplayFormatting(SettingsAuthoritySession session)
+    {
+        SettingsEnvelope envelope = session.Snapshot;
+        return new(Read<DataUnitStyle>(SettingsRegistry.Keys.DataUnitStyle), Read<RateUnit>(SettingsRegistry.Keys.RateUnit),
+            Read<ClockFormat>(SettingsRegistry.Keys.ClockFormat));
+
+        T Read<T>(SettingKey key) where T : notnull => envelope.Applied[key].Value is { } value
+            ? value.Get<T>() : SettingsRegistry.Default.Get(key.Value).DefaultValue.Get<T>();
     }
 
     private void ReportHealth(ILogStorage logs, SupervisorHealth health)

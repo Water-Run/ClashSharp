@@ -202,6 +202,7 @@
     <Compile Include="..\ClashSharp\Service\ProfileOperationGate.cs" Link="Service\ProfileOperationGate.cs" />
     <Compile Include="..\ClashSharp\Service\ProfileCatalogServiceFactory.cs" Link="Service\ProfileCatalogServiceFactory.cs" />
     <Compile Include="..\ClashSharp\Service\ProfileSubscriptionScheduler.cs" Link="Service\ProfileSubscriptionScheduler.cs" />
+    <Compile Include="..\ClashSharp\Service\SubscriptionReminderMonitor.cs" Link="Service\SubscriptionReminderMonitor.cs" />
     <Compile Include="..\ClashSharp\Service\ProxyNodeCatalogService.cs" Link="Service\ProxyNodeCatalogService.cs" />
     <Compile Include="..\ClashSharp\Service\ProxyRecoveryService.cs" Link="Service\ProxyRecoveryService.cs" />
     <Compile Include="..\ClashSharp\Service\ProxyRecoveryServiceFactory.cs" Link="Service\ProxyRecoveryServiceFactory.cs" />

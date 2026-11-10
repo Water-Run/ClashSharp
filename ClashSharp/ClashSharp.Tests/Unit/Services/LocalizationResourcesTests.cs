@@ -53,6 +53,55 @@ public sealed class LocalizationResourcesTests
         }
     }
 
+    /// <summary>
+    /// Every translation of a composite format carries exactly the English placeholders and formats without error.
+    /// A dropped placeholder silently loses a value (a name, a size, a date); an extra or malformed one throws
+    /// <see cref="FormatException"/> at the moment the text is needed, often inside a notification.
+    /// </summary>
+    [Fact]
+    public void ExplicitTranslations_KeepTheEnglishPlaceholdersAndFormatCleanly()
+    {
+        Dictionary<AppLanguage, Dictionary<string, string>> translations = LocalizationResources.BuildExplicitTranslations()
+            .ToDictionary(pair => pair.Key, pair => pair.Value.ToDictionary(entry => entry.Key, entry => entry.Value, StringComparer.Ordinal));
+        Dictionary<string, string> english = translations[AppLanguage.English];
+        List<string> failures = [];
+        foreach ((AppLanguage language, Dictionary<string, string> catalog) in translations)
+        {
+            foreach ((string key, string englishText) in english)
+            {
+                if (!catalog.TryGetValue(key, out string? text)) { continue; }
+                SortedSet<int> expected = PlaceholderIndices(englishText);
+                SortedSet<int> actual = PlaceholderIndices(text);
+                if (!expected.SetEquals(actual))
+                {
+                    failures.Add($"{language} {key}: {{{string.Join(",", actual)}}} instead of {{{string.Join(",", expected)}}}");
+                    continue;
+                }
+
+                if (expected.Count == 0 && !text.Contains('{', StringComparison.Ordinal)) { continue; }
+                object[] arguments = Enumerable.Range(0, expected.Count == 0 ? 0 : expected.Max + 1).Select(index => (object)("v" + index)).ToArray();
+                try
+                {
+                    _ = string.Format(System.Globalization.CultureInfo.InvariantCulture, text, arguments);
+                }
+                catch (FormatException)
+                {
+                    failures.Add($"{language} {key}: does not format");
+                }
+            }
+        }
+
+        Assert.True(failures.Count == 0, string.Join(Environment.NewLine, failures));
+    }
+
+    private static SortedSet<int> PlaceholderIndices(string text)
+    {
+        // Doubled braces are literal text; a format item is {index[,alignment][:format]}.
+        string unescaped = text.Replace("{{", string.Empty, StringComparison.Ordinal).Replace("}}", string.Empty, StringComparison.Ordinal);
+        return new(System.Text.RegularExpressions.Regex.Matches(unescaped, @"\{(\d+)(?:,[^}:]*)?(?::[^}]*)?\}")
+            .Select(match => int.Parse(match.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture)));
+    }
+
     /// <summary>Verifies automatic language selection keeps the established Simplified Chinese alias.</summary>
     [Fact]
     public void Translations_AutoDetect_AliasesSimplifiedChineseCatalog()
