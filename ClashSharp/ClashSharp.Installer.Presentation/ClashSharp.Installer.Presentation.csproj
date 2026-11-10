@@ -10,4 +10,8 @@
   <ItemGroup>
     <ProjectReference Include="..\ClashSharp.Installer.Core\ClashSharp.Installer.Core.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="ClashSharp.Installer.Presentation.Tests" />
+  </ItemGroup>
 </Project>

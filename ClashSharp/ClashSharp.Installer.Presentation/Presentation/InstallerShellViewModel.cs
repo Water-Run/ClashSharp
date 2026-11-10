@@ -29,6 +29,9 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
         };
 
     private readonly IInstallerRuntime _runtime;
+    private readonly InstallerText _text;
+    private readonly bool _isInternalCandidate;
+    private bool _hasStartedOperation;
     // Dedicated account operations can inspect a foreign owner's protected journal separately.
     // Keep that recovery entry for an unreadable journal, but hide it after bootstrap failures.
     private bool _accountActionsBlocked;
@@ -44,13 +47,13 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
     private bool _canExecuteMutations;
     private bool _isProgressIndeterminate;
     private int _progressValue;
-    private string _statusTitle = "正在准备";
-    private string _statusDetail = "正在检查系统与已安装版本。";
-    private string _statusBadge = "检查中";
+    private string _statusTitle;
+    private string _statusDetail;
+    private string _statusBadge;
     private string _displayVersion = "—";
     private string _diagnosticCode = "installer.runtime.not_inspected";
-    private string _progressStatus = "等待就绪检查";
-    private string _primaryActionText = "安装";
+    private string _progressStatus;
+    private string _primaryActionText;
     private string _secondaryActionText = string.Empty;
     private bool _hasSecondaryAction;
     private bool _isUpgrade;
@@ -65,16 +68,24 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
     /// <param name="runtime">Runtime that owns inspection and mutation authority.</param>
     /// <param name="packageVersion">Display-only version from the executable's embedded manifest, independent of successful inspection.</param>
     /// <param name="isInternalCandidate">Whether the executable was built as an internal test candidate.</param>
-    public InstallerShellViewModel(IInstallerRuntime runtime, string? packageVersion = null, bool isInternalCandidate = false)
+    /// <param name="text">Localized text shared with the window; Simplified Chinese when omitted.</param>
+    public InstallerShellViewModel(IInstallerRuntime runtime, string? packageVersion = null, bool isInternalCandidate = false,
+        InstallerText? text = null)
     {
         ArgumentNullException.ThrowIfNull(runtime);
         _runtime = runtime;
+        _text = text ?? new InstallerText();
+        _statusTitle = T("正在准备");
+        _statusDetail = T("正在检查系统与已安装版本。");
+        _statusBadge = T("检查中");
+        _progressStatus = T("等待就绪检查");
+        _primaryActionText = T("安装");
         if (packageVersion is not null)
         {
             InstallerProtocolValidation.ValidatePackageVersion(packageVersion);
             _displayVersion = packageVersion;
         }
-        ReleaseChannelText = isInternalCandidate ? " · 内部测试版" : string.Empty;
+        _isInternalCandidate = isInternalCandidate;
         LaunchApplicationCommand = new AsyncDelegateCommand(LaunchInstalledApplicationAsync,
             () => IsLaunchApplicationVisible, SetUnhandledCommandFailure);
         CompletePreferencesCommand = new AsyncDelegateCommand(
@@ -175,6 +186,7 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
             {
                 NotifyActionVisibility();
                 NotifyCommandAvailability();
+                OnPropertyChanged(nameof(CanChangeLanguage));
             }
         }
     }
@@ -265,7 +277,44 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
     }
 
     /// <summary>Gets the build channel suffix independently of installed-state inspection.</summary>
-    public string ReleaseChannelText { get; }
+    public string ReleaseChannelText => _isInternalCandidate ? T(" · 内部测试版") : string.Empty;
+
+    /// <summary>Gets the localized text shared with the window.</summary>
+    public InstallerText Text => _text;
+
+    /// <summary>Gets the installer languages by their native names, in <see cref="InstallerLanguage"/> order.</summary>
+    public IReadOnlyList<string> LanguageOptions => InstallerText.LanguageNames;
+
+    /// <summary>
+    /// Gets whether the language can still be changed. Once an operation has started, its progress and outcome
+    /// were written in the language it started with, so the choice is fixed for the rest of the session.
+    /// </summary>
+    public bool CanChangeLanguage => CanStartOperation && !_hasStartedOperation;
+
+    /// <summary>Gets or sets the installer language; changing it re-reads the installation state in that language.</summary>
+    public int LanguageIndex
+    {
+        get => (int)_text.Language;
+        set
+        {
+            if (value == (int)_text.Language) { return; }
+            if (!Enum.IsDefined((InstallerLanguage)value)) { throw new ArgumentOutOfRangeException(nameof(value)); }
+            if (!CanChangeLanguage)
+            {
+                // Keep the selector on the language in use; the window binding re-reads the current value.
+                OnPropertyChanged();
+                return;
+            }
+
+            _text.Language = (InstallerLanguage)value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(ReleaseChannelText));
+            OnPropertyChanged(nameof(NotificationPresetOptions));
+            OnPropertyChanged(nameof(NotificationPresetIndex));
+            NotifyPreferenceDescriptions();
+            if (RefreshCommand.CanExecute(null)) { RefreshCommand.Execute(null); }
+        }
+    }
 
     /// <summary>Gets a stable code suitable for support and automated diagnosis.</summary>
     public string DiagnosticCode
@@ -285,15 +334,27 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
     public string PrimaryActionText
     {
         get => _primaryActionText;
-        private set => SetProperty(ref _primaryActionText, value);
+        private set
+        {
+            if (SetProperty(ref _primaryActionText, value)) { OnPropertyChanged(nameof(PrimaryActionAutomationName)); }
+        }
     }
 
     /// <summary>Gets the label for the optional second installed-state operation.</summary>
     public string SecondaryActionText
     {
         get => _secondaryActionText;
-        private set => SetProperty(ref _secondaryActionText, value);
+        private set
+        {
+            if (SetProperty(ref _secondaryActionText, value)) { OnPropertyChanged(nameof(SecondaryActionAutomationName)); }
+        }
     }
+
+    /// <summary>Gets the accessible name of the primary action button.</summary>
+    public string PrimaryActionAutomationName => F("执行{0}", PrimaryActionText);
+
+    /// <summary>Gets the accessible name of the secondary action button.</summary>
+    public string SecondaryActionAutomationName => F("执行{0}", SecondaryActionText);
 
     /// <summary>Gets whether the trusted readiness snapshot authorizes a second operation.</summary>
     public bool HasSecondaryAction
@@ -360,10 +421,10 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
             IsCancellationRequested = true;
         }
 
-        StatusBadge = "正在取消";
-        StatusTitle = "正在取消操作";
-        StatusDetail = "已请求取消，正在等待当前操作安全结束。";
-        ProgressStatus = "正在等待操作收尾…";
+        StatusBadge = T("正在取消");
+        StatusTitle = T("正在取消操作");
+        StatusDetail = T("已请求取消，正在等待当前操作安全结束。");
+        ProgressStatus = T("正在等待操作收尾…");
         IsProgressIndeterminate = true;
         cancellation.Cancel();
     }
@@ -402,10 +463,10 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
         IsCancellationRequested = false;
         IsBusy = true;
         IsProgressIndeterminate = true;
-        StatusTitle = "正在检查安装状态";
-        StatusDetail = "正在检查系统与已安装版本。";
-        ProgressStatus = "正在检查安装状态…";
-        StatusBadge = "检查中";
+        StatusTitle = T("正在检查安装状态");
+        StatusDetail = T("正在检查系统与已安装版本。");
+        ProgressStatus = T("正在检查安装状态…");
+        StatusBadge = T("检查中");
 
         try
         {
@@ -432,16 +493,16 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
             StatusBadge = readiness.CanExecute
                 ? readiness.ProductState switch
                 {
-                    InstallerProductState.Available => "未安装",
-                    InstallerProductState.Installed when readiness.IsUpgrade => "可更新",
-                    InstallerProductState.Installed => "已安装",
-                    InstallerProductState.RecoveryRequired => "待恢复",
+                    InstallerProductState.Available => T("未安装"),
+                    InstallerProductState.Installed when readiness.IsUpgrade => T("可更新"),
+                    InstallerProductState.Installed => T("已安装"),
+                    InstallerProductState.RecoveryRequired => T("待恢复"),
                     _ => throw new InstallerProtocolException("installer.runtime.readiness_invalid"),
                 }
-                : "暂不可用";
+                : T("暂不可用");
             ProgressStatus = readiness.CanExecute
-                ? "准备就绪。"
-                : "请查看上方提示。";
+                ? T("准备就绪。")
+                : T("请查看上方提示。");
             ProgressValue = 0;
         }
         catch (OperationCanceledException exception) when (operation.Cancellation.IsCancellationRequested && !ClashSharp.Installer.Contracts.InstallerExceptionPolicy.IsProcessFatal(exception))
@@ -476,9 +537,9 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
         if (completePreferences ? !IsCompletePreferencesVisible : originalRestore ? !IsOriginalRestoreActionVisible : ownerTransfer ? transfer?.SupportsOwnerTransfer != true
             : retiredUninstall ? retired?.SupportsRetiredUninstall != true : !CanExecuteMutations || requestedOperation is null)
         {
-            StatusBadge = "已阻止";
-            StatusTitle = "暂时无法继续";
-            StatusDetail = "当前检查尚未通过，请重新检查安装状态。系统未被更改。";
+            StatusBadge = T("已阻止");
+            StatusTitle = T("暂时无法继续");
+            StatusDetail = T("当前检查尚未通过，请重新检查安装状态。系统未被更改。");
             DiagnosticCode = requestedOperation is null
                 ? "installer.runtime.operation_not_available"
                 : "installer.runtime.not_ready";
@@ -495,17 +556,26 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
             && (ownerTransfer || requestedOperation == InstallerOperation.Install && !_isUpgrade) ? _installPreferences : null;
 
         IsCancellationRequested = false;
+        _hasStartedOperation = true;
         IsBusy = true;
-        string operationLabel = completePreferences ? "安装选项" : originalRestore ? "恢复原安装"
-            : requestedOperation is { } selected ? GetOperationLabel(selected, _isUpgrade) : string.Empty;
+        (string startingText, string runningTitle) = completePreferences ? (T("正在开始安装选项…"), T("正在安装选项"))
+            : originalRestore ? (T("正在开始恢复原安装…"), T("正在恢复原安装"))
+            : requestedOperation switch
+            {
+                InstallerOperation.Install => (T("正在开始安装…"), T("正在安装")),
+                InstallerOperation.Repair when _isUpgrade => (T("正在开始更新…"), T("正在更新")),
+                InstallerOperation.Repair => (T("正在开始修复…"), T("正在修复")),
+                InstallerOperation.Uninstall => (T("正在开始卸载…"), T("正在卸载")),
+                _ => (T("正在开始执行…"), T("正在执行")),
+            };
         InvalidateReadiness();
         IsProgressIndeterminate = ownerTransfer || retiredUninstall;
         ProgressValue = 0;
-        ProgressStatus = ownerTransfer ? "正在检查使用账户…" : retiredUninstall ? "等待确认。" : $"正在开始{operationLabel}…";
-        StatusTitle = ownerTransfer ? "正在准备切换账户" : retiredUninstall ? "卸载此账户副本" : $"正在{operationLabel}";
-        StatusDetail = ownerTransfer ? "完成身份检查后，将在此处请你确认切换。"
-            : retiredUninstall ? "移除当前账户已不再使用的 Clash# 副本。" : "正在处理应用及所需组件。";
-        StatusBadge = "执行中";
+        ProgressStatus = ownerTransfer ? T("正在检查使用账户…") : retiredUninstall ? T("等待确认。") : startingText;
+        StatusTitle = ownerTransfer ? T("正在准备切换账户") : retiredUninstall ? T("卸载此账户副本") : runningTitle;
+        StatusDetail = ownerTransfer ? T("完成身份检查后，将在此处请你确认切换。")
+            : retiredUninstall ? T("移除当前账户已不再使用的 Clash# 副本。") : T("正在处理应用及所需组件。");
+        StatusBadge = T("执行中");
         int acceptProgress = 1;
         TaskScheduler confirmationScheduler = SynchronizationContext.Current is null
             ? TaskScheduler.Current : TaskScheduler.FromCurrentSynchronizationContext();
@@ -524,8 +594,8 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
                 IsProgressIndeterminate = false;
                 ProgressStatus = retiredUninstall ? DescribeRetiredUninstallProgress(value.MessageKey)
                     : ProgressMessages.TryGetValue(value.MessageKey, out string? message)
-                    ? message
-                    : "正在执行当前操作…";
+                    ? T(message)
+                    : T("正在执行当前操作…");
             });
 
             if (retiredUninstall)
@@ -594,11 +664,11 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
         finally
         {
             Interlocked.Exchange(ref acceptProgress, 0);
-            if (retiredUninstall && IsCurrent(generation) && StatusBadge == "已取消")
+            if (retiredUninstall && IsCurrent(generation) && StatusBadge == T("已取消"))
             {
-                StatusDetail = retiredStarted ? RetiredUninstallRecoveryDetail : "尚未开始卸载此账户副本。";
+                StatusDetail = retiredStarted ? RetiredUninstallRecoveryDetail : T("尚未开始卸载此账户副本。");
             }
-            else if (retiredUninstall && IsCurrent(generation) && StatusBadge == "失败")
+            else if (retiredUninstall && IsCurrent(generation) && StatusBadge == T("失败"))
             {
                 StatusDetail = DescribeRetiredUninstallFailure(DiagnosticCode);
             }
@@ -618,9 +688,9 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
         }
         var decision = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         _ownerTransferDecision = decision;
-        OwnerTransferConfirmationTitle = confirmation.IsRecovery ? "继续切换到当前账户？" : "切换到当前账户？";
+        OwnerTransferConfirmationTitle = confirmation.IsRecovery ? T("继续切换到当前账户？") : T("切换到当前账户？");
         IsOwnerTransferConfirmationVisible = true;
-        ProgressStatus = "等待确认，尚未开始本次切换。";
+        ProgressStatus = T("等待确认，尚未开始本次切换。");
         using CancellationTokenRegistration registration = cancellationToken.Register(() => decision.TrySetCanceled(cancellationToken));
         try
         {
@@ -632,7 +702,7 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
             if (!_disposed)
             {
                 IsOwnerTransferConfirmationVisible = false;
-                ProgressStatus = cancellationToken.IsCancellationRequested ? "正在收尾…" : "正在处理账户切换…";
+                ProgressStatus = cancellationToken.IsCancellationRequested ? T("正在收尾…") : T("正在处理账户切换…");
             }
         }
     }
@@ -701,11 +771,11 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
         }
 
         InvalidateReadiness();
-        StatusBadge = "已取消";
-        StatusTitle = "操作已取消";
-        StatusDetail = "取消请求已处理。重新检查后可继续未完成的操作。";
+        StatusBadge = T("已取消");
+        StatusTitle = T("操作已取消");
+        StatusDetail = T("取消请求已处理。重新检查后可继续未完成的操作。");
         DiagnosticCode = "installer.cancelled";
-        ProgressStatus = "操作已取消。";
+        ProgressStatus = T("操作已取消。");
     }
 
     private void SetInspectionFailureIfCurrent(OperationGeneration operation, string diagnosticCode)
@@ -716,15 +786,15 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
         }
 
         InvalidateReadiness();
-        StatusBadge = "已阻止";
+        StatusBadge = T("已阻止");
         _accountActionsBlocked = diagnosticCode != "installer.transaction.root_verification_failed";
         bool releaseConflict = diagnosticCode == "installer.transaction.release_conflict";
-        StatusTitle = releaseConflict ? "请使用原安装器继续" : "无法检查安装状态";
+        StatusTitle = releaseConflict ? T("请使用原安装器继续") : T("无法检查安装状态");
         StatusDetail = releaseConflict
-            ? "另一个版本的安装器留下了未完成的操作。请关闭此窗口，打开启动该操作的安装器，重新检查并继续。"
-            : "请重新检查；若问题持续，可展开详情查看诊断代码。";
+            ? T("另一个版本的安装器留下了未完成的操作。请关闭此窗口，打开启动该操作的安装器，重新检查并继续。")
+            : T("请重新检查；若问题持续，可展开详情查看诊断代码。");
         DiagnosticCode = diagnosticCode;
-        ProgressStatus = "就绪检查失败。";
+        ProgressStatus = T("就绪检查失败。");
         ApplyFailureGuidance(diagnosticCode);
     }
 
@@ -736,11 +806,11 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
         }
 
         InvalidateReadiness();
-        StatusBadge = "失败";
-        StatusTitle = "操作未完成";
-        StatusDetail = "请使用本次操作所用的安装器重新检查，或保留诊断代码以便排查。";
+        StatusBadge = T("失败");
+        StatusTitle = T("操作未完成");
+        StatusDetail = T("请使用本次操作所用的安装器重新检查，或保留诊断代码以便排查。");
         DiagnosticCode = diagnosticCode;
-        ProgressStatus = "需要恢复或诊断。";
+        ProgressStatus = T("需要恢复或诊断。");
         ApplyFailureGuidance(diagnosticCode);
     }
 
@@ -753,29 +823,28 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
         (StatusBadge, StatusTitle, StatusDetail, ProgressStatus) = result.Outcome switch
         {
             InstallerExecutionOutcome.Succeeded =>
-                ("已完成", "操作已完成", "可以关闭安装器，或重新检查以管理此应用。", "操作完成。"),
+                (T("已完成"), T("操作已完成"), T("可以关闭安装器，或重新检查以管理此应用。"), T("操作完成。")),
             InstallerExecutionOutcome.Blocked =>
-                ("已阻止", "暂时无法继续", "当前检查未通过，系统未被更改。请展开详情查看原因。", "操作未开始。"),
+                (T("已阻止"), T("暂时无法继续"), T("当前检查未通过，系统未被更改。请展开详情查看原因。"), T("操作未开始。")),
             InstallerExecutionOutcome.Cancelled =>
-                ("已取消", "操作已取消", GetRecoveryDetail(result), "操作已取消。"),
+                (T("已取消"), T("操作已取消"), GetRecoveryDetail(result), T("操作已取消。")),
             InstallerExecutionOutcome.Uncertain =>
-                ("需要恢复", "操作状态尚未确认", GetRecoveryDetail(result), "必须重新检查并恢复。"),
+                (T("需要恢复"), T("操作状态尚未确认"), GetRecoveryDetail(result), T("必须重新检查并恢复。")),
             InstallerExecutionOutcome.Failed =>
-                ("失败", "操作未完成", GetRecoveryDetail(result), "需要恢复或诊断。"),
+                (T("失败"), T("操作未完成"), GetRecoveryDetail(result), T("需要恢复或诊断。")),
             _ =>
-                ("失败", "结果协议无效", "运行时返回了未知结果；安装器已保持禁用。", "需要诊断。"),
+                (T("失败"), T("结果协议无效"), T("运行时返回了未知结果；安装器已保持禁用。"), T("需要诊断。")),
         };
 
         if (result.Outcome is InstallerExecutionOutcome.Failed or InstallerExecutionOutcome.Blocked
             && result.DiagnosticCode == "installer.package.content_conflict")
         {
-            StatusTitle = "同版本安装包内容冲突";
-            StatusDetail = "候选包与系统中同版本软件包的内容不一致，直接重试无法解决。"
-                + "请保留诊断代码和安装包，联系发布者提供可维护的更新包。"
-                + (result.RecoveryPending
-                    ? "请备份应用数据。当前未完成的操作仍需使用此安装器恢复，不能直接换用另一个安装包。"
-                    : "检查已在维护开始前停止，现有应用和服务保留。可关闭安装器后继续使用应用。");
-            ProgressStatus = result.RecoveryPending ? "需要恢复或诊断。" : "操作未开始。";
+            StatusTitle = T("同版本安装包内容冲突");
+            StatusDetail = Sentences(T("候选包与系统中同版本软件包的内容不一致，直接重试无法解决。请保留诊断代码和安装包，联系发布者提供可维护的更新包。"),
+                result.RecoveryPending
+                    ? T("请备份应用数据。当前未完成的操作仍需使用此安装器恢复，不能直接换用另一个安装包。")
+                    : T("检查已在维护开始前停止，现有应用和服务保留。可关闭安装器后继续使用应用。"));
+            ProgressStatus = result.RecoveryPending ? T("需要恢复或诊断。") : T("操作未开始。");
         }
 
         if (result.Outcome is InstallerExecutionOutcome.Failed or InstallerExecutionOutcome.Blocked)
@@ -784,11 +853,11 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
             if (result.DiagnosticCode is "installer.machine_certificate.ownership_conflict"
                 or "installer.certificate.ownership_conflict")
             {
-                StatusTitle = "需要使用原安装包";
+                StatusTitle = T("需要使用原安装包");
                 StatusDetail = result.RecoveryPending
-                    ? "现有操作尚未完成。请用启动该操作的 Setup.exe 继续恢复。"
-                    : "检查已在维护开始前停止。若要换用此版本，请先备份应用数据，再用原版本的 Setup.exe 卸载，随后安装此版本。";
-                ProgressStatus = result.RecoveryPending ? "需要恢复或诊断。" : "操作未开始。";
+                    ? T("现有操作尚未完成。请用启动该操作的 Setup.exe 继续恢复。")
+                    : T("检查已在维护开始前停止。若要换用此版本，请先备份应用数据，再用原版本的 Setup.exe 卸载，随后安装此版本。");
+                ProgressStatus = result.RecoveryPending ? T("需要恢复或诊断。") : T("操作未开始。");
             }
         }
 
@@ -797,9 +866,9 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
             ProgressValue = 100;
             if (result.LastDurablePhase == InstallerTransactionPhase.OriginalRestored)
             {
-                StatusTitle = "已保留原安装";
-                StatusDetail = "原应用、文件和服务状态已核验，可以关闭安装器并继续使用原版本。";
-                ProgressStatus = "原安装已恢复。";
+                StatusTitle = T("已保留原安装");
+                StatusDetail = T("原应用、文件和服务状态已核验，可以关闭安装器并继续使用原版本。");
+                ProgressStatus = T("原安装已恢复。");
             }
             if (result.DirectoryCleanupReport is { } cleanup)
             {
@@ -812,125 +881,117 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
     {
         if (diagnosticCode == "installer.transaction.root_verification_failed")
         {
-            StatusTitle = "无法读取现有安装记录";
-            StatusDetail = "如果此前由其他 Windows 账户安装，可在“详细信息”中检查并切换使用账户，"
-                + "或卸载旧账户副本。否则请保留诊断代码并反馈。";
+            StatusTitle = T("无法读取现有安装记录");
+            StatusDetail = T("如果此前由其他 Windows 账户安装，可在“详细信息”中检查并切换使用账户，或卸载旧账户副本。否则请保留诊断代码并反馈。");
         }
         else if (diagnosticCode == "installer.elevation.certificate_untrusted")
         {
-            StatusTitle = "安装包签名尚未受信任";
-            StatusDetail = "Windows 未能确认此安装包的来源。请从项目的 GitHub Release 重新下载完整压缩包，"
-                + "完整解压后运行 Setup.exe。若仍失败，请向提供者反馈诊断代码。";
+            StatusTitle = T("安装包签名尚未受信任");
+            StatusDetail = T("Windows 未能确认此安装包的来源。请从项目的 GitHub Release 重新下载完整压缩包，完整解压后运行 Setup.exe。若仍失败，请向提供者反馈诊断代码。");
         }
         else if (diagnosticCode == "installer.elevation.certificate_expired")
         {
-            StatusTitle = "安装包签名证书已过期";
-            StatusDetail = "请检查电脑的日期和时间，并向安装包提供者获取新版本。完整解压新安装包后，再运行 Setup.exe。";
+            StatusTitle = T("安装包签名证书已过期");
+            StatusDetail = T("请检查电脑的日期和时间，并向安装包提供者获取新版本。完整解压新安装包后，再运行 Setup.exe。");
         }
         else if (diagnosticCode == "installer.elevation.certificate_revoked")
         {
-            StatusTitle = "安装包签名证书已被撤销";
-            StatusDetail = "请向安装包提供者获取使用有效证书签名的新版本，完整解压后运行 Setup.exe。";
+            StatusTitle = T("安装包签名证书已被撤销");
+            StatusDetail = T("请向安装包提供者获取使用有效证书签名的新版本，完整解压后运行 Setup.exe。");
         }
         else if (diagnosticCode == "installer.elevation.authenticode_missing")
         {
-            StatusTitle = "安装包缺少有效签名";
-            StatusDetail = "请重新获取完整安装包，完整解压后运行其中的 Setup.exe，并保留随附文件。";
+            StatusTitle = T("安装包缺少有效签名");
+            StatusDetail = T("请重新获取完整安装包，完整解压后运行其中的 Setup.exe，并保留随附文件。");
         }
         else if (diagnosticCode is "installer.elevation.authenticode_invalid" or "installer.elevation.signer_mismatch")
         {
-            StatusTitle = "安装包签名校验失败";
-            StatusDetail = "安装器文件可能已损坏、被修改，或与安装载荷不属于同一版本。"
-                + "请重新获取完整安装包，完整解压后运行其中的 Setup.exe。";
+            StatusTitle = T("安装包签名校验失败");
+            StatusDetail = T("安装器文件可能已损坏、被修改，或与安装载荷不属于同一版本。请重新获取完整安装包，完整解压后运行其中的 Setup.exe。");
         }
         else if (diagnosticCode.StartsWith("installer.recovery.original_", StringComparison.Ordinal)
             || diagnosticCode is "installer.recovery.phase_invalid" or "installer.recovery.capability_unavailable")
         {
-            StatusTitle = "无法确认原安装可恢复";
-            StatusDetail = "原包、文件或服务状态已改变，或恢复记录不完整。请使用此安装器重新检查并继续完成安装。";
+            StatusTitle = T("无法确认原安装可恢复");
+            StatusDetail = T("原包、文件或服务状态已改变，或恢复记录不完整。请使用此安装器重新检查并继续完成安装。");
         }
         else if (diagnosticCode == "installer.release.locked_file_hash_mismatch")
         {
-            StatusTitle = "安装文件校验失败";
-            StatusDetail = "文件可能已损坏或与此安装器不匹配。请重新获取同一版本的完整安装包，"
-                + "完整解压后运行其中的安装器，并保留全部随附文件。";
+            StatusTitle = T("安装文件校验失败");
+            StatusDetail = T("文件可能已损坏或与此安装器不匹配。请重新获取同一版本的完整安装包，完整解压后运行其中的安装器，并保留全部随附文件。");
         }
         else if (diagnosticCode is "installer.release.payload_file_set_invalid"
             or "installer.release.payload_directory_set_invalid" or "installer.release.payload_reparse_rejected")
         {
-            StatusTitle = "安装文件不完整或不匹配";
-            StatusDetail = "请重新获取同一版本的完整安装包，完整解压后运行其中的安装器，"
-                + "并保留全部随附文件，不要混用其他版本的文件。";
+            StatusTitle = T("安装文件不完整或不匹配");
+            StatusDetail = T("请重新获取同一版本的完整安装包，完整解压后运行其中的安装器，并保留全部随附文件，不要混用其他版本的文件。");
         }
         else if (diagnosticCode is "installer.release.payload_lock_failed" or "installer.elevation.executable_lock_failed")
         {
-            StatusTitle = "无法读取安装文件";
-            StatusDetail = "请关闭正在使用这份安装包的其他程序，将完整压缩包解压到新的本机文件夹，"
-                + "再从该目录运行 Setup.exe。";
+            StatusTitle = T("无法读取安装文件");
+            StatusDetail = T("请关闭正在使用这份安装包的其他程序，将完整压缩包解压到新的本机文件夹，再从该目录运行 Setup.exe。");
         }
         else if (diagnosticCode == "installer.concurrent_action_rejected")
         {
-            StatusTitle = "已有安装操作正在执行";
-            StatusDetail = "请等待另一项安装、修复或卸载操作完成，再使用原安装器重新检查。";
+            StatusTitle = T("已有安装操作正在执行");
+            StatusDetail = T("请等待另一项安装、修复或卸载操作完成，再使用原安装器重新检查。");
         }
         else if (diagnosticCode == "installer.machine_helper.session_unavailable")
         {
-            StatusTitle = "无法建立安装会话";
-            StatusDetail = "请确认没有其他安装器正在执行操作；如有，请等待其完成，再使用原安装器重新检查。"
-                + "如果仍然失败，请保留诊断代码以便排查。";
+            StatusTitle = T("无法建立安装会话");
+            StatusDetail = T("请确认没有其他安装器正在执行操作；如有，请等待其完成，再使用原安装器重新检查。如果仍然失败，请保留诊断代码以便排查。");
         }
         else if (diagnosticCode == "installer.package.downgrade_rejected")
         {
-            StatusTitle = "已安装更新的版本";
-            StatusDetail = "此电脑上的 Clash# 比此安装包更新，安装器不会降级，系统未被更改。"
-                + "如需修复，请使用相同或更新版本的安装包；也可以重新检查后在此卸载。";
+            StatusTitle = T("已安装更新的版本");
+            StatusDetail = T("此电脑上的 Clash# 比此安装包更新，安装器不会降级，系统未被更改。如需修复，请使用相同或更新版本的安装包；也可以重新检查后在此卸载。");
         }
     }
 
     private void ApplyDirectoryCleanupReport(InstallerDirectoryCleanupReport cleanup)
     {
-        ProgressStatus = "卸载完成。";
+        ProgressStatus = T("卸载完成。");
         if (!cleanup.HasRetained)
         {
-            StatusTitle = "卸载已完成";
-            StatusDetail = "Clash# 已从此电脑移除。可以关闭安装器，或重新检查以再次安装。";
+            StatusTitle = T("卸载已完成");
+            StatusDetail = T("Clash# 已从此电脑移除。可以关闭安装器，或重新检查以再次安装。");
             return;
         }
 
-        StatusTitle = "卸载已完成，部分目录已保留";
-        StatusDetail = "以下目录含有其他内容，或无法确认由安装器创建，因此已保留："
+        StatusTitle = T("卸载已完成，部分目录已保留");
+        StatusDetail = T("以下目录含有其他内容，或无法确认由安装器创建，因此已保留：")
             + Environment.NewLine
             + string.Join(Environment.NewLine, cleanup.Entries
                 .Where(static entry => entry.Disposition is
                     InstallerDirectoryCleanupDisposition.RetainedNonEmpty
                     or InstallerDirectoryCleanupDisposition.RetainedUnprovenOwnership)
-                .Select(static entry => GetDirectoryLabel(entry.Role) + (entry.Disposition ==
-                    InstallerDirectoryCleanupDisposition.RetainedNonEmpty
-                    ? "：包含其他内容。" : "：无法确认由安装器创建。")))
-            + Environment.NewLine + "可以关闭安装器。";
+                .Select(entry => entry.Disposition == InstallerDirectoryCleanupDisposition.RetainedNonEmpty
+                    ? F("{0}：包含其他内容。", GetDirectoryLabel(entry.Role))
+                    : F("{0}：无法确认由安装器创建。", GetDirectoryLabel(entry.Role))))
+            + Environment.NewLine + T("可以关闭安装器。");
     }
 
-    private static string GetDirectoryLabel(InstallerDirectoryRole role) => role switch
+    private string GetDirectoryLabel(InstallerDirectoryRole role) => role switch
     {
-        InstallerDirectoryRole.ProgramFilesProduct => "程序目录（Program Files\\ClashSharp）",
-        InstallerDirectoryRole.ProgramDataProduct => "共享数据目录（ProgramData\\ClashSharp）",
-        InstallerDirectoryRole.InstallerRoot => "安装记录目录（ProgramData\\ClashSharp\\Installer）",
-        InstallerDirectoryRole.InstallerVersion => "安装记录子目录（ProgramData\\ClashSharp\\Installer\\v2）",
-        InstallerDirectoryRole.AuthorityRoot => "安装管理目录（ProgramData\\ClashSharp\\InstallerAuthority）",
-        InstallerDirectoryRole.AuthorityVersion => "安装管理子目录（ProgramData\\ClashSharp\\InstallerAuthority\\v1）",
+        InstallerDirectoryRole.ProgramFilesProduct => T("程序目录（Program Files\\ClashSharp）"),
+        InstallerDirectoryRole.ProgramDataProduct => T("共享数据目录（ProgramData\\ClashSharp）"),
+        InstallerDirectoryRole.InstallerRoot => T("安装记录目录（ProgramData\\ClashSharp\\Installer）"),
+        InstallerDirectoryRole.InstallerVersion => T("安装记录子目录（ProgramData\\ClashSharp\\Installer\\v2）"),
+        InstallerDirectoryRole.AuthorityRoot => T("安装管理目录（ProgramData\\ClashSharp\\InstallerAuthority）"),
+        InstallerDirectoryRole.AuthorityVersion => T("安装管理子目录（ProgramData\\ClashSharp\\InstallerAuthority\\v1）"),
         _ => throw new InstallerProtocolException("installer.runtime.result_invalid"),
     };
 
-    private static string GetRecoveryDetail(InstallerExecutionResult result) => result.RecoveryPending
-        ? "进度已保留。请使用本次操作所用的安装器重新检查并继续。"
-        : "操作尚未完成，请重新检查安装状态。";
+    private string GetRecoveryDetail(InstallerExecutionResult result) => result.RecoveryPending
+        ? T("进度已保留。请使用本次操作所用的安装器重新检查并继续。")
+        : T("操作尚未完成，请重新检查安装状态。");
 
     private void SetUnhandledCommandFailure()
     {
         InvalidateReadiness();
-        StatusBadge = "失败";
-        StatusTitle = "界面命令未完成";
-        StatusDetail = "请重新检查后重试，或展开详情查看诊断代码。";
+        StatusBadge = T("失败");
+        StatusTitle = T("界面命令未完成");
+        StatusDetail = T("请重新检查后重试，或展开详情查看诊断代码。");
         DiagnosticCode = "installer.presentation.command_failed";
     }
 
@@ -996,7 +1057,7 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
             ? readiness.AllowedOperations[1]
             : null;
         PrimaryActionText = readiness.ProductState == InstallerProductState.RecoveryRequired
-            ? $"继续{GetOperationLabel(_primaryOperation)}"
+            ? GetContinueLabel(_primaryOperation)
             : GetOperationLabel(_primaryOperation, _isUpgrade);
         SecondaryActionText = _secondaryOperation is { } secondary
             ? GetOperationLabel(secondary)
@@ -1006,13 +1067,32 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
             && _secondaryOperation is not null;
     }
 
-    private static string GetOperationLabel(InstallerOperation operation, bool isUpgrade = false) => operation switch
+    private string GetOperationLabel(InstallerOperation operation, bool isUpgrade = false) => operation switch
     {
-        InstallerOperation.Install => "安装",
-        InstallerOperation.Repair => isUpgrade ? "更新" : "修复",
-        InstallerOperation.Uninstall => "卸载",
-        _ => "执行",
+        InstallerOperation.Install => T("安装"),
+        InstallerOperation.Repair => isUpgrade ? T("更新") : T("修复"),
+        InstallerOperation.Uninstall => T("卸载"),
+        _ => T("执行"),
     };
+
+    private string GetContinueLabel(InstallerOperation operation) => operation switch
+    {
+        InstallerOperation.Install => T("继续安装"),
+        InstallerOperation.Repair => T("继续修复"),
+        InstallerOperation.Uninstall => T("继续卸载"),
+        _ => T("继续执行"),
+    };
+
+    /// <summary>
+    /// Joins complete sentences: Chinese text runs them together, the other languages separate them with a space.
+    /// </summary>
+    private string Sentences(params string[] sentences) => _text.JoinSentences(sentences);
+
+    /// <summary>Translates one Simplified Chinese source text into the current installer language.</summary>
+    private string T(string source) => _text[source];
+
+    /// <summary>Translates a Simplified Chinese source format and fills in its arguments.</summary>
+    private string F(string source, params object?[] arguments) => _text.Format(source, arguments);
 
     private static void ValidateReadiness(InstallerRuntimeReadiness readiness)
     {

@@ -113,7 +113,7 @@ public sealed class InstallerExecutableContractTests
     [Fact]
     public void ShellKeepsStateDerivedMaintenanceActionsOutsideTheScrollableContent()
     {
-        XDocument shell = XDocument.Load(SourcePath("ClashSharp.Installer", "MainWindow.xaml"));
+        XDocument shell = LoadShellWithSourceText();
         XNamespace presentation = "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
 
         XElement status = Assert.Single(
@@ -285,7 +285,7 @@ public sealed class InstallerExecutableContractTests
             "ClashSharp.Installer",
             "Themes",
             "InstallerTheme.xaml"));
-        XDocument shell = XDocument.Load(SourcePath("ClashSharp.Installer", "MainWindow.xaml"));
+        XDocument shell = LoadShellWithSourceText();
 
         XElement windowStyle = Assert.Single(theme.Descendants(presentation + "Style"),
             style => (string?)style.Attribute(x + "Key") == "InstallerWindowStyle");
@@ -394,4 +394,11 @@ public sealed class InstallerExecutableContractTests
 
         throw new InvalidOperationException("Cannot locate Installer source contracts from the test output.");
     }
+    /// <summary>
+    /// Loads the installer window with every localized text written back as its Simplified Chinese source, so
+    /// structural contracts can still find elements by the text a user sees.
+    /// </summary>
+    private static XDocument LoadShellWithSourceText() => XDocument.Parse(
+        System.Text.RegularExpressions.Regex.Replace(
+            File.ReadAllText(SourcePath("ClashSharp.Installer", "MainWindow.xaml")), @"\{l:T '([^']*)'\}", "$1"));
 }

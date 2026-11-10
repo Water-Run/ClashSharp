@@ -226,14 +226,14 @@ public sealed class InstallerOwnershipArchitectureTests
 
     /// <summary>Ensures every shipped language directs lifecycle work to the Installer.</summary>
     [Theory]
-    [InlineData("English", "ClashSharp Installer", "Repair")]
-    [InlineData("SimplifiedChinese", "ClashSharp 安装器", "修复")]
-    [InlineData("TraditionalChinese", "ClashSharp 安裝程式", "修復")]
-    [InlineData("Russian", "установщик ClashSharp", "Восстановить")]
-    [InlineData("French", "programme d’installation de ClashSharp", "Réparer")]
-    [InlineData("German", "ClashSharp-Installationsprogramm", "Reparieren")]
-    [InlineData("Persian", "نصب‌کننده ClashSharp", "تعمیر")]
-    [InlineData("Korean", "ClashSharp 설치 프로그램", "복구")]
+    [InlineData("English", "Clash# installer", "Repair")]
+    [InlineData("SimplifiedChinese", "Clash# 安装程序", "修复")]
+    [InlineData("TraditionalChinese", "Clash# 安裝程式", "修復")]
+    [InlineData("Russian", "установщик Clash#", "Восстановить")]
+    [InlineData("French", "programme d’installation de Clash#", "Réparer")]
+    [InlineData("German", "Clash#-Installationsprogramm", "Reparieren")]
+    [InlineData("Persian", "نصب‌کننده Clash#", "تعمیر")]
+    [InlineData("Korean", "Clash# 설치 프로그램", "복구")]
     public void ServiceDescription_DirectsLifecycleWorkToInstaller(
         string catalog,
         string installerText,
@@ -292,14 +292,14 @@ public sealed class InstallerOwnershipArchitectureTests
 
     /// <summary>Every shipped language directs a blocked transaction to manual Installer Repair.</summary>
     [Theory]
-    [InlineData("English", "ClashSharp Installer", "Repair", "transparent proxy (TUN)")]
-    [InlineData("SimplifiedChinese", "ClashSharp 安装器", "修复", "透明代理（TUN）")]
-    [InlineData("TraditionalChinese", "ClashSharp 安裝程式", "修復", "透明代理（TUN）")]
-    [InlineData("Russian", "установщика ClashSharp", "Восстановить", "прозрачный прокси (TUN)")]
-    [InlineData("French", "programme d’installation de ClashSharp", "Réparer", "proxy transparent (TUN)")]
-    [InlineData("German", "ClashSharp-Installationsprogramms", "Reparieren", "transparenten Proxy (TUN)")]
-    [InlineData("Persian", "نصب‌کننده ClashSharp", "تعمیر", "پروکسی شفاف (TUN)")]
-    [InlineData("Korean", "ClashSharp 설치 프로그램", "복구", "투명 프록시(TUN)")]
+    [InlineData("English", "Clash# installer", "Repair", "transparent proxy (TUN)")]
+    [InlineData("SimplifiedChinese", "Clash# 安装程序", "修复", "透明代理（TUN）")]
+    [InlineData("TraditionalChinese", "Clash# 安裝程式", "修復", "透明代理（TUN）")]
+    [InlineData("Russian", "установщика Clash#", "Восстановить", "прозрачный прокси (TUN)")]
+    [InlineData("French", "programme d’installation de Clash#", "Réparer", "proxy transparent (TUN)")]
+    [InlineData("German", "Clash#-Installationsprogramms", "Reparieren", "transparenten Proxy (TUN)")]
+    [InlineData("Persian", "نصب‌کننده Clash#", "تعمیر", "پروکسی شفاف (TUN)")]
+    [InlineData("Korean", "Clash# 설치 프로그램", "복구", "투명 프록시(TUN)")]
     public void InstallerTransactionPrompt_DirectsRepairWithoutOfferingAppRepair(
         string catalog,
         string installerText,

@@ -49,50 +49,50 @@ public sealed partial class InstallerShellViewModel
     /// <summary>Read-status-only local MCP activation selection.</summary>
     public bool EnableMcpServer { get => _installPreferences.EnableMcpServer; set => SetInstallPreferences(_installPreferences with { EnableMcpServer = value }); }
     /// <summary>Notification choice labels in stable enum order.</summary>
-    public IReadOnlyList<string> NotificationPresetOptions { get; } = ["默认", "仅重要", "详细", "关闭"];
+    public IReadOnlyList<string> NotificationPresetOptions => [T("默认"), T("仅重要"), T("详细"), T("关闭")];
 
     /// <summary>Explains the selected notification policy using the application's terminology.</summary>
     public string NotificationPresetDescription => _installPreferences.Notifications switch
     {
-        InstallerNotificationPreset.CriticalOnly => "只提示内核、服务不可用和启动检查等关键问题。",
-        InstallerNotificationPreset.All => "在默认级别上，增加导入、保存、测速等成功反馈，前台时也发送通知。",
-        InstallerNotificationPreset.Disabled => "不发送系统通知，应用内仍保留操作结果。",
-        _ => "提示关键问题，以及在后台发生的操作失败、测试超时和代理模式变化；前台时由窗口显示。",
+        InstallerNotificationPreset.CriticalOnly => T("只提示内核、服务不可用、启动检查，以及订阅已到期或流量已用完等关键问题。"),
+        InstallerNotificationPreset.All => T("在默认级别上，增加导入、保存、测速等成功反馈，前台时也发送通知。"),
+        InstallerNotificationPreset.Disabled => T("不发送系统通知，应用内仍保留操作结果。"),
+        _ => T("提示关键问题、订阅即将到期或流量即将用完，以及在后台发生的操作失败、测试超时和代理模式变化（前台时由窗口显示）。"),
     };
 
     /// <summary>Explains whether the selected installation includes transparent-proxy support.</summary>
     public string TransparentProxyServiceDescription => InstallTransparentProxyService
-        ? "为透明代理（TUN）提供系统服务支持；代理模式由应用控制。"
-        : "本次不安装此服务；透明代理（TUN）需要该组件支持。";
+        ? T("为透明代理（TUN）提供系统服务支持；代理模式由应用控制。")
+        : T("本次不安装此服务；透明代理（TUN）需要该组件支持。");
 
     /// <summary>Explains the current MCP choice without implying additional control permissions.</summary>
     public string McpServerDescription => EnableMcpServer
-        ? "应用运行时提供只读接入；代理控制仍需在应用中单独授权。"
-        : "供 Agent 读取运行状态，默认关闭，可稍后在应用中开启。";
+        ? T("应用运行时提供只读接入；代理控制仍需在应用中单独授权。")
+        : T("供 Agent 读取运行状态，默认关闭，可稍后在应用中开启。");
 
     /// <summary>Lists the concrete initial preferences the selected environment preset writes for new settings.</summary>
     public IReadOnlyList<InstallerPreferenceDetail> SystemDefaultsDetails => FollowSystemDefaults
         ?
         [
-            new("界面语言", "跟随 Windows 显示语言"),
-            new("时间格式", "跟随 Windows 区域设置"),
-            new("容量单位", "KB · 1024 进制"),
-            new("速率单位", "字节/秒（B/s）"),
-            new("中国大陆功能", "按 Windows 国家或地区自动选择"),
+            new(T("界面语言"), T("跟随 Windows 显示语言")),
+            new(T("时间格式"), T("跟随 Windows 区域设置")),
+            new(T("容量单位"), T("KB · 1024 进制")),
+            new(T("速率单位"), T("字节/秒（B/s）")),
+            new(T("中国大陆功能"), T("按 Windows 国家或地区自动选择")),
         ]
         :
         [
-            new("界面语言", "English"),
-            new("时间格式", "跟随 Windows 区域设置"),
-            new("容量单位", "KB · 1024 进制"),
-            new("速率单位", "字节/秒（B/s）"),
-            new("中国大陆功能", "关闭"),
+            new(T("界面语言"), "English"),
+            new(T("时间格式"), T("跟随 Windows 区域设置")),
+            new(T("容量单位"), T("KB · 1024 进制")),
+            new(T("速率单位"), T("字节/秒（B/s）")),
+            new(T("中国大陆功能"), T("关闭")),
         ];
 
     /// <summary>Explains which initial environment preset is selected.</summary>
     public string SystemDefaultsDescription => FollowSystemDefaults
-        ? "按 Windows 初始化语言、时钟、单位和地区功能；已有偏好保持。"
-        : "使用英语、24 小时制等通用初始偏好；已有设置保持。";
+        ? T("按 Windows 初始化语言、时钟、单位和地区功能；已有偏好保持。")
+        : T("使用英语、24 小时制等通用初始偏好；已有设置保持。");
     /// <summary>Selected notification preset index.</summary>
     public int NotificationPresetIndex
     {
@@ -153,16 +153,16 @@ public sealed partial class InstallerShellViewModel
         List<string> detail = [];
         if (pending)
         {
-            StatusBadge = "待完成";
-            StatusTitle = operation == InstallerOperation.Uninstall ? "卸载已完成，快捷入口尚未全部清理" : "应用已安装，选项尚未完成";
+            StatusBadge = T("待完成");
+            StatusTitle = operation == InstallerOperation.Uninstall ? T("卸载已完成，快捷入口尚未全部清理") : T("应用已安装，选项尚未完成");
             detail.Add(operation == InstallerOperation.Uninstall
-                ? "应用已移除。仍被占用的本程序快捷方式可稍后手动清理。"
-                : "可重新检查并选择“完成安装选项”重试；已有安装保持可用。");
+                ? T("应用已移除。仍被占用的本程序快捷方式可稍后手动清理。")
+                : T("可重新检查并选择“完成安装选项”重试；已有安装保持可用。"));
         }
-        if (result.PreferencesWarnings.HasFlag(InstallerPreferencesWarnings.StartupDenied)) { detail.Add("Windows 未启用应用自动启动；请在启动应用设置中确认。"); }
-        if (result.PreferencesWarnings.HasFlag(InstallerPreferencesWarnings.ProxyRecoveryDenied)) { detail.Add("Windows 未启用登录时代理恢复；可在应用设置中检查。"); }
-        if (result.PreferencesWarnings.HasFlag(InstallerPreferencesWarnings.ExistingSettingsPreserved)) { detail.Add("检测到已有应用设置，已保留原有偏好。"); }
-        if (result.PreferencesWarnings.HasFlag(InstallerPreferencesWarnings.NativePinConfirmationPending)) { detail.Add("首次打开 Clash# 后，将在 Windows 支持的情况下请求任务栏固定确认。"); }
+        if (result.PreferencesWarnings.HasFlag(InstallerPreferencesWarnings.StartupDenied)) { detail.Add(T("Windows 未启用应用自动启动；请在启动应用设置中确认。")); }
+        if (result.PreferencesWarnings.HasFlag(InstallerPreferencesWarnings.ProxyRecoveryDenied)) { detail.Add(T("Windows 未启用登录时代理恢复；可在应用设置中检查。")); }
+        if (result.PreferencesWarnings.HasFlag(InstallerPreferencesWarnings.ExistingSettingsPreserved)) { detail.Add(T("检测到已有应用设置，已保留原有偏好。")); }
+        if (result.PreferencesWarnings.HasFlag(InstallerPreferencesWarnings.NativePinConfirmationPending)) { detail.Add(T("首次打开 Clash# 后，将在 Windows 支持的情况下请求任务栏固定确认。")); }
         StatusDetail = string.Join(" ", detail);
     }
 }

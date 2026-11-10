@@ -6,7 +6,7 @@ namespace ClashSharp.Installer.Runtime;
 /// <summary>Composes the production presentation runtime without exposing Windows capabilities.</summary>
 internal static class WindowsProductionInstallerRuntimeFactory
 {
-    internal static IInstallerRuntime Create(EmbeddedInstallerReleaseManifest release)
+    internal static IInstallerRuntime Create(EmbeddedInstallerReleaseManifest release, Presentation.InstallerText text)
     {
         ArgumentNullException.ThrowIfNull(release);
         string executablePath = Environment.ProcessPath
@@ -17,7 +17,7 @@ internal static class WindowsProductionInstallerRuntimeFactory
             executablePath);
         try
         {
-            return new ProductionInstallerRuntime(backend);
+            return new ProductionInstallerRuntime(backend, text);
         }
         catch
         {

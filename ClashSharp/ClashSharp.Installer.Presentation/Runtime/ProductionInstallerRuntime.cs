@@ -14,11 +14,19 @@ public sealed class ProductionInstallerRuntime : IInstallerRuntime, IInstallerOw
 
     /// <summary>Creates a production presentation runtime over one trusted platform backend.</summary>
     /// <param name="backend">Backend that owns exact request construction and mutation authority.</param>
-    public ProductionInstallerRuntime(IInstallerRuntimeBackend backend)
+    /// <param name="text">Localized text shared with the window; Simplified Chinese when omitted.</param>
+    public ProductionInstallerRuntime(IInstallerRuntimeBackend backend, Presentation.InstallerText? text = null)
     {
         ArgumentNullException.ThrowIfNull(backend);
         _backend = backend;
+        _text = text ?? new Presentation.InstallerText();
     }
+
+    private readonly Presentation.InstallerText _text;
+
+    private string T(string source) => _text[source];
+
+    private string F(string source, params object?[] arguments) => _text.Format(source, arguments);
 
     /// <inheritdoc />
     public async Task<InstallerRuntimeReadiness> InspectReadinessAsync(
@@ -240,7 +248,7 @@ public sealed class ProductionInstallerRuntime : IInstallerRuntime, IInstallerOw
         _disposed = true;
     }
 
-    private static (string Title, string Detail) Describe(
+    private (string Title, string Detail) Describe(
         InstallerRuntimeInspection inspection,
         InstallerProductStateDecision product,
         bool canExecute,
@@ -249,48 +257,48 @@ public sealed class ProductionInstallerRuntime : IInstallerRuntime, IInstallerOw
         if (inspection.Environment.IsApplicationRunning)
         {
             return (
-                "请先关闭 Clash#",
-                "关闭正在运行的应用后，选择“重新检查”继续。");
+                T("请先关闭 Clash#"),
+                T("关闭正在运行的应用后，选择“重新检查”继续。"));
         }
 
         if (!canExecute)
         {
-            InstallerPlatformGuidance guidance = InstallerPlatformGuidance.For(inspection.Environment.BlockingDiagnosticCode);
+            InstallerPlatformGuidance guidance = InstallerPlatformGuidance.For(inspection.Environment.BlockingDiagnosticCode, _text);
             return (guidance.Title, guidance.Detail);
         }
 
         if (!inspection.Environment.IsSupported && removalPathAvailable)
         {
             return (
-                "仅安全卸载可用",
-                InstallerPlatformGuidance.For(inspection.Environment.BlockingDiagnosticCode).Requirement
-                    + "仍可在此卸载已安装的 Clash#。");
+                T("仅安全卸载可用"),
+                F("{0}仍可在此卸载已安装的 Clash#。",
+                    InstallerPlatformGuidance.For(inspection.Environment.BlockingDiagnosticCode, _text).Requirement));
         }
         if (inspection.PendingUserPreferences && product.ProductState == InstallerProductState.Installed)
         {
-            return ("安装选项待完成", "应用已经安装。可选择“完成安装选项”继续设置快捷入口和启动选项。");
+            return (T("安装选项待完成"), T("应用已经安装。可选择“完成安装选项”继续设置快捷入口和启动选项。"));
         }
 
         return product.ProductState switch
         {
             InstallerProductState.Available => (
-                "可以安装",
-                "为当前账户安装 Clash#，并配置所需的系统组件。"),
+                T("可以安装"),
+                T("为当前账户安装 Clash#，并配置所需的系统组件。")),
             InstallerProductState.Installed when IsNewerRelease(inspection) => (
-                "可以更新",
-                $"将 Clash# 从 {inspection.Environment.InstalledPackageVersion} 更新到 {inspection.ReleaseVersion}。现有设置和数据将保留。"),
+                T("可以更新"),
+                F("将 Clash# 从 {0} 更新到 {1}。现有设置和数据将保留。", inspection.Environment.InstalledPackageVersion, inspection.ReleaseVersion)),
             InstallerProductState.Installed when IsOlderRelease(inspection) => (
-                "已安装更新的版本",
-                $"此电脑已安装 Clash# {inspection.Environment.InstalledPackageVersion}，比此安装包的 {inspection.ReleaseVersion} 更新。"
-                    + $"安装器不会降级；如需修复，请使用 {inspection.Environment.InstalledPackageVersion} 或更新版本的安装包。也可以在此卸载。"),
+                T("已安装更新的版本"),
+                F("此电脑已安装 Clash# {0}，比此安装包的 {1} 更新。安装器不会降级；如需修复，请使用 {0} 或更新版本的安装包。也可以在此卸载。",
+                    inspection.Environment.InstalledPackageVersion, inspection.ReleaseVersion)),
             InstallerProductState.Installed => (
-                "已安装",
-                "可修复当前安装，或从此电脑移除 Clash#。"),
+                T("已安装"),
+                T("可修复当前安装，或从此电脑移除 Clash#。")),
             InstallerProductState.RecoveryRequired when inspection.DurableTransaction?.Journal.Phase == InstallerTransactionPhase.OriginalRestored => (
-                "原安装恢复待收尾", "原安装已经恢复。请选择“继续”核验结果并完成收尾。"),
+                T("原安装恢复待收尾"), T("原安装已经恢复。请选择“继续”核验结果并完成收尾。")),
             InstallerProductState.RecoveryRequired => (
-                "需要继续未完成的操作",
-                "上次操作尚未完成。请使用此安装器继续，完成后再执行其他操作。"),
+                T("需要继续未完成的操作"),
+                T("上次操作尚未完成。请使用此安装器继续，完成后再执行其他操作。")),
             _ => throw new InstallerProtocolException(
                 "installer.runtime.product_state_invalid"),
         };
@@ -306,42 +314,42 @@ public sealed class ProductionInstallerRuntime : IInstallerRuntime, IInstallerOw
         Version.TryParse(inspection.Environment.InstalledPackageVersion, out Version? installed)
         && Version.TryParse(inspection.ReleaseVersion, out Version? release) && release < installed;
 
-    private static IReadOnlyList<InstallerCapabilityStatus> BuildCapabilities(
+    private IReadOnlyList<InstallerCapabilityStatus> BuildCapabilities(
         InstallerRuntimeInspection inspection,
         bool platformAllowsVisibleAction,
         bool removalPathAvailable) =>
     [
         new(
-            "系统要求",
+            T("系统要求"),
             inspection.Environment.IsSupported
-                ? "当前 Windows 桌面环境和 x64 系统符合安装要求。"
+                ? T("当前 Windows 桌面环境和 x64 系统符合安装要求。")
                 : removalPathAvailable
-                    ? "当前系统不符合安装要求，仍可卸载已安装的 Clash#。"
-                    : InstallerPlatformGuidance.For(inspection.Environment.BlockingDiagnosticCode).Requirement,
+                    ? T("当前系统不符合安装要求，仍可卸载已安装的 Clash#。")
+                    : InstallerPlatformGuidance.For(inspection.Environment.BlockingDiagnosticCode, _text).Requirement,
             platformAllowsVisibleAction),
         new(
-            "安装器签名",
-            "安装器签名已通过验证，版本信息与此安装包一致。",
+            T("安装器签名"),
+            T("安装器签名已通过验证，版本信息与此安装包一致。"),
             true),
         new(
-            "安装状态",
+            T("安装状态"),
             inspection.Environment.InstalledPackageVersion is null
-                ? "当前账户尚未安装 Clash#。"
+                ? T("当前账户尚未安装 Clash#。")
                 : inspection.Environment.IsApplicationRunning
-                    ? "Clash# 正在运行，请关闭应用后继续。"
+                    ? T("Clash# 正在运行，请关闭应用后继续。")
                     : IsOlderRelease(inspection)
-                        ? $"当前账户已安装更新的 Clash# {inspection.Environment.InstalledPackageVersion}，此安装包不能降级。"
-                        : "当前账户已安装 Clash#，应用已关闭。",
+                        ? F("当前账户已安装更新的 Clash# {0}，此安装包不能降级。", inspection.Environment.InstalledPackageVersion)
+                        : T("当前账户已安装 Clash#，应用已关闭。"),
             !inspection.Environment.IsApplicationRunning),
         new(
-            "未完成的操作",
+            T("未完成的操作"),
             inspection.DurableTransaction is null
-                ? "没有需要继续的安装或维护操作。"
-                : "发现上次未完成的操作，可使用此安装包继续。",
+                ? T("没有需要继续的安装或维护操作。")
+                : T("发现上次未完成的操作，可使用此安装包继续。"),
             true),
         new(
-            "所需权限",
-            "配置系统组件时需要管理员权限；若 Windows 显示提示，请确认后继续。",
+            T("所需权限"),
+            T("配置系统组件时需要管理员权限；若 Windows 显示提示，请确认后继续。"),
             true),
     ];
 

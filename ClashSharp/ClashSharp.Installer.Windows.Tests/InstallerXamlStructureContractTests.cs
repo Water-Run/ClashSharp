@@ -300,8 +300,11 @@ public sealed partial class InstallerXamlStructureContractTests
         return parts.Where(static part => part.Trim().Length > 0).ToArray();
     }
 
-    private static XDocument Load(string relative) => XDocument.Load(
-        Path.Combine(FindInstallerSource(), relative),
+    // Localized window text is written back as its Simplified Chinese source, so contracts find elements by the
+    // text a user sees whatever the markup that delivers it.
+    private static XDocument Load(string relative) => XDocument.Parse(
+        System.Text.RegularExpressions.Regex.Replace(
+            File.ReadAllText(Path.Combine(FindInstallerSource(), relative)), @"\{l:T '([^']*)'\}", "$1"),
         LoadOptions.SetLineInfo);
 
     private static string FindInstallerSource()

@@ -5,8 +5,8 @@ namespace ClashSharp.Installer.Presentation;
 
 public sealed partial class InstallerShellViewModel
 {
-    private const string RetiredUninstallRecoveryDetail =
-        "若卸载尚未完成，请使用同一个安装器，在“安装详情与诊断”中再次选择“卸载此账户副本”继续。";
+    private string RetiredUninstallRecoveryDetail =>
+        T("若卸载尚未完成，请使用同一个安装器，在“安装详情与诊断”中再次选择“卸载此账户副本”继续。");
     private TaskCompletionSource<bool>? _retiredUninstallDecision;
     private bool _isRetiredUninstallConfirmationVisible;
 
@@ -49,7 +49,7 @@ public sealed partial class InstallerShellViewModel
         var decision = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         _retiredUninstallDecision = decision;
         IsRetiredUninstallConfirmationVisible = true;
-        ProgressStatus = "等待确认，尚未开始卸载。";
+        ProgressStatus = T("等待确认，尚未开始卸载。");
         using CancellationTokenRegistration registration = cancellationToken.Register(() => decision.TrySetCanceled(cancellationToken));
         try
         {
@@ -61,31 +61,31 @@ public sealed partial class InstallerShellViewModel
             if (!_disposed)
             {
                 IsRetiredUninstallConfirmationVisible = false;
-                ProgressStatus = cancellationToken.IsCancellationRequested ? "正在收尾…" : "正在检查此账户副本…";
+                ProgressStatus = cancellationToken.IsCancellationRequested ? T("正在收尾…") : T("正在检查此账户副本…");
             }
         }
     }
 
-    private static string DescribeRetiredUninstallProgress(string messageKey) => messageKey switch
+    private string DescribeRetiredUninstallProgress(string messageKey) => messageKey switch
     {
-        "installer.progress.preflight" => "正在检查此账户的应用…",
-        "installer.progress.prepared" => "正在读取卸载进度…",
+        "installer.progress.preflight" => T("正在检查此账户的应用…"),
+        "installer.progress.prepared" => T("正在读取卸载进度…"),
         "installer.progress.machine_prepare" or "installer.progress.machine_remove_authorize"
-            or "installer.progress.machine_remove" => "正在核验共享服务保持原状…",
-        "installer.progress.package_remove" => "正在卸载此账户的应用包…",
-        "installer.progress.certificate_remove" => "正在核验此账户的证书清理结果…",
-        "installer.progress.verifying" => "正在核验此账户副本已移除…",
-        "installer.progress.completed" => "此账户副本已卸载。",
-        _ => "正在处理此账户副本…",
+            or "installer.progress.machine_remove" => T("正在核验共享服务保持原状…"),
+        "installer.progress.package_remove" => T("正在卸载此账户的应用包…"),
+        "installer.progress.certificate_remove" => T("正在核验此账户的证书清理结果…"),
+        "installer.progress.verifying" => T("正在核验此账户副本已移除…"),
+        "installer.progress.completed" => T("此账户副本已卸载。"),
+        _ => T("正在处理此账户副本…"),
     };
 
     private void ApplyRetiredUninstallResult(InstallerExecutionResult result)
     {
         if (result.Outcome == InstallerExecutionOutcome.Succeeded)
         {
-            StatusTitle = "已卸载此账户副本";
-            StatusDetail = "此账户的应用副本已移除，其他账户使用的共享服务保持原状。";
-            ProgressStatus = "此账户副本已卸载。";
+            StatusTitle = T("已卸载此账户副本");
+            StatusDetail = T("此账户的应用副本已移除，其他账户使用的共享服务保持原状。");
+            ProgressStatus = T("此账户副本已卸载。");
         }
         else
         {
@@ -93,11 +93,11 @@ public sealed partial class InstallerShellViewModel
         }
     }
 
-    private static string DescribeRetiredUninstallFailure(string code) => code switch
+    private string DescribeRetiredUninstallFailure(string code) => code switch
     {
-        "installer.retired_uninstall.current_owner" => "此账户仍在使用共享服务。请重新检查后使用普通卸载。",
-        "installer.retired_uninstall.ordinary_state_pending" => "请先由共享服务的使用账户完成未结束的安装或卸载。",
-        "installer.owner_transfer.pending" => "请先由接收服务的账户完成未结束的账户切换。",
+        "installer.retired_uninstall.current_owner" => T("此账户仍在使用共享服务。请重新检查后使用普通卸载。"),
+        "installer.retired_uninstall.ordinary_state_pending" => T("请先由共享服务的使用账户完成未结束的安装或卸载。"),
+        "installer.owner_transfer.pending" => T("请先由接收服务的账户完成未结束的账户切换。"),
         _ => RetiredUninstallRecoveryDetail,
     };
 }
