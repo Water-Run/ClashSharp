@@ -40,7 +40,8 @@ internal sealed class AppDataGenerationRuntimeComposer(
     Guid processEpoch,
     Func<string, string> getString,
     Func<CoreConfigurationService, INetworkSettingsRuntime>? createNetwork = null,
-    ISupervisorClock? producerClock = null)
+    ISupervisorClock? producerClock = null,
+    Func<ClashSharpMode, CancellationToken, Task>? publishModeApplied = null)
 {
     public Task ComposeAsync(AppDataGenerationRepositories repositories, CancellationToken cancellationToken)
     {
@@ -71,7 +72,7 @@ internal sealed class AppDataGenerationRuntimeComposer(
             notifications.DeliverTriggerFiredNotificationAsync, notifications.ReportTriggerFiredNotificationFailure);
         ApplicationErrorSink errors = new(repositories.Logs.AppendLog, getString);
         McpAccessState access = new();
-        AppMcpAgentBackend agent = new(repositories, generations, admission, authority, observer, access, time.GetUtcNow());
+        AppMcpAgentBackend agent = new(repositories, generations, admission, authority, observer, access, time.GetUtcNow(), publishModeApplied);
         McpRuntimeController mcpRuntime = new(admission, new McpProtectedCredentialStore(generation), new McpHttpServer(agent, errors), access);
         McpSettingsParticipant mcp = repositories.OwnProducer(new McpSettingsParticipant(generation, admission, SettingsRegistry.Default, mcpRuntime));
         repositories.OwnSettingsParticipant(mcp);

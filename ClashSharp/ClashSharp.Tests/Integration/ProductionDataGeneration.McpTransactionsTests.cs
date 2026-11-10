@@ -172,6 +172,90 @@ public sealed partial class ProductionDataGenerationTests
         Assert.Equal(mode.ToString(), status.StructuredContent!.Value.GetProperty("mode").GetString());
     }
 
+    /// <summary>
+    /// An agent changes the network like the window, the tray and a trigger do, so every mode it applies is announced
+    /// once through the same publication, in whichever tool the change arrives.
+    /// </summary>
+    [Theory]
+    [InlineData(ClashSharpMode.Standby, false)]
+    [InlineData(ClashSharpMode.RuleTakeover, false)]
+    [InlineData(ClashSharpMode.FullTakeover, false)]
+    [InlineData(ClashSharpMode.Standby, true)]
+    [InlineData(ClashSharpMode.RuleTakeover, true)]
+    public async Task NativeAgent_AppliedModeIsAnnouncedThroughTheSharedPublication(ClashSharpMode mode, bool throughSettings)
+    {
+        await using DataGenerationTestDirectory directory = new();
+        await using Fixture fixture = new(directory);
+        NetworkSurface network = new();
+        ConfigureRealRuntime(fixture, new StartupPlatform(), new AppearanceSurface(), network);
+        _ = await fixture.StartAsync();
+        List<ClashSharpMode> announced = [];
+        await using AgentSession agent = await AgentSession.StartAsync(fixture,
+            McpAccessScope.ReadStatus | McpAccessScope.ModifyConfiguration | McpAccessScope.ChangeProxyState, new AgentSurfaceObserver(network),
+            (applied, _) => { announced.Add(applied); return Task.CompletedTask; });
+
+        CallToolResult changed = throughSettings
+            ? await agent.CallAsync(McpToolId.UpdateSettings, new { operation_id = Guid.NewGuid(), changes = new { CurrentMode = mode.ToString() } })
+            : await agent.CallAsync(McpToolId.SetProxyState, new { operation_id = Guid.NewGuid(), mode = mode.ToString() });
+
+        Assert.False(changed.IsError ?? false, changed.StructuredContent?.GetRawText());
+        Assert.Equal(mode, Assert.Single(announced));
+        Assert.Equal(mode, (await network.ReadConfigurationAsync(CancellationToken.None)).Mode);
+    }
+
+    /// <summary>
+    /// Nothing is announced unless a mode was actually applied: a refused tool, a rejected value and a settings change
+    /// that leaves the mode alone all stay silent.
+    /// </summary>
+    [Fact]
+    public async Task NativeAgent_ChangesThatDoNotApplyAModeAreNotAnnounced()
+    {
+        await using DataGenerationTestDirectory directory = new();
+        await using Fixture fixture = new(directory);
+        NetworkSurface network = new();
+        ConfigureRealRuntime(fixture, new StartupPlatform(), new AppearanceSurface(), network);
+        _ = await fixture.StartAsync();
+        List<ClashSharpMode> announced = [];
+        await using AgentSession agent = await AgentSession.StartAsync(fixture, McpAccessScope.ReadStatus | McpAccessScope.ModifyConfiguration,
+            new AgentSurfaceObserver(network), (applied, _) => { announced.Add(applied); return Task.CompletedTask; });
+
+        CallToolResult withoutGrant = await agent.CallAsync(McpToolId.SetProxyState, new { operation_id = Guid.NewGuid(), mode = "RuleTakeover" });
+        CallToolResult settingsWithoutGrant = await agent.CallAsync(McpToolId.UpdateSettings,
+            new { operation_id = Guid.NewGuid(), changes = new { CurrentMode = "RuleTakeover" } });
+        Assert.True(withoutGrant.IsError);
+        Assert.True(settingsWithoutGrant.IsError);
+
+        await agent.SetScopesAsync(McpAccessScope.ReadStatus | McpAccessScope.ModifyConfiguration | McpAccessScope.ChangeProxyState);
+        CallToolResult invalid = await agent.CallAsync(McpToolId.UpdateSettings,
+            new { operation_id = Guid.NewGuid(), changes = new { CurrentMode = "NoSuchMode" } });
+        CallToolResult preference = await agent.CallAsync(McpToolId.UpdateSettings,
+            new { operation_id = Guid.NewGuid(), changes = new { RateUnit = "Bits" } });
+
+        Assert.True(invalid.IsError);
+        Assert.False(preference.IsError ?? false, preference.StructuredContent?.GetRawText());
+        Assert.Empty(announced);
+        Assert.Equal(ClashSharpMode.Disabled, (await network.ReadConfigurationAsync(CancellationToken.None)).Mode);
+    }
+
+    /// <summary>The announcement is best effort: a failing one never turns an applied mode into a failed tool call.</summary>
+    [Fact]
+    public async Task NativeAgent_AFailingAnnouncementNeverChangesTheOutcomeOfAnAppliedMode()
+    {
+        await using DataGenerationTestDirectory directory = new();
+        await using Fixture fixture = new(directory);
+        NetworkSurface network = new();
+        ConfigureRealRuntime(fixture, new StartupPlatform(), new AppearanceSurface(), network);
+        _ = await fixture.StartAsync();
+        await using AgentSession agent = await AgentSession.StartAsync(fixture, McpAccessScope.ReadStatus | McpAccessScope.ChangeProxyState,
+            new AgentSurfaceObserver(network), (_, _) => throw new InvalidOperationException("notification platform unavailable"));
+
+        CallToolResult changed = await agent.CallAsync(McpToolId.SetProxyState, new { operation_id = Guid.NewGuid(), mode = "Standby" });
+
+        Assert.False(changed.IsError ?? false, changed.StructuredContent?.GetRawText());
+        Assert.Equal(ClashSharpMode.Standby, (await network.ReadConfigurationAsync(CancellationToken.None)).Mode);
+        Assert.Empty(agent.Errors.Records);
+    }
+
     [Fact]
     public async Task NativeAgent_RejectedWriteCanRetryAfterTheUserGrantsProxyControl()
     {
@@ -415,13 +499,14 @@ public sealed partial class ProductionDataGenerationTests
             await controller.ApplyAdmittedAsync(new(port, new(true, scopes)), lease, CancellationToken.None);
         }
 
-        public static async Task<AgentSession> StartAsync(Fixture fixture, McpAccessScope scopes, INetworkStateObserver? observer = null)
+        public static async Task<AgentSession> StartAsync(Fixture fixture, McpAccessScope scopes, INetworkStateObserver? observer = null,
+            Func<ClashSharpMode, CancellationToken, Task>? modeApplied = null)
         {
             McpAccessState access = new();
             AgentStore store = new();
             AgentErrors errors = new();
             Backend backend = new(fixture.Containers[^1], fixture.Manager, fixture.Admission, fixture.Authority,
-                observer ?? new AgentNetwork(), access, DateTimeOffset.UtcNow);
+                observer ?? new AgentNetwork(), access, DateTimeOffset.UtcNow, modeApplied);
             McpRuntimeController controller = new(fixture.Admission, store, new McpHttpServer(backend, errors), access);
             int port = ReservePort();
             HttpClient http = new(new SocketsHttpHandler { UseProxy = false });

@@ -199,7 +199,8 @@ internal static class ClashSharpAppHostFactory
                     provider.GetRequiredService<MihomoConnectionService>(), provider.GetRequiredService<RuntimeTrafficRateService>(),
                     takeover, provider.GetRequiredService<WindowsProxyService>(), provider.GetRequiredService<MihomoServiceManager>(),
                     provider.GetRequiredService<NotificationService>(), provider.GetRequiredService<ITriggerRuntimeEventSource>(),
-                    lifetimeRequests, presentation.ExitRequested, provider.GetRequiredService<TimeProvider>(), triggerProcessEpoch, localization.GetString);
+                    lifetimeRequests, presentation.ExitRequested, provider.GetRequiredService<TimeProvider>(), triggerProcessEpoch, localization.GetString,
+                    publishModeApplied: provider.GetRequiredService<ApplicationActionService>().PublishProxyModeAppliedAsync);
                 return new AppDataGenerationFactory(dataRoot.Value, mutationAdmission, new WindowsLegacySettingsSource(SettingsRegistry.Default),
                     async (lease, token) =>
                     {

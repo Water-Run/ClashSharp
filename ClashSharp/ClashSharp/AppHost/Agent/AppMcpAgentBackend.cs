@@ -25,7 +25,8 @@ namespace ClashSharp.Hosting.Agent;
 /// <summary>Routes authenticated agent requests to generation-owned product transactions.</summary>
 internal sealed partial class AppMcpAgentBackend(AppDataGenerationRepositories repositories, DataGenerationManager generations,
     MutationAdmissionBarrier admission, IRuntimeSettingsAuthority authority, INetworkStateObserver network,
-    McpAccessState access, DateTimeOffset processStarted) : IMcpAgentBackend
+    McpAccessState access, DateTimeOffset processStarted,
+    Func<ClashSharpMode, CancellationToken, Task>? modeApplied = null) : IMcpAgentBackend
 {
     private readonly SemaphoreSlim _writes = new(1, 1);
     // Completed write receipts contain only detached result metadata and argument hashes. They
@@ -317,11 +318,19 @@ internal sealed partial class AppMcpAgentBackend(AppDataGenerationRepositories r
                     { return McpToolResponse.Error("mcp.invalid_setting_value"); }
                     changes.Add(new(setting.Key, normalized.Value!));
                 }
-                return SettingsResult(await authority.ApplyChangesAdmittedAsync(changes, operation, lease, token).ConfigureAwait(false));
+                SettingsAuthorityResult settingsChanged = await authority.ApplyChangesAdmittedAsync(changes, operation, lease, token).ConfigureAwait(false);
+                if (changes.Find(static change => change.Key == SettingsRegistry.Keys.CurrentMode) is { } modeChange)
+                {
+                    await AnnounceModeAsync(settingsChanged, modeChange.Value.Get<ClashSharpMode>()).ConfigureAwait(false);
+                }
+
+                return SettingsResult(settingsChanged);
             case McpToolId.SetProxyState:
                 ClashSharpMode mode = Enum.Parse<ClashSharpMode>(args.GetProperty("mode").GetString()!);
-                return SettingsResult(await authority.ApplyRuntimeChangesAdmittedAsync([new(SettingsRegistry.Keys.CurrentMode,
-                    SettingsRegistry.Default.Get(SettingsRegistry.Keys.CurrentMode.Value).NormalizeValue(mode).Value!)], operation, lease, token).ConfigureAwait(false));
+                SettingsAuthorityResult modeMoved = await authority.ApplyRuntimeChangesAdmittedAsync([new(SettingsRegistry.Keys.CurrentMode,
+                    SettingsRegistry.Default.Get(SettingsRegistry.Keys.CurrentMode.Value).NormalizeValue(mode).Value!)], operation, lease, token).ConfigureAwait(false);
+                await AnnounceModeAsync(modeMoved, mode).ConfigureAwait(false);
+                return SettingsResult(modeMoved);
             case McpToolId.ActivateProfile:
                 string profileId = args.GetProperty("profile_id").GetString()!;
                 if (!repositories.Profiles.GetProfiles().Any(profile => profile.Id == profileId)) { return McpToolResponse.Error("mcp.profile_unavailable"); }
@@ -446,6 +455,18 @@ internal sealed partial class AppMcpAgentBackend(AppDataGenerationRepositories r
             // response, file path, bearer secret or original exception text enters this fallback.
             System.Diagnostics.Debug.WriteLine("MCP audit unavailable: " + failure.GetType().Name);
         }
+    }
+
+    /// <summary>
+    /// An agent moves the network like the window, the tray and a trigger do, so the same announcement follows a mode it
+    /// applied: the notification and the proxy-start trigger event. The announcement never changes the outcome of a
+    /// mode that is already applied, and a refused or failed change announces nothing.
+    /// </summary>
+    private async Task AnnounceModeAsync(SettingsAuthorityResult result, ClashSharpMode mode)
+    {
+        if (modeApplied is null || !result.IsSucceeded) { return; }
+        try { await modeApplied(mode, CancellationToken.None).ConfigureAwait(false); }
+        catch (Exception failure) when (failure is not OperationCanceledException) { }
     }
 
     private static McpToolResponse SettingsResult(SettingsAuthorityResult result) => Success(new
