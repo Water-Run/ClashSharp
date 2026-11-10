@@ -4,7 +4,7 @@
 
 # Clash#
 
-**A native Windows proxy client built on the mihomo core**
+**A Windows proxy client that is native from the root up**
 
 [![CI](https://img.shields.io/github/actions/workflow/status/Water-Run/ClashSharp/ci.yml?branch=main&label=CI&logo=githubactions&logoColor=white&style=flat-square)](https://github.com/Water-Run/ClashSharp/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/License-AGPL--3.0-2ea043?style=flat-square)](./LICENSE)
@@ -13,31 +13,78 @@
 
 **English** · [简体中文](./README-zh.md) · [繁體中文](./README-zh-Hant.md) · [한국어](./README-ko.md) · [Русский](./README-ru.md) · [فارسی](./README-fa.md)
 
+<img src="./docs/assets/screenshots/en/master.png" alt="Clash# Master Control in the light theme" width="80%" />
+
 </div>
 
 > [!IMPORTANT]
 > Clash# 1.0.0 is under development and has no official release. Packages produced by CI are unsigned test builds and are not intended for everyday use.
 
-Clash# is a native Windows proxy client built on the [mihomo](https://github.com/MetaCubeX/mihomo) core. The application is written in C# with .NET 10 and WinUI 3 and is distributed as an MSIX package; a standalone WPF installer handles installation, repair, and removal. Supported systems are Windows 11 x64 and Windows Server 2025 with Desktop Experience.
+Clash# is a proxy client for Windows built on the [mihomo](https://github.com/MetaCubeX/mihomo) core. It is written in C# with .NET 10 and WinUI 3, shipped as an MSIX package, and installed and repaired by its own installer. It is not a web page in a window: there is no embedded browser, and every control, notification, tray menu, service and setting is a real Windows one.
 
-Beyond managing subscriptions, profiles, nodes, and rules, Clash# covers several Windows-specific concerns: taking over and restoring the system proxy, machine-wide transparent proxy (TUN), proxy access for WSL, terminals, and Microsoft Store apps, and proxy settings left behind after an abnormal exit.
+## Why Clash#
 
-## Features
-
-| Area | Description |
+| | |
 | :--- | :--- |
-| **Interface** | Native WinUI 3 controls, Fluent icons, and Windows 11 materials, with light, dark, and system accent color support. Master Control uses a tile layout; tiles can be shown, hidden, and reordered. |
-| **Native Agent support** | A local MCP server connects Agents to actual status, settings, profiles, diagnostics, and retained history. Each permission is controlled separately; proxy control requires its own grant. |
-| **Startup checks** | Before proxy mode starts, checks for external mihomo processes, occupied ports, a Windows manual proxy, and other TUN/VPN adapters, and offers fixes for items that can be handled safely. |
-| **Proxy restoration** | Restores the system proxy on exit; after an abnormal exit, a recovery process restores it immediately; stale proxy settings are checked and cleared at startup. |
-| **Windows network repair** | Diagnoses proxy access for WSL, terminals, and the Microsoft Store separately, with fixes applied or reverted per item. |
-| **Triggers** | Runs preset actions in order once all conditions are met. Conditions cover traffic, rate, connection count, runtime, and system time; actions include switching mode, closing connections, sending notifications, and exiting. |
-| **Statistics and logs** | Traffic, connection, node health, and rule-hit records are stored in a local SQLite database. |
-| **Interface languages** | 简体中文, 繁體中文, English, 한국어, Русский, Français, Deutsch, and فارسی (right-to-left layout). |
+| **Native from the root up** | WinUI 3 controls, Fluent design, Windows tiles, system notifications, the notification area, services and the Windows proxy settings, used the way Windows intends. [Read more](#native-from-the-root-up) |
+| **Windows integration in one step** | One installer deploys the app, the transparent-proxy service and the package certificate. Exit, crash and restart recovery are built in. [Read more](#windows-integration-in-one-step) |
+| **Ready for agents** | A local MCP server lets an agent read and, only if you allow it, change the real state. Every permission is a separate switch. [Read more](#agents-with-your-consent-mcp) |
+| **A standalone installer manager** | `Setup.exe` installs, repairs, upgrades and removes everything it put on the machine, and resumes after an interruption. [Read more](#a-standalone-installer-manager) |
+| **Automation that explains itself** | Triggers run ordered actions once all their conditions hold. [Read more](#triggers) |
+| **Mainland China features** | Optional display conventions for region names, flags and text, applied to the interface only. [Read more](#mainland-china-features) |
+| **Your data is portable** | Export and import settings, profiles and subscriptions; export logs; keep long-term statistics. [Read more](#your-data-is-portable) |
 
-## Modes
+## Native from the root up
 
-Clash# names each mode after its effect on the network. The correspondence with common client terminology:
+### Master Control
+
+Master Control is built from tiles that read as Windows at a glance. They show core status, rates, traffic, latency, subscription usage and expiry, public IP and more. Tiles can be shown, hidden and reordered, and six built-in layouts give a quick start: Default, Extended, Minimal, Technical, General and All tiles.
+
+<img src="./docs/assets/screenshots/en/master.png" alt="Master Control tiles" width="100%" />
+
+### Windows mechanisms, used as designed
+
+| Windows mechanism | What Clash# does with it |
+| :--- | :--- |
+| **Fluent design and materials** | Native WinUI 3 controls and Fluent icons. It follows the system light or dark theme and the system accent color, high-contrast themes and text scaling. |
+| **Notifications** | Real Windows notifications with one switch and three levels, and click-through back to the app. Windows' own permission and Focus settings always apply. |
+| **Notification area** | A tray icon whose color shows the current state, with a menu for the common actions. |
+| **Startup** | Launch at sign-in uses Windows' own startup registration. A separate sign-in cleanup can restore the proxy without waiting for the app. |
+| **Services** | Transparent proxy runs in a Windows service managed by the Service Control Manager, with supervision and automatic restart of the core. |
+| **Credential protection** | The Agent token and the controller credentials are protected by Windows data protection. |
+| **Process lifetime** | Child processes live in a job object, so a stopped app never leaves a core behind. |
+| **Windows proxy settings** | Takes over the system proxy and puts back exactly what it replaced. |
+| **MSIX packaging** | Clean install and removal, a Start menu entry and a taskbar-friendly identity. |
+| **Languages** | Eight interface languages that switch immediately, including right-to-left Persian. |
+
+### Eight languages
+
+The interface switches language immediately; a few texts that Windows supplies, such as color names, follow at the next start. Persian mirrors the pages, dialogs and tray menu right to left.
+
+<p align="center">
+<img src="./docs/assets/screenshots/zh-Hans/master.png" alt="简体中文" width="24%" />&nbsp;<img src="./docs/assets/screenshots/zh-Hant/master.png" alt="繁體中文" width="24%" />&nbsp;<img src="./docs/assets/screenshots/en/master.png" alt="English" width="24%" />&nbsp;<img src="./docs/assets/screenshots/ru/master.png" alt="Русский" width="24%" />
+<img src="./docs/assets/screenshots/fr/master.png" alt="Français" width="24%" />&nbsp;<img src="./docs/assets/screenshots/de/master.png" alt="Deutsch" width="24%" />&nbsp;<img src="./docs/assets/screenshots/fa/master.png" alt="فارسی" width="24%" />&nbsp;<img src="./docs/assets/screenshots/ko/master.png" alt="한국어" width="24%" />
+</p>
+
+### Notifications
+
+Clash# tells you what changed, which object it concerned and what to do next, and it stays quiet otherwise. *Enable system notifications* turns them all on or off, and the level decides how much you hear:
+
+| Level | You are notified about |
+| :--- | :--- |
+| **Critical only** | The core stopped unexpectedly, the transparent-proxy service became unavailable, a takeover could not be applied or verified, a startup check needs action, or the active subscription has expired or used up its data. |
+| **Default** | The above, plus mode and transparent-proxy changes, profile and node selection, failed imports or updates, test timeouts, trigger messages, and an active subscription that expires within three days or has used 90% of its data. |
+| **More** | Everything above, plus successful imports, updates, exports and saved settings. |
+
+Each subscription reminder comes once per stage and starts over after a renewal or a quota reset. A failure notification carries the same reason and support code as the page, so you do not need to open the window to know why. Passive checks, canceled actions and sampling never notify.
+
+<img src="./docs/assets/screenshots/en/settings-notifications.png" alt="Notification settings" width="100%" />
+
+## Windows integration in one step
+
+### Modes
+
+Clash# names each mode after its effect on the network:
 
 | Clash# | Common name | Behavior |
 | :--- | :--- | :--- |
@@ -46,16 +93,74 @@ Clash# names each mode after its effect on the network. The correspondence with 
 | **Rule takeover** | Rule | Traffic is routed by the rules in the profile. |
 | **Full takeover** | Global | All traffic goes through the selected proxy. |
 
-Transparent proxy (TUN) is controlled by *Transparent proxy* under **Settings › Proxy** and is on by default. When it is on and the Mihomo service is available, takeover runs through TUN and also covers programs that do not read the system proxy. When the Mihomo service is not deployed, takeover runs through the Windows system proxy instead.
+Transparent proxy (TUN) is controlled by *Transparent proxy* under **Settings › Proxy** and is on by default. When it is on and the Mihomo service is available, takeover runs through TUN and also covers programs that do not read the system proxy. When the service is not deployed, takeover runs through the Windows system proxy instead.
 
 > [!CAUTION]
 > Transparent proxy takes over routing and DNS for the entire computer. Clash# is designed for one computer with one interactive user and does not isolate traffic between user sessions.
 
-With *Enable tray color status indicator* on under **Settings › Taskbar tray**, the tray icon reflects the current state by color:
+<img src="./docs/assets/screenshots/en/settings-proxy.png" alt="Proxy settings" width="100%" />
 
-| <img src="./ClashSharp/ClashSharp/Assets/Tray/Logo.Inactive.svg" width="24" alt="Gray tray icon" /> | <img src="./ClashSharp/ClashSharp/Assets/Tray/Logo.SystemProxy.svg" width="24" alt="Green tray icon" /> | <img src="./ClashSharp/ClashSharp/Assets/Tray/Logo.Tun.svg" width="24" alt="Purple tray icon" /> |
-| :---: | :---: | :---: |
-| Disabled or Standby | System proxy | Transparent proxy |
+### Recovery you do not have to think about
+
+| Situation | What Clash# does |
+| :--- | :--- |
+| You exit the app | Stops the core and restores the system proxy that Clash# owns (configurable). |
+| The app crashes | A recovery process restores the system proxy immediately. |
+| Windows shuts down first | The leftover setting is detected and cleared at the next launch, or at sign-in if the startup cleanup is registered. |
+| The core stops unexpectedly | You are notified, and the service restarts the core within a budget. |
+| A takeover cannot be verified | The failed change is kept and reported rather than claimed as applied; the next action you take resolves it. |
+
+### Startup checks and native repair
+
+Before proxy mode starts, Clash# checks for an external mihomo process, an occupied port, a Windows manual proxy and other TUN or VPN adapters, and offers fixes for what can be handled safely. **Settings › Windows integration** diagnoses WSL, terminals and Microsoft Store apps separately, which do not read the system proxy, and applies or reverts a fix for each one.
+
+<img src="./docs/assets/screenshots/en/settings-startup.png" alt="Startup settings" width="100%" />
+
+## Agents with your consent (MCP)
+
+A local MCP server connects an agent to the real status, settings, profiles, diagnostics and retained history. It is off by default and listens only on loopback (`http://127.0.0.1:20000/mcp`). Each permission is a separate switch, proxy control needs its own grant, and the agent cannot change its own permissions.
+
+<img src="./docs/assets/screenshots/en/settings-mcp.png" alt="MCP server settings" width="100%" />
+
+1. Open **Settings › MCP server**, enable the server and choose the permissions to grant. Only status reading is preselected.
+2. Select **Apply changes** and confirm that the actual state is **Running**.
+3. Use **Copy client configuration** to supply the endpoint and authorization header to a client that supports Streamable HTTP. The copy is excluded from Windows clipboard history and cloud synchronization.
+
+See the [connection and permission guide](./docs/guides/native-agent.md) for permission combinations and troubleshooting.
+
+## A standalone installer manager
+
+`Setup.exe` is a separate Windows application, not a wizard bolted onto the app. It installs for the current user, asks for administrator rights only for the machine-level parts, and later repairs, upgrades or removes exactly what it installed, including the service and the certificate it manages. Every step is recorded, so an interrupted operation resumes instead of leaving a half-installed machine, and the original state can be restored. It speaks the same eight languages as the app: it follows the Windows display language, and you can pick another one in the top corner of the window before you start.
+
+<img src="./docs/assets/screenshots/en/installer.png" alt="Clash# installer" width="62%" />
+
+## Triggers
+
+A trigger runs an ordered list of actions once all of its conditions hold. Conditions cover entering the app, starting the proxy, notifications of a chosen level, traffic in a time window, traffic of the current run, rate, active connections, runtime and system time. Actions include switching the mode, closing connections, turning transparent proxy, connection sampling or launch at sign-in on or off, sending a notification and exiting. Each trigger shows when it last fired.
+
+<img src="./docs/assets/screenshots/en/triggers.png" alt="Triggers" width="100%" />
+
+## Mainland China features
+
+Optional display conventions for people who use Clash# in mainland China, found under **Settings › Mainland China features**. They change only what the interface displays: profiles, logs, search, copied text and exported data are never modified, and nothing here blocks network access.
+
+*Built-in review filter* picks how far the conventions go; each option includes the ones before it:
+
+| Option | What the interface shows |
+| :--- | :--- |
+| **Flag replacement only** | Taiwan appears with the flag of the People's Republic of China; Hong Kong and Macau keep their regional flags. |
+| **Flag replacement and text completion only** | Region names also follow the convention, for example "China Hong Kong", "China Macau" and "China Taiwan". |
+| **Flag replacement, text completion, and keyword filtering** | A short list of sensitive Chinese terms is also masked in displayed text. |
+
+The default is flag replacement and text completion, and **Disabled** turns everything off. A separate switch, *Mask marked URLs in displayed text*, also masks addresses on a built-in list; it is off by default.
+
+<img src="./docs/assets/screenshots/en/settings-china.png" alt="Mainland China feature settings" width="100%" />
+
+## Your data is portable
+
+**Settings › Data** exports Clash# settings to a single file, optionally including proxy configuration and subscriptions, and imports it again. Logs are exported separately as an SQLite database. Traffic, connection, node-health and rule-hit statistics are kept locally, by profile, node and time, with a clean-up preview before anything is deleted.
+
+<img src="./docs/assets/screenshots/en/statistics.png" alt="Statistics" width="49%" />&nbsp;<img src="./docs/assets/screenshots/en/settings-data.png" alt="Data settings" width="49%" />
 
 ## Installation
 
@@ -65,9 +170,9 @@ Once an official version is released, packages are published on the [Releases](h
 
 1. Download and extract the release package. `Setup.exe` must stay next to its `payload` folder.
 2. Run `Setup.exe` in the current user session. The application is installed for the user who runs the installer; running as administrator is not required, and .NET does not need to be preinstalled.
-3. Confirm the Windows administrator prompt. Setup deploys the Mihomo service and manages the Clash# package certificate automatically.
+3. Confirm the Windows administrator prompt. Setup deploys the Mihomo service and manages the Clash# package certificate automatically. Check the publisher shown in the prompt before approving.
 
-Repair, upgrade, and removal are all done by running the same installer again.
+Repair, upgrade and removal are all done by running the same installer again.
 
 > [!WARNING]
 > Uninstallation should go through `Setup.exe`. Removing the app only from Windows *Settings › Apps* leaves machine-level resources such as the Mihomo service in place.
@@ -79,20 +184,19 @@ Repair, upgrade, and removal are all done by running the same installer again.
 3. Select **Rule takeover** on **Master Control**.
 4. Select a node under **Proxies › Nodes**; a latency test can be run first.
 
-On each launch, Clash# shows a startup guide summarizing the checks for subscription, transparent proxy service, startup restore, and stale proxy settings. The guide can be turned off under **Settings › Startup**.
+<img src="./docs/assets/screenshots/en/nodes.png" alt="Nodes" width="49%" />&nbsp;<img src="./docs/assets/screenshots/en/profiles.png" alt="Profiles" width="49%" />
+
+On each launch, Clash# shows a startup guide summarizing the checks for subscription, transparent proxy service, startup restore and stale proxy settings. It can be turned off under **Settings › Startup**.
 
 The local mixed port defaults to `10000` and serves both HTTP and SOCKS. Programs that do not read the system proxy can use `127.0.0.1:10000` directly. The port can be changed under **Settings › Proxy**.
 
 Closing the main window minimizes Clash# to the tray by default, and it keeps running. *Safe exit* in the tray menu is the intended way to quit; on exit, the core stops and the system proxy is restored by default.
 
-### Connect an Agent through MCP
+With *Enable tray color status indicator* on under **Settings › Taskbar tray**, the tray icon reflects the current state by color:
 
-1. Open **Settings › MCP server**, enable the server, and choose the permissions to grant. The server is off by default, with only status reading preselected.
-2. Select **Apply changes** and confirm that the actual state is **Running**. The default Streamable HTTP endpoint is `http://127.0.0.1:20000/mcp`.
-3. Use **Copy client configuration** to supply the endpoint and authorization header to an Agent client that supports Streamable HTTP. The copied configuration contains a private token; Clash# excludes this copy from Windows clipboard history and cloud synchronization.
-4. Keep Clash# running while the Agent uses it. Closing the MCP server disconnects clients; replacing its token requires copying the configuration again.
-
-Configuration editing does not grant proxy control. Turning on **Control proxy state** also allows changes that can interrupt an Agent's network access. Historical summaries, historical details, and sensitive configuration have separate grants; the Agent cannot change its own permissions. See the [connection and permission guide](./docs/guides/native-agent.md) for practical combinations and troubleshooting, or the [MCP design and verification record](./docs/design/2026-10-15-native-agent-mcp.md) for implementation boundaries.
+| <img src="./ClashSharp/ClashSharp/Assets/Tray/Logo.Inactive.svg" width="24" alt="Gray tray icon" /> | <img src="./ClashSharp/ClashSharp/Assets/Tray/Logo.SystemProxy.svg" width="24" alt="Green tray icon" /> | <img src="./ClashSharp/ClashSharp/Assets/Tray/Logo.Tun.svg" width="24" alt="Purple tray icon" /> |
+| :---: | :---: | :---: |
+| Disabled or Standby | System proxy | Transparent proxy |
 
 ### Pages
 
@@ -103,7 +207,9 @@ Configuration editing does not grant proxy control. Turning on **Control proxy s
 | **Triggers** | Automation tasks, evaluated from top to bottom. |
 | **Connections** | Active connections with their process, matched rule, and proxy route. |
 | **Statistics** | Long-term totals by profile, node, and time; system logs are also reached from here. |
-| **Settings** | Language and appearance, startup, proxy, native Windows repair, MCP server and permissions, notifications, tray, and data backup. |
+| **Settings** | Language and appearance, startup, proxy, Windows integration, MCP server and permissions, notifications, tray, Mainland China features and data backup. |
+
+<img src="./docs/assets/screenshots/en/rules.png" alt="Rules" width="49%" />&nbsp;<img src="./docs/assets/screenshots/en/connections.png" alt="Connections" width="49%" />
 
 ## FAQ
 
@@ -111,7 +217,7 @@ Configuration editing does not grant proxy control. Turning on **Control proxy s
 <summary><b>WSL, a terminal, or a Microsoft Store app cannot reach the network through the proxy</b></summary>
 <br />
 
-These programs do not read the Windows system proxy. **Settings › Native Windows** runs a diagnosis for each of them and applies a fix based on the result; each fix can be reverted at any time. With transparent proxy on, traffic from these programs is taken over as well.
+These programs do not read the Windows system proxy. **Settings › Windows integration** runs a diagnosis for each of them and applies a fix based on the result; each fix can be reverted at any time. With transparent proxy on, traffic from these programs is taken over as well.
 </details>
 
 <details>
@@ -125,14 +231,21 @@ The conflict check covers four cases: an external mihomo process, an occupied pr
 <summary><b>The system proxy remains on after an abnormal exit</b></summary>
 <br />
 
-When Clash# exits abnormally, the recovery process immediately restores the system proxy still owned by Clash#. If the computer shut down before that, Clash# checks for and clears the leftover setting at its next launch. *Startup restore fallback* under **Settings › Startup** can also be registered so that the same cleanup runs at Windows sign-in, without waiting for Clash# to start.
+When Clash# exits abnormally, the recovery process immediately restores the system proxy still owned by Clash#. If the computer shut down before that, Clash# checks for and clears the leftover setting at its next launch. *Proxy recovery at sign-in* under **Settings › Windows integration** can also be registered so that the same cleanup runs at Windows sign-in, without waiting for Clash# to start.
 </details>
 
 <details>
-<summary><b>Region names or flags differ from the profile</b></summary>
+<summary><b>Transparent proxy does not start with my subscription</b></summary>
 <br />
 
-**Settings › Mainland China features** enables flag replacement and text completion by default, adjusting the names and flags of some regions in the interface according to mainland China conventions. It affects display only; profiles, logs, search, copied text, and exported data are not modified. It can be turned off in the same place.
+The transparent-proxy service runs the core with its own GeoData files and a fixed set of safe options, so it never takes download addresses, extra listening ports or credentials from a profile. Clash# leaves out the harmless GeoData download address (`geox-url`) automatically and tells you, with a support code, if a profile sets something that cannot be hosted, such as a DNS listener or an extra port. Remove that entry, or turn off transparent proxy to use the system proxy instead.
+</details>
+
+<details>
+<summary><b>An action failed and every later action fails too</b></summary>
+<br />
+
+A failed proxy change is kept and reported instead of being claimed as applied. Changing the mode or the transparent-proxy switch retries it automatically as part of your action. The **Retry** link in the notice on **Settings** does the same without changing anything else.
 </details>
 
 <details>
