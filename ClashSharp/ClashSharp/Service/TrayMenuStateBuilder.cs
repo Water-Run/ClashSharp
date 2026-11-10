@@ -58,6 +58,7 @@ public enum TrayIconVisualState
 /// <param name="SettingsLabel">Settings command label.</param>
 /// <param name="SafeExitLabel">Safe exit command label.</param>
 /// <param name="VisibleFeatureIds">Canonical menu section identifiers in display order.</param>
+/// <param name="IsRightToLeft">True when the interface language reads right to left, so the menu is mirrored.</param>
 public readonly record struct TrayMenuState(
     string StatusMenuLabel,
     IReadOnlyList<TrayStatusMenuItem> StatusItems,
@@ -71,7 +72,8 @@ public readonly record struct TrayMenuState(
     bool TunEffective,
     string SettingsLabel,
     string SafeExitLabel,
-    IReadOnlyList<string> VisibleFeatureIds)
+    IReadOnlyList<string> VisibleFeatureIds,
+    bool IsRightToLeft = false)
 {
     /// <summary>Gets whether the runtime-status section is visible.</summary>
     public bool ShowStatus => VisibleFeatureIds.Contains("status");

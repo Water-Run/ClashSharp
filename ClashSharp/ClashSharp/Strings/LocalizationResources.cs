@@ -24,6 +24,8 @@ internal static partial class LocalizationResources
             new(BuildExplicitTranslations());
 
         FillMissingTranslations(table, AppLanguage.English);
+        // Right-to-left text needs bidirectional marks around left-to-right fragments; see RightToLeftCatalogText.
+        table[AppLanguage.Persian] = RightToLeftCatalogText.Prepare(table[AppLanguage.Persian]);
         table[AppLanguage.AutoDetect] = table[AppLanguage.SimplifiedChinese];
 
         return new ReadOnlyDictionary<AppLanguage, ReadOnlyDictionary<string, string>>(table);

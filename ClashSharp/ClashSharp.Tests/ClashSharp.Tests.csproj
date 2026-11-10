@@ -230,6 +230,7 @@
     <Compile Include="..\ClashSharp\Service\WindowsProxyOwnershipRestorer.cs" Link="Service\WindowsProxyOwnershipRestorer.cs" />
     <Compile Include="..\ClashSharp\Service\WindowsProxyService.cs" Link="Service\WindowsProxyService.cs" />
     <Compile Include="..\ClashSharp\Strings\LocalizationResources.cs" Link="Strings\LocalizationResources.cs" />
+    <Compile Include="..\ClashSharp\Strings\RightToLeftCatalogText.cs" Link="Strings\RightToLeftCatalogText.cs" />
     <Compile Include="..\ClashSharp\Strings\Catalogs\LocalizationResources.English.cs" Link="Strings\Catalogs\LocalizationResources.English.cs" />
     <Compile Include="..\ClashSharp\Strings\Catalogs\LocalizationResources.French.cs" Link="Strings\Catalogs\LocalizationResources.French.cs" />
     <Compile Include="..\ClashSharp\Strings\Catalogs\LocalizationResources.German.cs" Link="Strings\Catalogs\LocalizationResources.German.cs" />

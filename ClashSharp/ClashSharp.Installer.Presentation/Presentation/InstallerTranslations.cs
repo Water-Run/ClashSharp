@@ -15,6 +15,9 @@ internal static partial class InstallerTranslations
     // built on first use, after every part has been initialized, never in a field initializer.
     private static readonly Lazy<Dictionary<string, string[]>> LazyTable = new(Build);
 
+    // Column of the Persian translation in a row without its source.
+    private const int PersianColumn = (int)InstallerLanguage.Persian - 1;
+
     /// <summary>Gets the translations by source text; the array holds the seven non-source languages.</summary>
     internal static IReadOnlyDictionary<string, string[]> Table => LazyTable.Value;
 
@@ -28,7 +31,10 @@ internal static partial class InstallerTranslations
         {
             if (row.Length != 8) { throw new InvalidOperationException("Installer translation row must have eight columns: " + row[0]); }
             // A duplicate source keeps the first row; the validation test reports it.
-            table.TryAdd(row[0], row[1..]);
+            string[] translations = row[1..];
+            // Right-to-left text needs left-to-right marks around left-to-right fragments; see InstallerRightToLeftText.
+            translations[PersianColumn] = InstallerRightToLeftText.Prepare(translations[PersianColumn]);
+            table.TryAdd(row[0], translations);
         }
 
         return table;

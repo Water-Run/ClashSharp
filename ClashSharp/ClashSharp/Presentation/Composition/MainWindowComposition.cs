@@ -321,7 +321,7 @@ internal sealed class MainWindowComposition
             NetworkStateSnapshot? networkState = GetLatestTrayNetworkState();
             ClashSharpMode mode = CurrentMode;
             bool runtimeKnown = networkState is not null && networkState.Mode == mode;
-            return TrayMenuStateBuilder.Build(
+            TrayMenuState state = TrayMenuStateBuilder.Build(
                 mode,
                 TransparentProxyEnabled,
                 serviceStatus.IsInstalled,
@@ -337,6 +337,10 @@ internal sealed class MainWindowComposition
                     ',',
                     StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
                 _localization.GetString);
+            return state with
+            {
+                IsRightToLeft = LocalizationService.IsRightToLeft(_localization.CurrentLanguage, CultureInfo.CurrentUICulture),
+            };
         }
 
         private NetworkStateSnapshot? GetLatestTrayNetworkState()

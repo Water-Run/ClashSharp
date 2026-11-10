@@ -198,7 +198,8 @@ public sealed class LocalizationResourcesTests
     [InlineData(AppLanguage.Korean, "StartupConflict.Proxy.Repair", "프록시 끄기")]
     public void Translations_PreviouslyMixedValues_AreCorrectLanguage(AppLanguage language, string key, string expected)
     {
-        Assert.Equal(expected, LocalizationResources.Translations[language][key]);
+        // Authored text: the runtime right-to-left table adds bidirectional marks, checked in RightToLeftCatalogTextTests.
+        Assert.Equal(expected, LocalizationResources.BuildExplicitTranslations()[language][key]);
     }
 
     /// <summary>Verifies core navigation keys are present in the English fallback resources.</summary>

@@ -28,6 +28,7 @@ public sealed class SystemTrayService : IDisposable
     private const uint MfSeparator = 0x00000800;
     private const uint TpmRightButton = 0x0002;
     private const uint TpmReturnCommand = 0x0100;
+    private const uint TpmLayoutRtl = 0x8000;
 
     private const uint ModeDisabledCommandId = 1001;
     private const uint ModeStandbyCommandId = 1002;
@@ -268,7 +269,10 @@ public sealed class SystemTrayService : IDisposable
 
         GetCursorPos(out POINT point);
         SetForegroundWindow(_ownerWindowHandle);
-        uint commandId = TrackPopupMenu(menu, TpmRightButton | TpmReturnCommand, point.x, point.y, 0, _ownerWindowHandle, nint.Zero);
+        // A right-to-left interface mirrors the menu the way Windows mirrors its own: items align to the right,
+        // check marks sit on the right and submenus open to the left.
+        uint layout = state.IsRightToLeft ? TpmLayoutRtl : 0;
+        uint commandId = TrackPopupMenu(menu, TpmRightButton | TpmReturnCommand | layout, point.x, point.y, 0, _ownerWindowHandle, nint.Zero);
         DestroyMenu(menu);
         HandleMenuCommand(commandId, state);
     }
