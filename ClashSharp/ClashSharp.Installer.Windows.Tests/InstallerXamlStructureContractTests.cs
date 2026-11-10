@@ -168,6 +168,35 @@ public sealed partial class InstallerXamlStructureContractTests
         Assert.True(inspected > 60, $"Only {inspected} literals were found.");
     }
 
+    /// <summary>
+    /// The window mirrors in Persian and WPF has no detect-from-content reading order, so a literal Latin token that
+    /// ends in a neutral character, such as the product name, renders as "#Clash" unless its element reads left to
+    /// right. Translated text gets left-to-right marks instead; literals never pass through translation.
+    /// </summary>
+    [Fact]
+    public void EveryLiteralProductNameReadsLeftToRightInTheMirroredWindow()
+    {
+        XDocument window = Load("MainWindow.xaml");
+        int checkedLiterals = 0;
+        foreach (XElement element in window.Descendants())
+        {
+            bool literalName = element.Attributes()
+                .Where(static attribute => VisibleTextAttributes.Contains(attribute.Name.LocalName))
+                .Any(static attribute => !attribute.Value.StartsWith('{')
+                    && attribute.Value.Contains("Clash#", StringComparison.Ordinal)
+                    // Load unwraps translated values to their Chinese source; only untranslated text is a literal.
+                    && !attribute.Value.Any(static character => character is >= '一' and <= '鿿'));
+            if (!literalName) { continue; }
+
+            checkedLiterals++;
+            Assert.Equal("LeftToRight", (string?)element.Attribute("FlowDirection"));
+            // A stretched left-to-right element would push the name to the far side of a mirrored row.
+            Assert.NotEqual("Stretch", (string?)element.Attribute("HorizontalAlignment") ?? "Stretch");
+        }
+
+        Assert.True(checkedLiterals > 0, "The header no longer shows the product name as a literal; revisit this contract.");
+    }
+
     [Fact]
     public void ThemeDictionaryDefinesEachTopLevelKeyOnceAndTheBrandMarkExists()
     {
