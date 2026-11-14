@@ -1,0 +1,15 @@
+{
+  "_comment": "Line-coverage floors (percent) per area of the main test project, measured on a6709ba0 with eng/coverage.runsettings (Service 79.7, ViewModel 87.2, AppHost 67.8, Model 92.3, MihomoService 81.2, RecoveryWatchdog 76.8, Core 93.8, Application 89.8, Infrastructure 87.1, Mcp 93.4). Each floor sits about three points below the measurement; raise it when coverage rises, never lower it to pass.",
+  "floors": {
+    "ClashSharp/Service": 76,
+    "ClashSharp/ViewModel": 84,
+    "ClashSharp/AppHost": 64,
+    "ClashSharp/Model": 88,
+    "ClashSharp.MihomoService": 78,
+    "ClashSharp.RecoveryWatchdog": 72,
+    "ClashSharp.Core": 90,
+    "ClashSharp.Application": 86,
+    "ClashSharp.Infrastructure": 84,
+    "ClashSharp.Infrastructure.Mcp": 90
+  }
+}

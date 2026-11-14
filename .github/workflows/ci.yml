@@ -58,6 +58,16 @@ jobs:
         shell: pwsh
         run: ./eng/Test-DotNetResultsContract.ps1
 
+      - name: Verify coverage floor contract (Windows PowerShell 5.1)
+        if: steps.scope.outputs.product != 'false'
+        shell: powershell
+        run: ./eng/Test-CoverageFloorContract.ps1
+
+      - name: Verify coverage floor contract (PowerShell 7)
+        if: steps.scope.outputs.product != 'false'
+        shell: pwsh
+        run: ./eng/Test-CoverageFloorContract.ps1
+
       - name: Verify product CI input contract (Windows PowerShell 5.1)
         if: steps.scope.outputs.product != 'false'
         shell: powershell
@@ -202,7 +212,7 @@ jobs:
 
       - name: Run tests
         if: steps.scope.outputs.product != 'false'
-        run: dotnet test ClashSharp/ClashSharp.Tests/ClashSharp.Tests.csproj -c Release -p:Platform=x64 --no-build --logger "trx;LogFileName=tests.trx"
+        run: dotnet test ClashSharp/ClashSharp.Tests/ClashSharp.Tests.csproj -c Release -p:Platform=x64 --no-build --settings eng/coverage.runsettings --logger "trx;LogFileName=tests.trx"
 
       - name: Run Installer Core tests
         if: steps.scope.outputs.product != 'false'
@@ -253,6 +263,11 @@ jobs:
           if ($lineRate -lt 0.90) { throw "Installer Core line coverage $lineRate is below 0.90." }
           if ($branchRate -lt 0.80) { throw "Installer Core branch coverage $branchRate is below 0.80." }
 
+      - name: Enforce main test project coverage floors
+        if: steps.scope.outputs.product != 'false'
+        shell: pwsh
+        run: ./eng/Test-CoverageFloor.ps1
+
       - name: Upload test results
         if: always() && steps.scope.outputs.product != 'false'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -261,6 +276,7 @@ jobs:
           path: |
             artifacts/validation/dotnet-test-evidence.json
             ClashSharp/ClashSharp.Tests/TestResults/**/*.trx
+            ClashSharp/ClashSharp.Tests/TestResults/**/coverage.cobertura.xml
             ClashSharp/ClashSharp.Installer.Tests/TestResults/**/*.trx
             ClashSharp/ClashSharp.Installer.Tests/TestResults/**/coverage.cobertura.xml
             ClashSharp/ClashSharp.Installer.Presentation.Tests/TestResults/**/*.trx
