@@ -1,10 +1,10 @@
 # ClashSharp 开发文档
 
-当前交付为产品源码 `9f3444a5`：完整 CI **13,712／0／0**。最终内部候选 [42768133436](https://github.com/Water-Run/ClashSharp/actions/runs/42768133436) 已装到蓝机；八语言 README 与 92 张截图已入库。最终候选上的真实数据验收仍在进行，进度和已知问题见[本轮记录](reviews/2026-11-10-release-pass.md)。
+当前交付为产品源码 `a6709ba0`：完整 CI **13,730／0／0**。最终内部候选 [43555383220](https://github.com/Water-Run/ClashSharp/actions/runs/43555383220) 已在蓝机装好并完成实机验收，桌面 `Clash#` 为同一版本；六份 README 与 116 张截图已入库。尚未重测覆盖率，其余边界见[本轮记录](reviews/2026-11-10-release-pass.md)。
 
 | 入口 | 用途 |
 | --- | --- |
-| [发布级检验、缺口修复与文档（暂停）](reviews/2026-11-10-release-pass.md) | 当前源码与候选、测试增长、实机状态、截图与 README 进度、已知问题、恢复步骤 |
+| [发布级检验、缺口修复与文档](reviews/2026-11-10-release-pass.md) | 当前源码与候选、测试增长、两次实机验收、截图与 README、已知问题和剩余事项 |
 | [Fluent 样式、交互与通知收敛](reviews/2026-11-04-fluent-production-pass.md) | 当前包、剪贴板根因、通知级别新策略、安装器调整与实机交付 |
 | [磁贴、关于页与当前冻结](reviews/2026-11-03-tile-reorder-and-about.md) | 当前包、数据保护、用户暂停及未验收项目 |
 | [手验反馈与通知覆盖清单](reviews/2026-11-02-manual-feedback-and-notification-matrix.md) | 当前修复范围、四档通知事件矩阵、实现和候选验证进度 |
