@@ -110,13 +110,14 @@ try {
     $enabled = Get-ClashSharpInstallerMutationRuntimeProperty
     $disabled = Get-ClashSharpInstallerMutationRuntimeProperty -Development
     $profiles = @(
-        @{ name = 'preview'; enabled = $false; internal = $false; arguments = @() },
-        @{ name = 'development'; enabled = $false; internal = $false; arguments = @($formal, $manifestProperty, $disabled) },
-        @{ name = 'signed'; enabled = $true; internal = $false; arguments = @($formal, $manifestProperty, $enabled) },
-        @{ name = 'internal'; enabled = $true; internal = $true; arguments = @($formal, $manifestProperty, $enabled, '-p:ClashSharpInstallerInternalCandidate=true') }
+        @{ name = 'preview'; enabled = $false; internal = $false; pinned = $false; arguments = @() },
+        @{ name = 'development'; enabled = $false; internal = $false; pinned = $false; arguments = @($formal, $manifestProperty, $disabled) },
+        @{ name = 'signed'; enabled = $true; internal = $false; pinned = $false; arguments = @($formal, $manifestProperty, $enabled) },
+        @{ name = 'internal'; enabled = $true; internal = $true; pinned = $false; arguments = @($formal, $manifestProperty, $enabled, '-p:ClashSharpInstallerInternalCandidate=true') },
+        @{ name = 'pinned-release'; enabled = $true; internal = $false; pinned = $true; arguments = @($formal, $manifestProperty, $enabled, '-p:ClashSharpInstallerPinnedSelfSignedRelease=true') }
     )
     foreach ($profile in $profiles) {
-        $result = Invoke-InstallerProfileBuild -Arguments (@('-getProperty:ClashSharpEnableInstallerMutationRuntime,ClashSharpInstallerInternalCandidate,DefineConstants,SelfContained,PublishSingleFile') + $profile.arguments)
+        $result = Invoke-InstallerProfileBuild -Arguments (@('-getProperty:ClashSharpEnableInstallerMutationRuntime,ClashSharpInstallerInternalCandidate,ClashSharpInstallerPinnedSelfSignedRelease,DefineConstants,SelfContained,PublishSingleFile') + $profile.arguments)
         if ($result.exitCode -ne 0) { throw "MSBuild profile $($profile.name) failed: $($result.output)$($result.error)" }
         $properties = ($result.output | ConvertFrom-Json).Properties
         $expected = if ($profile.enabled) { 'true' } else { 'false' }
@@ -124,6 +125,8 @@ try {
             (($properties.DefineConstants -split ';') -ccontains 'CLASHSHARP_INSTALLER_MUTATION_RUNTIME') -ne $profile.enabled -or
             (($properties.DefineConstants -split ';') -ccontains 'CLASHSHARP_INSTALLER_INTERNAL_CANDIDATE') -ne $profile.internal -or
             $properties.ClashSharpInstallerInternalCandidate -cne $profile.internal.ToString().ToLowerInvariant() -or
+            (($properties.DefineConstants -split ';') -ccontains 'CLASHSHARP_INSTALLER_PINNED_SELF_SIGNED_RELEASE') -ne $profile.pinned -or
+            $properties.ClashSharpInstallerPinnedSelfSignedRelease -cne $profile.pinned.ToString().ToLowerInvariant() -or
             $properties.SelfContained -cne 'true' -or $properties.PublishSingleFile -cne 'true') {
             throw "MSBuild profile $($profile.name) selected an incorrect runtime or deployment model."
         }
@@ -145,7 +148,20 @@ try {
             throw 'An incomplete internal candidate profile was admitted.'
         }
     }
-    Write-Output 'Installer build profiles passed: 4 evaluated profiles and 5 rejected activation combinations.'
+    # The pinned self-signed release needs the signed production profile and cannot be an internal candidate.
+    $pinned = '-p:ClashSharpInstallerPinnedSelfSignedRelease=true'
+    $invalidPinned = @(
+        @{ arguments = @($pinned); diagnostic = 'requires the signed production Installer profile' },
+        @{ arguments = @($formal, $manifestProperty, $disabled, $pinned); diagnostic = 'requires the signed production Installer profile' },
+        @{ arguments = @($formal, $manifestProperty, $enabled, $pinned, '-p:ClashSharpInstallerInternalCandidate=true'); diagnostic = 'cannot also be an internal candidate' }
+    )
+    foreach ($case in $invalidPinned) {
+        $result = Invoke-InstallerProfileBuild -Arguments (@('-t:ValidateClashSharpPinnedSelfSignedReleaseProfile') + $case.arguments)
+        if ($result.exitCode -eq 0 -or -not $result.output.Contains($case.diagnostic, [StringComparison]::Ordinal)) {
+            throw 'An incomplete pinned self-signed release profile was admitted or failed for an unrelated reason.'
+        }
+    }
+    Write-Output 'Installer build profiles passed: 5 evaluated profiles and 8 rejected activation combinations.'
 } finally {
     $resolved = Assert-ClashSharpOrdinaryPath -LiteralPath $testRoot -RequireDirectory
     if ([IO.Path]::GetDirectoryName($resolved) -cne $testParent -or

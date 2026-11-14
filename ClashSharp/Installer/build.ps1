@@ -6,20 +6,30 @@ Builds the complete signed installer or an explicitly non-mutating development p
 .DESCRIPTION
 Internal candidates additionally opt in to exact embedded-signer verification for their
 short-lived self-signed certificate without requiring a preinstalled Authenticode root.
+A pinned self-signed release does the same for the maintainer's long-lived release identity
+(the exact publisher subject plus the thumbprint embedded at build time); a build without either
+switch requires a signer that chains to a root the target machine trusts.
 .PARAMETER Development
 Builds an unsigned non-mutating development preview.
 .PARAMETER InternalCandidate
 Selects the internal signed candidate profile, including its visible test-build label.
+.PARAMETER PinnedSelfSignedRelease
+Selects the signed production profile whose installer accepts the long-lived self-signed release
+identity without a system-trusted root. It cannot be combined with Development or InternalCandidate.
 #>
 [CmdletBinding()]
 param(
     [switch] $Development,
-    [switch] $InternalCandidate
+    [switch] $InternalCandidate,
+    [switch] $PinnedSelfSignedRelease
 )
 
 $ErrorActionPreference = "Stop"
 if ($Development -and $InternalCandidate) {
     throw 'An internal candidate requires the signed production Installer profile.'
+}
+if ($PinnedSelfSignedRelease -and ($Development -or $InternalCandidate)) {
+    throw 'A pinned self-signed release requires the signed production Installer profile and cannot be an internal candidate.'
 }
 
 $installerRoot = $PSScriptRoot
@@ -860,6 +870,7 @@ dotnet publish $installerProject `
     -p:PublishDocumentationFiles=false `
     -p:ClashSharpFormalInstallerBuild=true `
     "-p:ClashSharpInstallerInternalCandidate=$($InternalCandidate.IsPresent.ToString().ToLowerInvariant())" `
+    "-p:ClashSharpInstallerPinnedSelfSignedRelease=$($PinnedSelfSignedRelease.IsPresent.ToString().ToLowerInvariant())" `
     $installerRuntimeProperty `
     "-p:ClashSharpInstallerReleaseManifestPath=$($installerReleaseManifest.FullName)" `
     -o $installerPublishRoot

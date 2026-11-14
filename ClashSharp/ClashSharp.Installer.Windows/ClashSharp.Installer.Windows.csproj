@@ -10,16 +10,29 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <WarningsAsErrors>$(WarningsAsErrors);CS1591</WarningsAsErrors>
     <ClashSharpInstallerInternalCandidate Condition="'$(ClashSharpInstallerInternalCandidate)' == ''">false</ClashSharpInstallerInternalCandidate>
+    <ClashSharpInstallerPinnedSelfSignedRelease Condition="'$(ClashSharpInstallerPinnedSelfSignedRelease)' == ''">false</ClashSharpInstallerPinnedSelfSignedRelease>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(ClashSharpInstallerInternalCandidate)' == 'true'">
     <DefineConstants>$(DefineConstants);CLASHSHARP_INSTALLER_INTERNAL_CANDIDATE</DefineConstants>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(ClashSharpInstallerPinnedSelfSignedRelease)' == 'true'">
+    <DefineConstants>$(DefineConstants);CLASHSHARP_INSTALLER_PINNED_SELF_SIGNED_RELEASE</DefineConstants>
+  </PropertyGroup>
+
   <Target Name="ValidateClashSharpInternalCandidateProfile" BeforeTargets="PrepareForBuild"
           Condition="'$(ClashSharpInstallerInternalCandidate)' == 'true'">
     <Error Condition="'$(ClashSharpFormalInstallerBuild)' != 'true' or '$(ClashSharpEnableInstallerMutationRuntime)' != 'true'"
            Text="An internal candidate requires the signed production Installer profile." />
+  </Target>
+
+  <Target Name="ValidateClashSharpPinnedSelfSignedReleaseProfile" BeforeTargets="PrepareForBuild"
+          Condition="'$(ClashSharpInstallerPinnedSelfSignedRelease)' == 'true'">
+    <Error Condition="'$(ClashSharpFormalInstallerBuild)' != 'true' or '$(ClashSharpEnableInstallerMutationRuntime)' != 'true'"
+           Text="A pinned self-signed release requires the signed production Installer profile." />
+    <Error Condition="'$(ClashSharpInstallerInternalCandidate)' == 'true'"
+           Text="A pinned self-signed release cannot also be an internal candidate." />
   </Target>
 
   <ItemGroup>

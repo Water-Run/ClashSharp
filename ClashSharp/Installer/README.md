@@ -118,14 +118,19 @@ CLASHSHARP_WINDOWS_SDK_VERSION。脚本验证签名与时间戳后才产生正�
 
 ### 没有公共 CA 证书时的发行方式
 
-正式版 `Setup.exe` 在提权时会用 Windows 校验自己的 Authenticode 签名（`WinVerifyTrust`），签名必须能追溯到**目标机器**上受信任的根；只有内部候选构建（主题为 `CN=ClashSharp Internal Candidate <GUID>` 的一次性自签名证书）才允许缺少系统根。因此自签名的正式包在没有信任该证书的机器上会被拒绝，错误码 `installer.elevation.certificate_untrusted`。2026-11-14 在干净的 Windows 沙盒里实测：自签名正式包的 `Get-AuthenticodeSignature` 为 `UnknownError`（链终止于不受信任的根），把随包的 CER 导入“受信任的根证书颁发机构”后变为 `Valid`。
+正式版 `Setup.exe` 在提权时会用 Windows 校验自己的 Authenticode 签名（`WinVerifyTrust`）。默认的正式构建要求签名能追溯到**目标机器**上受信任的根，因此自签名的普通正式包在没有信任该证书的机器上会被拒绝，错误码 `installer.elevation.certificate_untrusted`。2026-11-14 在干净的 Windows 沙盒里实测：自签名正式包的 `Get-AuthenticodeSignature` 为 `UnknownError`（链终止于不受信任的根），把随包的 CER 导入“受信任的根证书颁发机构”后变为 `Valid`。
 
-所以有两种可行的发行方式：
+没有公共 CA 证书时，用 `build.ps1 -PinnedSelfSignedRelease` 构建“固定指纹的自签名正式版”（MSBuild 属性 `ClashSharpInstallerPinnedSelfSignedRelease`，编译常量 `CLASHSHARP_INSTALLER_PINNED_SELF_SIGNED_RELEASE`）。这个配置只能在构建时选择，不能由清单或命令行参数打开，也不能与 `-Development`、`-InternalCandidate` 同用。它让安装器在 Windows 报告“根不受信任”时，只在同时满足以下条件时放行：
 
-- **面向所有用户：**使用公共 CA 签发的代码签名证书（OV／EV 证书，或 Azure Trusted Signing 这类云签名服务），目标机器无需任何额外操作。
-- **面向维护者自己的和受控的机器：**使用一份长期自签名证书，主题固定为 `CN=WaterRun, OU="Clash#"`（与 Package.appxmanifest 的 Publisher 逐字一致），所有正式版本共用，保持包家族不变、支持原地升级；每台目标机器在运行 `Setup.exe` 之前，先以管理员身份把随包的 CER（`payload\ClashSharp_TemporaryKey.cer`）导入受信任的根，例如 `certutil -addstore Root payload\ClashSharp_TemporaryKey.cer`。这会让该机器信任此证书签的所有代码，只应在自己控制的机器上做。
+- 签名与映像摘要仍然由 Windows 校验有效，修改过的文件照样被拒绝；
+- 签名者证书只有一级，自签发，主题与 MSIX 发布者逐字相同（`CN=WaterRun, OU="Clash#"`），带代码签名用途，并在 Windows 校验所取的时间（有效时间戳或当前时间）仍在有效期内；
+- 签名者指纹与构建时嵌入安装器的指纹完全一致，由外层校验器核对后才发出提权租约。
 
-自签名正式包的构建方式：
+安装器不会修改任何系统证书存储，目标机器无需先导入证书。代价要知道：校验的锚点来自安装器自身嵌入的指纹，所以能替换 `Setup.exe` 的人可以带上另一份自签名证书和指纹；防的是被篡改的映像，不是被整体替换的安装器。用户在管理员提示里看到的发布者仍是“未知发布者”。需要让所有用户获得受信任的发布者名称时，改用公共 CA 签发的代码签名证书（OV／EV 证书，或 Azure Trusted Signing 这类云签名服务）并去掉这个开关。
+
+用一份长期证书、所有正式版本共用，才能保持包家族不变、支持原地升级；每个内部候选使用的是一次性临时证书，不能原地升级。
+
+构建方式：
 
 1. 在受控的构建机上生成一份长期证书并导出 PFX 与 CER。示例（有效期十年，密钥不要放进仓库，PFX 与口令由维护者保管）：
 
@@ -134,10 +139,10 @@ CLASHSHARP_WINDOWS_SDK_VERSION。脚本验证签名与时间戳后才产生正�
            -TextExtension @('2.5.29.37={text}1.3.6.1.5.5.7.3.3') -NotAfter (Get-Date).AddYears(10)
 
 2. 把 PFX 与 CER 放到 `ClashSharp/Installer/signing/`（目录内容被 Git 忽略），文件名为 `ClashSharp_TemporaryKey.pfx` 与 `ClashSharp_TemporaryKey.cer`，通过环境变量 `CLASHSHARP_CERTIFICATE_PASSWORD` 提供 PFX 口令，并设置 `CLASHSHARP_MSIX_CERTIFICATE_THUMBPRINT` 与 `CLASHSHARP_AUTHENTICODE_CERTIFICATE_THUMBPRINT` 为该证书的指纹。
-3. 在构建机上同样信任该证书，让 `signtool verify /pa /all /tw` 能建立链。
-4. 设置 `CLASHSHARP_AUTHENTICODE_TIMESTAMP_URL`（如 `http://timestamp.digicert.com`）和 `CLASHSHARP_WINDOWS_SDK_VERSION`，运行不带 `-Development` 的 `build.ps1`。RFC3161 时间戳使签名在证书到期后仍然有效。
+3. 在构建机上信任该证书，让构建时的 `signtool verify /pa /all /tw` 能建立链（只影响这台构建机）。
+4. 设置 `CLASHSHARP_AUTHENTICODE_TIMESTAMP_URL`（如 `http://timestamp.digicert.com`）和 `CLASHSHARP_WINDOWS_SDK_VERSION`，运行 `build.ps1 -PinnedSelfSignedRelease`。RFC3161 时间戳使签名在证书到期后仍然有效。
 
-2026-11-14 已按此方案在受控的开发机上产出第一份正式包，证书指纹以 `59ED7BC9` 开头；备份位置由维护者保管。证书私钥一旦丢失，只能换新证书和新的包家族，用户需要卸载重装；因此要像保管发布密钥一样备份 PFX 与口令。
+2026-11-15 已按此方案在受控的开发机上产出固定指纹自签名正式包，证书指纹以 `59ED7BC9` 开头；备份位置由维护者保管。证书私钥一旦丢失，只能换新证书和新的包家族，用户需要卸载重装；因此要像保管发布密钥一样备份 PFX 与口令。
 
 时间戳地址须为绝对 URI，不能含用户凭据、片段或空白。使用时间戳服务商公布的
 RFC3161 地址；例如 [DigiCert 官方地址](https://knowledge.digicert.com/general-information/rfc3161-compliant-time-stamp-authority-server)

@@ -197,6 +197,22 @@ internal sealed class WindowsInstallerExecutableTrustLease
     }
 }
 
+/// <summary>
+/// Decides what the installer accepts when Windows reports that the executable's signature chain ends
+/// in a root the machine does not trust. The default for a public release is to accept nothing.
+/// </summary>
+internal enum AuthenticodeUntrustedRootPolicy
+{
+    /// <summary>The signer must chain to a root the system trusts.</summary>
+    SystemTrustOnly,
+
+    /// <summary>An internal candidate may use its one-time self-signed certificate.</summary>
+    PinnedInternalCandidate,
+
+    /// <summary>A release signed by the maintainer's long-lived self-signed identity is accepted.</summary>
+    PinnedSelfSignedRelease,
+}
+
 internal sealed class WindowsAuthenticodeVerifier : IWindowsAuthenticodeVerifier
 {
     private static readonly Guid GenericVerifyV2 =
@@ -207,19 +223,41 @@ internal sealed class WindowsAuthenticodeVerifier : IWindowsAuthenticodeVerifier
     private const uint StateActionClose = 2;
     private const uint CacheOnlyUrlRetrieval = 0x0000_1000;
     private const int UntrustedRoot = unchecked((int)0x800B0109);
-    private readonly bool _allowPinnedInternalSigner;
 
-#if CLASHSHARP_INSTALLER_INTERNAL_CANDIDATE
-    private const bool InternalCandidateBuild = true;
+    /// <summary>The exact subject of the release identity; it matches the MSIX Publisher.</summary>
+    internal const string ReleaseSignerSubject = "CN=WaterRun, OU=\"Clash#\"";
+
+    private const string InternalCandidateSubjectPrefix = "CN=ClashSharp Internal Candidate ";
+    private readonly AuthenticodeUntrustedRootPolicy _untrustedRootPolicy;
+
+    // The profile is chosen when the installer is built and cannot be changed by a manifest or an argument.
+#if CLASHSHARP_INSTALLER_INTERNAL_CANDIDATE && CLASHSHARP_INSTALLER_PINNED_SELF_SIGNED_RELEASE
+#error An installer cannot be both an internal candidate and a pinned self-signed release.
+#elif CLASHSHARP_INSTALLER_INTERNAL_CANDIDATE
+    private const AuthenticodeUntrustedRootPolicy BuildPolicy = AuthenticodeUntrustedRootPolicy.PinnedInternalCandidate;
+#elif CLASHSHARP_INSTALLER_PINNED_SELF_SIGNED_RELEASE
+    private const AuthenticodeUntrustedRootPolicy BuildPolicy = AuthenticodeUntrustedRootPolicy.PinnedSelfSignedRelease;
 #else
-    private const bool InternalCandidateBuild = false;
+    private const AuthenticodeUntrustedRootPolicy BuildPolicy = AuthenticodeUntrustedRootPolicy.SystemTrustOnly;
 #endif
 
-    internal static WindowsAuthenticodeVerifier Instance { get; } = new(InternalCandidateBuild);
+    internal static WindowsAuthenticodeVerifier Instance { get; } = new(BuildPolicy);
 
     internal WindowsAuthenticodeVerifier(bool allowPinnedInternalSigner)
+        : this(allowPinnedInternalSigner
+            ? AuthenticodeUntrustedRootPolicy.PinnedInternalCandidate
+            : AuthenticodeUntrustedRootPolicy.SystemTrustOnly)
     {
-        _allowPinnedInternalSigner = allowPinnedInternalSigner;
+    }
+
+    internal WindowsAuthenticodeVerifier(AuthenticodeUntrustedRootPolicy untrustedRootPolicy)
+    {
+        if (!Enum.IsDefined(untrustedRootPolicy))
+        {
+            throw new ArgumentOutOfRangeException(nameof(untrustedRootPolicy));
+        }
+
+        _untrustedRootPolicy = untrustedRootPolicy;
     }
 
     public string VerifyTrustedSigner(
@@ -265,18 +303,20 @@ internal sealed class WindowsAuthenticodeVerifier : IWindowsAuthenticodeVerifier
             };
             verificationStarted = true;
             int status = WinVerifyTrust(new nint(-1), ref policy, ref trustData);
-            if (status != 0 && (status != UntrustedRoot || !_allowPinnedInternalSigner))
+            if (status != 0 && (status != UntrustedRoot || _untrustedRootPolicy == AuthenticodeUntrustedRootPolicy.SystemTrustOnly))
             {
                 throw new InstallerProtocolException(GetFailureCode(status));
             }
 
             cancellationToken.ThrowIfCancellationRequested();
             using X509Certificate2 certificate = ReadSignerCertificate(trustData.StateData, out uint chainCount, out DateTime verifiedAsOf);
-            // Internal candidates use a short-lived self-signed certificate. Windows still verifies
-            // the image digest and signature above; only an absent system root may be replaced by
-            // this in-memory chain. The outer verifier must then match the exact embedded signer
-            // thumbprint before granting a lease. No OS certificate store is changed here.
-            if (status == UntrustedRoot && (chainCount != 1 || !IsValidInternalCertificate(certificate, verifiedAsOf)))
+            // Internal candidates use a short-lived self-signed certificate, and a pinned self-signed
+            // release uses the maintainer's long-lived one. Windows still verifies the image digest and
+            // signature above; only an absent system root may be replaced by this in-memory chain, and
+            // only for the identity the build profile names. The outer verifier must then match the
+            // exact embedded signer thumbprint before granting a lease. No OS certificate store is
+            // changed here.
+            if (status == UntrustedRoot && (chainCount != 1 || !IsAcceptedUntrustedRootSigner(certificate, verifiedAsOf)))
             {
                 throw new InstallerProtocolException("installer.elevation.certificate_untrusted");
             }
@@ -314,12 +354,33 @@ internal sealed class WindowsAuthenticodeVerifier : IWindowsAuthenticodeVerifier
 
     // The time is selected by WinVerifyTrust: a validated timestamp or current time. Never use
     // an unauthenticated signing-time attribute or accept a time from a caller or manifest.
+    private bool IsAcceptedUntrustedRootSigner(X509Certificate2 certificate, DateTime verifiedAsOf) => _untrustedRootPolicy switch
+    {
+        AuthenticodeUntrustedRootPolicy.PinnedInternalCandidate => IsValidInternalCertificate(certificate, verifiedAsOf),
+        AuthenticodeUntrustedRootPolicy.PinnedSelfSignedRelease => IsValidPinnedReleaseCertificate(certificate, verifiedAsOf),
+        _ => false,
+    };
+
     internal static bool IsValidInternalCertificate(X509Certificate2 certificate, DateTime verifiedAsOf)
     {
-        const string prefix = "CN=ClashSharp Internal Candidate ";
-        if (!certificate.Subject.StartsWith(prefix, StringComparison.Ordinal)
-            || !Guid.TryParseExact(certificate.Subject.AsSpan(prefix.Length), "N", out _)
-            || !certificate.SubjectName.RawData.AsSpan().SequenceEqual(certificate.IssuerName.RawData)
+        return certificate.Subject.StartsWith(InternalCandidateSubjectPrefix, StringComparison.Ordinal)
+            && Guid.TryParseExact(certificate.Subject.AsSpan(InternalCandidateSubjectPrefix.Length), "N", out _)
+            && IsSelfIssuedCodeSigningCertificate(certificate, verifiedAsOf);
+    }
+
+    /// <summary>
+    /// Accepts only the maintainer's release identity: the exact publisher subject, self-issued, usable for
+    /// code signing at the time Windows verified. The pinned thumbprint is checked by the caller.
+    /// </summary>
+    internal static bool IsValidPinnedReleaseCertificate(X509Certificate2 certificate, DateTime verifiedAsOf)
+    {
+        return string.Equals(certificate.Subject, ReleaseSignerSubject, StringComparison.Ordinal)
+            && IsSelfIssuedCodeSigningCertificate(certificate, verifiedAsOf);
+    }
+
+    private static bool IsSelfIssuedCodeSigningCertificate(X509Certificate2 certificate, DateTime verifiedAsOf)
+    {
+        if (!certificate.SubjectName.RawData.AsSpan().SequenceEqual(certificate.IssuerName.RawData)
             || certificate.Extensions["2.5.29.37"] is not X509EnhancedKeyUsageExtension usage
             || !usage.EnhancedKeyUsages.Cast<Oid>().Any(static oid => oid.Value == "1.3.6.1.5.5.7.3.3"))
         {
