@@ -132,6 +132,8 @@ CLASHSHARP_WINDOWS_SDK_VERSION。脚本验证签名与时间戳后才产生正�
 3. 在这台构建机上信任该证书，让 `signtool verify /pa /all /tw` 能建立链：把 CER 加入当前用户的“受信任的根证书颁发机构”（Windows 会弹出确认框，需要人工确认一次）。证书被信任只影响这台构建机，用户机器上由安装器按叶证书固定信任。
 4. 设置 `CLASHSHARP_AUTHENTICODE_TIMESTAMP_URL`（如 `http://timestamp.digicert.com`）和 `CLASHSHARP_WINDOWS_SDK_VERSION`，运行不带 `-Development` 的 `build.ps1`。RFC3161 时间戳使签名在证书到期后仍然有效。
 
+2026-11-14 已按此方案产出第一份正式包，证书指纹以 `59ED7BC9` 开头，主题与上面一致；备份位置由维护者保管。
+
 证书私钥一旦丢失，只能换新证书和新的包家族，用户需要卸载重装；因此要像保管发布密钥一样备份 PFX 与口令。
 
 时间戳地址须为绝对 URI，不能含用户凭据、片段或空白。使用时间戳服务商公布的
