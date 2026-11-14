@@ -159,6 +159,7 @@
 1. 正式签名与受保护的发布环境（DEV-05）。这一项按设计只有维护者能完成，工具不会代为创建环境或签名：11 月 14 日再次读取仓库环境清单仍为空，发布保护预检会返回 `release.environment.missing`。需要的动作：
    - 建立名为 `release` 的 GitHub 环境，配置人工审批人，并只允许受保护分支部署；保持 `main` 受保护。
    - 提供正式的 MSIX 与 Authenticode 签名证书及私钥（环境变量 `CLASHSHARP_MSIX_CERTIFICATE_THUMBPRINT`、`CLASHSHARP_AUTHENTICODE_CERTIFICATE_THUMBPRINT`、`CLASHSHARP_CERTIFICATE_PASSWORD`），并确定发布者身份（候选包现为测试证书的 `CN=WaterRun, OU="Clash#"`，更早的安装包是 `CN=linzh`，换发布者会换包家族）。
+   - 本机证书库（11 月 14 日核对）里能用于代码签名的证书全是自签名：开发构建留下的以 GUID 命名的证书，以及 `CN=WaterRun`、`CN=linzh` 等，没有公共 CA 签发的。正式门禁的 `signtool verify /pa /all /tw` 要求受信任的证书链，自签名证书只有显式信任它的机器能通过，对外发布没有意义。所以这一项取决于能否取得公共 CA 签发的代码签名证书（OV／EV 证书或云签名服务），用本机现有材料做不到。
    - 从 `main` 手动运行 `Release protection preflight`，应通过；再对同一候选做签名、时间戳、第三方材料与校验和的核对，按 `ClashSharp/Installer/README.md` 的正式发行步骤发布。
 2. 波斯语数字样式统一（标题栏的取舍见上）。
 3. 开发机上的临时目录 `D:\w` 是此前遗留的，安全检查阻止了脚本删除，请手动删除。
