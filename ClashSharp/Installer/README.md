@@ -116,6 +116,24 @@ CLASHSHARP_WINDOWS_SDK_VERSION。脚本验证签名与时间戳后才产生正�
 并核验两个成品的签名者、信任链与时间戳。
 可选的 CLASHSHARP_WINDOWS_APP_RUNTIME_SIGNER_THUMBPRINT 必须与仓库固定输入一致。
 
+### 没有公共 CA 证书时的发行方式
+
+本项目的信任路径不依赖公共 CA：用户运行 `Setup.exe` 并确认 Windows 管理员提示，提权助手核验随包的公开叶证书，按需将它加入 Trusted People，MSIX 因此按固定的叶证书安装。公共 CA 证书带来的只是 `Setup.exe` 的管理员提示里发布者名称更友好、不再显示“未知发布者”，对安装是否成功没有影响。所以正式发行使用一份由维护者长期保管的自签名代码签名证书，主题固定为 `CN=WaterRun, OU="Clash#"`（与 Package.appxmanifest 的 Publisher 逐字一致），所有正式版本都用同一份证书，才能保持包家族不变、支持原地升级；每个内部候选使用的是一次性临时证书，不能原地升级。
+
+做法：
+
+1. 在受控的构建机上生成一份长期证书并导出 PFX 与 CER。示例（有效期十年，密钥不要放进仓库，PFX 与口令由维护者保管）：
+
+       $cert = New-SelfSignedCertificate -Type Custom -Subject 'CN=WaterRun, OU="Clash#"' -KeyUsage DigitalSignature `
+           -FriendlyName 'Clash# release signing' -CertStoreLocation Cert:\CurrentUser\My `
+           -TextExtension @('2.5.29.37={text}1.3.6.1.5.5.7.3.3') -NotAfter (Get-Date).AddYears(10)
+
+2. 把 PFX 与 CER 放到 `ClashSharp/Installer/signing/`（目录内容被 Git 忽略），文件名为 `ClashSharp_TemporaryKey.pfx` 与 `ClashSharp_TemporaryKey.cer`，通过环境变量 `CLASHSHARP_CERTIFICATE_PASSWORD` 提供 PFX 口令，并设置 `CLASHSHARP_MSIX_CERTIFICATE_THUMBPRINT` 与 `CLASHSHARP_AUTHENTICODE_CERTIFICATE_THUMBPRINT` 为该证书的指纹。
+3. 在这台构建机上信任该证书，让 `signtool verify /pa /all /tw` 能建立链：把 CER 加入当前用户的“受信任的根证书颁发机构”（Windows 会弹出确认框，需要人工确认一次）。证书被信任只影响这台构建机，用户机器上由安装器按叶证书固定信任。
+4. 设置 `CLASHSHARP_AUTHENTICODE_TIMESTAMP_URL`（如 `http://timestamp.digicert.com`）和 `CLASHSHARP_WINDOWS_SDK_VERSION`，运行不带 `-Development` 的 `build.ps1`。RFC3161 时间戳使签名在证书到期后仍然有效。
+
+证书私钥一旦丢失，只能换新证书和新的包家族，用户需要卸载重装；因此要像保管发布密钥一样备份 PFX 与口令。
+
 时间戳地址须为绝对 URI，不能含用户凭据、片段或空白。使用时间戳服务商公布的
 RFC3161 地址；例如 [DigiCert 官方地址](https://knowledge.digicert.com/general-information/rfc3161-compliant-time-stamp-authority-server)
 为 `http://timestamp.digicert.com`。Windows SDK 10.0.26100.0 的 SignTool 在服务器
