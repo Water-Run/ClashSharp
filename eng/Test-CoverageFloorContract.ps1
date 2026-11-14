@@ -24,6 +24,10 @@ $null = New-Item -ItemType Directory -Path $script:root
 Builds a class element with one line per hit count.
 .DESCRIPTION
 Each entry of Hits becomes a line numbered from one, so the covered fraction is exactly the share of non-zero entries.
+.PARAMETER File
+Source name recorded on the class, relative to the solution folder or rooted.
+.PARAMETER Hits
+Hit count of each line; zero marks an uncovered line.
 #>
 function New-ClassXml {
     [CmdletBinding()]
@@ -36,6 +40,12 @@ function New-ClassXml {
 <#
 .SYNOPSIS
 Writes a report whose packages hold the supplied class elements.
+.DESCRIPTION
+Each class element goes into its own package, so one source file can be seen by several assemblies as in a real report.
+.PARAMETER Name
+File name of the report inside the temporary directory, without extension.
+.PARAMETER PackageClasses
+Class elements to place, one per package.
 #>
 function Write-Report {
     [CmdletBinding()]
@@ -50,6 +60,12 @@ function Write-Report {
 <#
 .SYNOPSIS
 Runs the gate and returns whether it passed and what it said.
+.DESCRIPTION
+Calls the gate with the fixture solution folder and reports a pass, or the rejection message when the gate throws.
+.PARAMETER Report
+Path of the Cobertura fixture to judge.
+.PARAMETER Floors
+Path of the floors file to judge it against.
 #>
 function Invoke-Gate {
     [CmdletBinding()]
@@ -66,6 +82,12 @@ function Invoke-Gate {
 <#
 .SYNOPSIS
 Fails the contract with a message unless the condition holds.
+.DESCRIPTION
+Counts every check so the final summary shows how many conditions were exercised.
+.PARAMETER Condition
+Condition that must hold.
+.PARAMETER Message
+Description of the expected behavior, used in the failure.
 #>
 function Assert-Check {
     [CmdletBinding()]
