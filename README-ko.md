@@ -36,11 +36,49 @@ Clash#는 [mihomo](https://github.com/MetaCubeX/mihomo) 코어 기반의 Windows
 
 ## 뿌리부터 네이티브
 
-### 메인 컨트롤
+Clash#는 Windows를 흉내 내지 않고, Windows가 제공하는 것으로 만들어졌다. WinUI 3 컨트롤과 Fluent 디자인 외에 가장 먼저 만나는 것은 Windows에만 있는 것들, 곧 타일, 시스템 알림, 알림 영역이다.
 
-메인 컨트롤은 한눈에 Windows임을 알 수 있는 타일로 구성된다. 타일은 코어 상태, 속도, 트래픽, 지연 시간, 구독 사용량과 만료일, 공인 IP 등을 보여 준다. 타일은 표시·숨김·순서 변경이 가능하며, 기본·확장·최소·기술·일반·모든 타일의 여섯 가지 내장 배치로 빠르게 시작할 수 있다.
+### 타일
 
-<img src="./docs/assets/screenshots/ko/master.png" alt="메인 컨트롤 타일" width="100%" />
+메인 컨트롤은 타일로 이루어진 벽이며, 시작 메뉴 이래 Windows가 실시간 정보를 보여 온 방식을 따른다. 타일 하나는 스스로 갱신되는 정보 하나이다. 코어 상태, 업로드·다운로드 속도, 이번 실행과 누적 트래픽, 현재 노드와 지연, 활성 연결, 구독 사용량과 만료, DNS 설정, 코어 메모리와 가동 시간, 공인 출구 IP 등이 있다. 타일은 타일답게 동작한다. 클릭하면 실행하고(예: 연결 테스트 실행, 공인 IP 조회), 끌어서 순서를 바꾸며, 마우스 오른쪽 버튼이나 터치 길게 누르기로 ‘대시보드에서 고정 해제’ 같은 타일 고유의 메뉴를 연다. 타일은 모두 74개이며 전부 수치 표시만 하는 것은 아니다. 시스템 알림, 로그인 시 시작, 테마, 언어, 내보내기와 가져오기처럼 스위치나 동작을 담은 타일도 있어 대시보드가 제어판 역할을 겸한다.
+
+<img src="./docs/assets/screenshots/ko/master.png" alt="메인 컨트롤의 타일" width="100%" />
+
+### 타일 편집과 레이아웃
+
+‘타일 편집’은 모든 타일을 보여 주는 네이티브 목록을 열며, 검색과 실시간 개수가 있다. 먼저 ‘레이아웃 템플릿’을 고른다. 기본, 확장, 간단히, 기술, 일반, 모든 타일 중에서 고르고, 원하는 타일을 켜거나 끄고, ‘모두 표시’와 ‘모두 숨기기’로 한꺼번에 바꾸거나 ‘추천 배치로 복원’으로 처음으로 돌아간다. ‘템플릿으로 저장’은 나만의 레이아웃을 보관하고, ‘선택한 템플릿 삭제’는 지우며, ‘기본 템플릿 복원’은 기본 제공 템플릿을 되살린다. 레이아웃과 템플릿은 내보내고 가져올 수 있는 설정에 포함된다.
+
+<p align="center">
+<img src="./docs/assets/screenshots/ko/tiles-editor.png" alt="타일 편집기" width="49%" />&nbsp;<img src="./docs/assets/screenshots/ko/tiles-technical.png" alt="기술 레이아웃" width="49%" />
+</p>
+
+### 알림
+
+<p align="center">
+<img src="./docs/assets/screenshots/ko/toast.png" alt="Clash#가 보낸 Windows 알림" />
+</p>
+
+이 알림은 진짜 Windows 토스트로, 화면 모서리에 나타나고 알림 센터에 남는다.
+
+Clash#는 무엇이 바뀌었는지, 어떤 대상에 관한 것인지, 다음에 무엇을 하면 되는지를 알려 주고, 그 밖에는 조용히 있는다. ‘시스템 알림 사용’이 전체 스위치이며, 단계로 알림의 양을 정한다.
+
+| 단계 | 알림을 받는 경우 |
+| :--- | :--- |
+| **중요한 알림만** | 코어가 예기치 않게 중지됨, 투명 프록시 서비스를 사용할 수 없게 됨, 인계를 적용하거나 확인하지 못함, 시작 점검에서 조치가 필요함, 현재 구독이 만료되었거나 데이터를 모두 사용함. |
+| **기본** | 위 항목에 더해 모드와 투명 프록시 변경, 프로필·노드 선택, 가져오기·업데이트 실패, 테스트 시간 초과, 트리거 메시지, 3일 안에 만료되거나 데이터를 90% 사용한 현재 구독. |
+| **더 많이** | 위 항목에 더해 가져오기·업데이트·내보내기·설정 저장 성공. |
+
+구독 알림은 단계마다 한 번만 보내며, 갱신하거나 데이터가 초기화되면 다시 시작한다. 실패 알림에는 페이지에 표시되는 것과 같은 원인과 지원 코드가 들어 있어, 창을 열지 않고도 이유를 알 수 있다. 수동적인 점검, 취소된 동작, 샘플링은 알리지 않는다.
+
+<img src="./docs/assets/screenshots/ko/settings-notifications.png" alt="알림 설정" width="100%" />
+
+### 알림 영역
+
+트레이 아이콘은 진짜 알림 영역 아이콘이다. 오른쪽 클릭 메뉴는 Windows 기본 메뉴로, ‘상태’, ‘모드’, ‘페이지’, ‘투명 프록시’, ‘설정’, ‘안전하게 종료’로 이루어지며, **설정 › 작업 표시줄 트레이**에서 어떤 항목을 어떤 순서로 보일지 정한다. 색상 상태 표시를 켜면 아이콘 색으로 현재 상태를 한눈에 알 수 있고, 오른쪽에서 왼쪽으로 쓰는 언어에서는 메뉴가 Windows 자체 메뉴처럼 좌우로 뒤집힌다.
+
+<p align="center">
+<img src="./docs/assets/screenshots/ko/tray-menu.png" alt="트레이 메뉴" />
+</p>
 
 ### 설계된 대로 사용하는 Windows 메커니즘
 
@@ -65,20 +103,6 @@ Clash#는 [mihomo](https://github.com/MetaCubeX/mihomo) 코어 기반의 Windows
 <img src="./docs/assets/screenshots/zh-Hans/master.png" alt="简体中文" width="24%" />&nbsp;<img src="./docs/assets/screenshots/zh-Hant/master.png" alt="繁體中文" width="24%" />&nbsp;<img src="./docs/assets/screenshots/en/master.png" alt="English" width="24%" />&nbsp;<img src="./docs/assets/screenshots/ru/master.png" alt="Русский" width="24%" />
 <img src="./docs/assets/screenshots/fr/master.png" alt="Français" width="24%" />&nbsp;<img src="./docs/assets/screenshots/de/master.png" alt="Deutsch" width="24%" />&nbsp;<img src="./docs/assets/screenshots/fa/master.png" alt="فارسی" width="24%" />&nbsp;<img src="./docs/assets/screenshots/ko/master.png" alt="한국어" width="24%" />
 </p>
-
-### 알림
-
-Clash#는 무엇이 바뀌었는지, 어떤 대상에 관한 것인지, 다음에 무엇을 하면 되는지를 알려 주고, 그 밖에는 조용히 있는다. ‘시스템 알림 사용’이 전체 스위치이며, 단계로 알림의 양을 정한다.
-
-| 단계 | 알림을 받는 경우 |
-| :--- | :--- |
-| **중요한 알림만** | 코어가 예기치 않게 중지됨, 투명 프록시 서비스를 사용할 수 없게 됨, 인계를 적용하거나 확인하지 못함, 시작 점검에서 조치가 필요함, 현재 구독이 만료되었거나 데이터를 모두 사용함. |
-| **기본** | 위 항목에 더해 모드와 투명 프록시 변경, 프로필·노드 선택, 가져오기·업데이트 실패, 테스트 시간 초과, 트리거 메시지, 3일 안에 만료되거나 데이터를 90% 사용한 현재 구독. |
-| **더 많이** | 위 항목에 더해 가져오기·업데이트·내보내기·설정 저장 성공. |
-
-구독 알림은 단계마다 한 번만 보내며, 갱신하거나 데이터가 초기화되면 다시 시작한다. 실패 알림에는 페이지에 표시되는 것과 같은 원인과 지원 코드가 들어 있어, 창을 열지 않고도 이유를 알 수 있다. 수동적인 점검, 취소된 동작, 샘플링은 알리지 않는다.
-
-<img src="./docs/assets/screenshots/ko/settings-notifications.png" alt="알림 설정" width="100%" />
 
 ## Windows 통합을 한 번에
 

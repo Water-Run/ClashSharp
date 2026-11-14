@@ -36,11 +36,49 @@ Clash# 是基于 [mihomo](https://github.com/MetaCubeX/mihomo) 内核的 Windows
 
 ## 从根上原生
 
-### 主控
+Clash# 不是在模仿 Windows，而是用 Windows 本身提供的东西搭起来的。除了 WinUI 3 控件和 Fluent 设计，最先遇到的就是只有 Windows 才有的几样：磁贴、系统通知和通知区域。
 
-主控由一眼就像 Windows 的磁贴组成，显示内核状态、速率、流量、延迟、订阅用量与到期、公网 IP 等信息。磁贴可显示、隐藏与排序，并提供六套内置布局以便快速上手：缺省、较多、极简、技术向、广泛大众与全部磁贴。
+### 磁贴
+
+主控是一面磁贴墙，沿用 Windows 自开始菜单以来呈现实时信息的方式。每块磁贴是一条会自己更新的信息：内核状态、上传与下载速率、本次与累计流量、当前节点与延迟、活动连接、订阅用量与到期、DNS 设置、内核内存与运行时间、公网出口 IP 等。磁贴的行为也像磁贴：单击执行（例如运行连接测试、查询公网 IP），拖动调整顺序，右键或触摸长按打开它自己的菜单，比如“从主控取消固定”。一共有 74 块磁贴，并非都只是读数：有的带开关或操作，例如系统通知、登录时启动、主题、语言、导出与导入，主控因此也可以当控制面板用。
 
 <img src="./docs/assets/screenshots/zh-Hans/master.png" alt="主控页的磁贴" width="100%" />
+
+### 编辑磁贴与布局
+
+“编辑磁贴”打开原生的磁贴列表，带搜索和实时计数。可以先选一个“布局模板”：缺省、较多、极简、技术向、广泛大众或全部磁贴；再勾选想要的磁贴，用“全部显示”“全部隐藏”批量操作，或用“恢复推荐布局”回到起点。“保存为模板”保存你自己的布局，“删除所选模板”删除它，“恢复默认模板”找回内置模板。布局和模板属于可导出、导入的设置。
+
+<p align="center">
+<img src="./docs/assets/screenshots/zh-Hans/tiles-editor.png" alt="磁贴编辑器" width="49%" />&nbsp;<img src="./docs/assets/screenshots/zh-Hans/tiles-technical.png" alt="技术向布局" width="49%" />
+</p>
+
+### 通知
+
+<p align="center">
+<img src="./docs/assets/screenshots/zh-Hans/toast.png" alt="Clash# 发出的 Windows 通知" />
+</p>
+
+它们是真正的 Windows 系统 toast：出现在屏幕角落，也会留在通知中心。
+
+Clash# 告诉你发生了什么变化、涉及哪个对象、接下来该做什么，其余时间保持安静。“启用系统通知”是总开关，级别决定通知的多少：
+
+| 级别 | 会通知的内容 |
+| :--- | :--- |
+| **仅重要** | 内核意外停止、透明代理服务不可用、接管未能应用或验证、启动检查需要处理，以及当前订阅已到期或流量已用完。 |
+| **默认** | 上述内容，加上模式与透明代理变化、配置与节点选择、导入或更新失败、测试超时、触发器消息，以及当前订阅三天内到期或流量已用到 90%。 |
+| **详细** | 以上全部，加上导入、更新、导出与设置保存成功。 |
+
+订阅提醒每个阶段只发一次，续费或流量重置后重新开始。失败通知带有与页面相同的原因和支持代码，不必打开窗口也能知道原因。被动检查、已取消的操作与采样不会产生通知。
+
+<img src="./docs/assets/screenshots/zh-Hans/settings-notifications.png" alt="通知设置" width="100%" />
+
+### 通知区域
+
+托盘图标是真正的通知区域图标。右键菜单是 Windows 原生菜单，包含“状态”“模式”“页面”“透明代理”“设置”和“安全退出”，在 **设置 › 任务栏托盘** 里可以选择显示哪些项目以及它们的顺序。开启色彩状态指示后，图标的颜色能让你一眼看出当前状态；在从右到左的语言下，菜单会像 Windows 自己的菜单一样镜像。
+
+<p align="center">
+<img src="./docs/assets/screenshots/zh-Hans/tray-menu.png" alt="托盘菜单" />
+</p>
 
 ### 按 Windows 本来的方式使用系统机制
 
@@ -65,20 +103,6 @@ Clash# 是基于 [mihomo](https://github.com/MetaCubeX/mihomo) 内核的 Windows
 <img src="./docs/assets/screenshots/zh-Hans/master.png" alt="简体中文" width="24%" />&nbsp;<img src="./docs/assets/screenshots/zh-Hant/master.png" alt="繁體中文" width="24%" />&nbsp;<img src="./docs/assets/screenshots/en/master.png" alt="English" width="24%" />&nbsp;<img src="./docs/assets/screenshots/ru/master.png" alt="Русский" width="24%" />
 <img src="./docs/assets/screenshots/fr/master.png" alt="Français" width="24%" />&nbsp;<img src="./docs/assets/screenshots/de/master.png" alt="Deutsch" width="24%" />&nbsp;<img src="./docs/assets/screenshots/fa/master.png" alt="فارسی" width="24%" />&nbsp;<img src="./docs/assets/screenshots/ko/master.png" alt="한국어" width="24%" />
 </p>
-
-### 通知
-
-Clash# 告诉你发生了什么变化、涉及哪个对象、接下来该做什么，其余时间保持安静。“启用系统通知”是总开关，级别决定通知的多少：
-
-| 级别 | 会通知的内容 |
-| :--- | :--- |
-| **仅重要** | 内核意外停止、透明代理服务不可用、接管未能应用或验证、启动检查需要处理，以及当前订阅已到期或流量已用完。 |
-| **默认** | 上述内容，加上模式与透明代理变化、配置与节点选择、导入或更新失败、测试超时、触发器消息，以及当前订阅三天内到期或流量已用到 90%。 |
-| **详细** | 以上全部，加上导入、更新、导出与设置保存成功。 |
-
-订阅提醒每个阶段只发一次，续费或流量重置后重新开始。失败通知带有与页面相同的原因和支持代码，不必打开窗口也能知道原因。被动检查、已取消的操作与采样不会产生通知。
-
-<img src="./docs/assets/screenshots/zh-Hans/settings-notifications.png" alt="通知设置" width="100%" />
 
 ## Windows 功能一步到位
 

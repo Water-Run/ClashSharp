@@ -36,11 +36,49 @@ Clash# is a proxy client for Windows built on the [mihomo](https://github.com/Me
 
 ## Native from the root up
 
-### Master Control
+Clash# does not imitate Windows; it is built from what Windows provides. Beyond WinUI 3 controls and Fluent design, the first things you meet are the ones only Windows has: tiles, system notifications and the notification area.
 
-Master Control is built from tiles that read as Windows at a glance. They show core status, rates, traffic, latency, subscription usage and expiry, public IP and more. Tiles can be shown, hidden and reordered, and six built-in layouts give a quick start: Default, Extended, Minimal, Technical, General and All tiles.
+### Tiles
+
+Master Control is a wall of tiles, the way Windows has presented live information since the Start menu. Each tile is one fact that updates by itself: core status, upload and download rate, session and total traffic, current node and latency, active connections, subscription usage and expiry, DNS settings, core memory and uptime, the public egress IP and more. Tiles behave like tiles: click one to act (for example, run the connection test or look up the public IP), drag to rearrange, and right-click or touch and hold for its own commands such as *Unpin from dashboard*. There are 74 tiles in all, and not all are readouts: some hold switches and actions, such as notifications, launch at sign-in, theme, language, export and import, so the dashboard can double as a control panel.
 
 <img src="./docs/assets/screenshots/en/master.png" alt="Master Control tiles" width="100%" />
+
+### Edit tiles and layouts
+
+*Edit tiles* opens a native list of every tile, with search and a running count. Start from a *Layout preset*: Default, Extended, Minimal, Technical, General or All tiles. Then tick the tiles you want, use *Show all tiles* or *Hide all tiles*, or go back with *Restore recommended layout*. *Save as template* keeps your own layout, *Delete selected template* removes it and *Restore default templates* brings the built-in ones back. Layouts and templates are part of the settings you export and import.
+
+<p align="center">
+<img src="./docs/assets/screenshots/en/tiles-editor.png" alt="The tile editor" width="49%" />&nbsp;<img src="./docs/assets/screenshots/en/tiles-technical.png" alt="The Technical layout" width="49%" />
+</p>
+
+### Notifications
+
+<p align="center">
+<img src="./docs/assets/screenshots/en/toast.png" alt="A Windows notification from Clash#" />
+</p>
+
+They are real Windows toasts: they appear at the corner of the screen and stay in the notification center.
+
+Clash# tells you what changed, which object it concerned and what to do next, and it stays quiet otherwise. *Enable system notifications* turns them all on or off, and the level decides how much you hear:
+
+| Level | You are notified about |
+| :--- | :--- |
+| **Critical only** | The core stopped unexpectedly, the transparent-proxy service became unavailable, a takeover could not be applied or verified, a startup check needs action, or the active subscription has expired or used up its data. |
+| **Default** | The above, plus mode and transparent-proxy changes, profile and node selection, failed imports or updates, test timeouts, trigger messages, and an active subscription that expires within three days or has used 90% of its data. |
+| **More** | Everything above, plus successful imports, updates, exports and saved settings. |
+
+Each subscription reminder comes once per stage and starts over after a renewal or a quota reset. A failure notification carries the same reason and support code as the page, so you do not need to open the window to know why. Passive checks, canceled actions and sampling never notify.
+
+<img src="./docs/assets/screenshots/en/settings-notifications.png" alt="Notification settings" width="100%" />
+
+### The notification area
+
+The tray icon is a real notification-area icon. Its right-click menu is the native Windows menu, with *Status*, *Mode*, *Pages*, *Transparent proxy*, *Settings* and *Safe exit*, and under **Settings › Taskbar tray** you choose which entries appear and in what order. With the color status indicator on, the icon shows the state at a glance; in right-to-left languages the menu mirrors like Windows' own.
+
+<p align="center">
+<img src="./docs/assets/screenshots/en/tray-menu.png" alt="The tray menu" />
+</p>
 
 ### Windows mechanisms, used as designed
 
@@ -65,20 +103,6 @@ The interface switches language immediately; a few texts that Windows supplies, 
 <img src="./docs/assets/screenshots/zh-Hans/master.png" alt="简体中文" width="24%" />&nbsp;<img src="./docs/assets/screenshots/zh-Hant/master.png" alt="繁體中文" width="24%" />&nbsp;<img src="./docs/assets/screenshots/en/master.png" alt="English" width="24%" />&nbsp;<img src="./docs/assets/screenshots/ru/master.png" alt="Русский" width="24%" />
 <img src="./docs/assets/screenshots/fr/master.png" alt="Français" width="24%" />&nbsp;<img src="./docs/assets/screenshots/de/master.png" alt="Deutsch" width="24%" />&nbsp;<img src="./docs/assets/screenshots/fa/master.png" alt="فارسی" width="24%" />&nbsp;<img src="./docs/assets/screenshots/ko/master.png" alt="한국어" width="24%" />
 </p>
-
-### Notifications
-
-Clash# tells you what changed, which object it concerned and what to do next, and it stays quiet otherwise. *Enable system notifications* turns them all on or off, and the level decides how much you hear:
-
-| Level | You are notified about |
-| :--- | :--- |
-| **Critical only** | The core stopped unexpectedly, the transparent-proxy service became unavailable, a takeover could not be applied or verified, a startup check needs action, or the active subscription has expired or used up its data. |
-| **Default** | The above, plus mode and transparent-proxy changes, profile and node selection, failed imports or updates, test timeouts, trigger messages, and an active subscription that expires within three days or has used 90% of its data. |
-| **More** | Everything above, plus successful imports, updates, exports and saved settings. |
-
-Each subscription reminder comes once per stage and starts over after a renewal or a quota reset. A failure notification carries the same reason and support code as the page, so you do not need to open the window to know why. Passive checks, canceled actions and sampling never notify.
-
-<img src="./docs/assets/screenshots/en/settings-notifications.png" alt="Notification settings" width="100%" />
 
 ## Windows integration in one step
 

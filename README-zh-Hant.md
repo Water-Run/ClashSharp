@@ -36,11 +36,49 @@ Clash# 是基於 [mihomo](https://github.com/MetaCubeX/mihomo) 核心的 Windows
 
 ## 從根上原生
 
-### 主控
+Clash# 不是在模仿 Windows，而是用 Windows 本身提供的東西打造而成。除了 WinUI 3 控制項與 Fluent 設計，最先遇到的就是只有 Windows 才有的幾樣：磁貼、系統通知與通知區域。
 
-主控由一眼就像 Windows 的磁貼組成，顯示核心狀態、速率、流量、延遲、訂閱用量與到期、公網 IP 等資訊。磁貼可顯示、隱藏與排序，並提供六套內建佈局以便快速上手：預設、較多、極簡、技術向、廣泛大眾與全部磁貼。
+### 磁貼
+
+主控是一面磁貼牆，沿用 Windows 自開始功能表以來呈現即時資訊的方式。每塊磁貼是一則會自動更新的資訊：核心狀態、上傳與下載速率、本次與累計流量、目前節點與延遲、使用中連線、訂閱用量與到期、DNS 設定、核心記憶體與執行時間、公網出口 IP 等。磁貼的行為也像磁貼：點一下執行（例如執行連線測試、查詢公網 IP），拖曳調整順序，按右鍵或觸控長按開啟它自己的選單，例如「從主控取消固定」。共有 74 塊磁貼，並非都只是讀數：有的帶開關或操作，例如系統通知、登入時啟動、主題、語言、匯出與匯入，主控因此也能當控制面板使用。
 
 <img src="./docs/assets/screenshots/zh-Hant/master.png" alt="主控頁的磁貼" width="100%" />
+
+### 編輯磁貼與版面配置
+
+「編輯磁貼」會開啟原生的磁貼清單，附搜尋與即時計數。可先選一個「版面配置範本」：預設、較多、精簡、技術向、一般使用或所有磁貼；再勾選想要的磁貼，用「全部顯示」「全部隱藏」批次操作，或用「還原建議版面配置」回到起點。「儲存為範本」會保存你自己的版面，「刪除所選範本」將其刪除，「還原預設範本」找回內建範本。版面與範本屬於可匯出、匯入的設定。
+
+<p align="center">
+<img src="./docs/assets/screenshots/zh-Hant/tiles-editor.png" alt="磁貼編輯器" width="49%" />&nbsp;<img src="./docs/assets/screenshots/zh-Hant/tiles-technical.png" alt="技術向版面配置" width="49%" />
+</p>
+
+### 通知
+
+<p align="center">
+<img src="./docs/assets/screenshots/zh-Hant/toast.png" alt="Clash# 發出的 Windows 通知" />
+</p>
+
+它們是真正的 Windows toast 通知：出現在螢幕角落，也會留在通知中心。
+
+Clash# 告訴你發生了什麼變化、與哪個項目有關、接下來該做什麼，其餘時間保持安靜。「啟用系統通知」是總開關，級別決定通知的多寡：
+
+| 級別 | 會通知的內容 |
+| :--- | :--- |
+| **僅重要** | 核心意外停止、透明代理服務無法使用、接管未能套用或驗證、啟動檢查需要處理，以及目前訂閱已到期或流量已用完。 |
+| **預設** | 上述內容，加上模式與透明代理變更、設定檔與節點選擇、匯入或更新失敗、測試逾時、觸發器訊息，以及目前訂閱三天內到期或流量已用到 90%。 |
+| **詳細** | 以上全部，加上匯入、更新、匯出與設定儲存成功。 |
+
+訂閱提醒每個階段只發一次，續費或流量重置後重新開始。失敗通知帶有與頁面相同的原因和支援代碼，不必開啟視窗也能知道原因。被動檢查、已取消的操作與取樣不會產生通知。
+
+<img src="./docs/assets/screenshots/zh-Hant/settings-notifications.png" alt="通知設定" width="100%" />
+
+### 通知區域
+
+托盤圖示是真正的通知區域圖示。右鍵選單是 Windows 原生選單，包含「狀態」「模式」「頁面」「透明代理」「設定」與「安全結束」，並可在 **設定 › 工作列托盤** 選擇要顯示哪些項目與其順序。開啟色彩狀態指示後，圖示的顏色能讓你一眼看出目前狀態；在由右至左的語言下，選單會像 Windows 自己的選單一樣鏡像。
+
+<p align="center">
+<img src="./docs/assets/screenshots/zh-Hant/tray-menu.png" alt="托盤選單" />
+</p>
 
 ### 按 Windows 本來的方式使用系統機制
 
@@ -65,20 +103,6 @@ Clash# 是基於 [mihomo](https://github.com/MetaCubeX/mihomo) 核心的 Windows
 <img src="./docs/assets/screenshots/zh-Hans/master.png" alt="简体中文" width="24%" />&nbsp;<img src="./docs/assets/screenshots/zh-Hant/master.png" alt="繁體中文" width="24%" />&nbsp;<img src="./docs/assets/screenshots/en/master.png" alt="English" width="24%" />&nbsp;<img src="./docs/assets/screenshots/ru/master.png" alt="Русский" width="24%" />
 <img src="./docs/assets/screenshots/fr/master.png" alt="Français" width="24%" />&nbsp;<img src="./docs/assets/screenshots/de/master.png" alt="Deutsch" width="24%" />&nbsp;<img src="./docs/assets/screenshots/fa/master.png" alt="فارسی" width="24%" />&nbsp;<img src="./docs/assets/screenshots/ko/master.png" alt="한국어" width="24%" />
 </p>
-
-### 通知
-
-Clash# 告訴你發生了什麼變化、與哪個項目有關、接下來該做什麼，其餘時間保持安靜。「啟用系統通知」是總開關，級別決定通知的多寡：
-
-| 級別 | 會通知的內容 |
-| :--- | :--- |
-| **僅重要** | 核心意外停止、透明代理服務無法使用、接管未能套用或驗證、啟動檢查需要處理，以及目前訂閱已到期或流量已用完。 |
-| **預設** | 上述內容，加上模式與透明代理變更、設定檔與節點選擇、匯入或更新失敗、測試逾時、觸發器訊息，以及目前訂閱三天內到期或流量已用到 90%。 |
-| **詳細** | 以上全部，加上匯入、更新、匯出與設定儲存成功。 |
-
-訂閱提醒每個階段只發一次，續費或流量重置後重新開始。失敗通知帶有與頁面相同的原因和支援代碼，不必開啟視窗也能知道原因。被動檢查、已取消的操作與取樣不會產生通知。
-
-<img src="./docs/assets/screenshots/zh-Hant/settings-notifications.png" alt="通知設定" width="100%" />
 
 ## Windows 功能一步到位
 

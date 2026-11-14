@@ -95,7 +95,7 @@
 
 图片范围：截图用 `PrintWindow` 按软件窗口句柄绘制，**只含软件窗口本身**，不含桌面、任务栏、其他窗口和鼠标指针；窗口是固定尺寸的普通窗口（约 2560×1630 像素），不是全屏。原图四周有约 13 像素的窗口外框黑边，入库脚本统一裁掉；随后做 256 色无抖动量化，体积约为原图一半，目视无色带。波斯语 README 中的 `Clash#` 一律以 `&lrm;` 绑定，避免 GitHub 在从右到左段落里显示成 `#Clash`。
 
-脚本、README 草稿与已拍图片的备份在本地被 Git 忽略的 `artifacts/release-pass-20261110/`（含 `RESUME.md`），蓝机脚本保留在 `C:\ClashSharpValidationound9-20261110`。
+脚本、README 草稿与已拍图片的备份在本地被 Git 忽略的 `artifacts/release-pass-20261110/`（含 `RESUME.md`），蓝机脚本保留在 `C:\ClashSharpValidation\round9-20261110`。
 
 ## 已知问题与边界
 
