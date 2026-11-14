@@ -1,6 +1,6 @@
 # ClashSharp 开发文档
 
-当前交付为产品源码 `a6709ba0`：完整 CI **13,730／0／0**。最终内部候选 [43555383220](https://github.com/Water-Run/ClashSharp/actions/runs/43555383220) 已在蓝机装好并完成实机验收，桌面 `Clash#` 为同一版本；六份 README 与 116 张截图已入库。尚未重测覆盖率，其余边界见[本轮记录](reviews/2026-11-10-release-pass.md)。
+当前交付为产品源码 `a6709ba0`：完整 CI **13,730／0／0**。最终内部候选 [43555383220](https://github.com/Water-Run/ClashSharp/actions/runs/43555383220) 已在蓝机装好并完成实机验收，桌面 `Clash#` 为同一版本；六份 README 与 116 张截图已入库。覆盖率已在最终源码上重测，其余边界见[本轮记录](reviews/2026-11-10-release-pass.md)。
 
 | 入口 | 用途 |
 | --- | --- |
