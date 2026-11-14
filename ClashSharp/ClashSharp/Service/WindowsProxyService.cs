@@ -14,6 +14,17 @@ namespace ClashSharp.Service;
 /// </remarks>
 public sealed class WindowsProxyService
 {
+    /// <summary>
+    /// The WinINet exception list Clash# writes with its proxy: loopback and local names are never sent to the proxy.
+    /// Windows does not exempt <c>127.0.0.1</c>, <c>localhost</c> or <c>::1</c> when only <c>&lt;local&gt;</c> is listed, so clients
+    /// that honor the list (Python's <c>urllib</c> and <c>requests</c>, for example) would otherwise send local services,
+    /// including the MCP endpoint of this application, to the core.
+    /// </summary>
+    internal const string BypassList = "localhost;127.*;[::1];<local>";
+
+    /// <summary>The exception list earlier builds wrote; a leftover of theirs is still recognized as Clash#'s own.</summary>
+    internal const string LegacyBypassList = "<local>";
+
     /// <summary>Shared singleton instance created once at type initialization.</summary>
     /// <value>A non-null <see cref="WindowsProxyService"/> instance.</value>
     public static WindowsProxyService Instance { get; } = new(
@@ -117,7 +128,7 @@ public sealed class WindowsProxyService
             {
                 ProxyEnable = new WindowsProxyDwordValue(true, 1),
                 ProxyServer = new WindowsProxyStringValue(true, proxyServer, WindowsProxyStringKind.String),
-                ProxyOverride = new WindowsProxyStringValue(true, "<local>", WindowsProxyStringKind.String),
+                ProxyOverride = new WindowsProxyStringValue(true, BypassList, WindowsProxyStringKind.String),
                 AutoConfigUrl = new WindowsProxyStringValue(false, null, WindowsProxyStringKind.None),
             };
             WindowsProxyMutationJournal pendingJournal = new(
@@ -267,6 +278,7 @@ internal sealed record WindowsProxyOwnershipObservation(
         && Current.ProxyEnable == new WindowsProxyDwordValue(true, 1)
         && Current.ProxyServer.Exists && Current.ProxyServer.Kind == WindowsProxyStringKind.String
         && StringComparer.OrdinalIgnoreCase.Equals(Current.ProxyServer.Value, proxyServer)
-        && Current.ProxyOverride == new WindowsProxyStringValue(true, "<local>", WindowsProxyStringKind.String)
+        && (Current.ProxyOverride == new WindowsProxyStringValue(true, WindowsProxyService.BypassList, WindowsProxyStringKind.String)
+            || Current.ProxyOverride == new WindowsProxyStringValue(true, WindowsProxyService.LegacyBypassList, WindowsProxyStringKind.String))
         && Current.AutoConfigUrl == new WindowsProxyStringValue(false, null, WindowsProxyStringKind.None);
 }

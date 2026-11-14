@@ -5,6 +5,88 @@ namespace ClashSharp.Tests.Unit.Services;
 /// <summary>Unit tests for full WinINet baseline and ownership semantics.</summary>
 public sealed class WindowsProxyServiceTests
 {
+    /// <summary>
+    /// Every loopback form and every dotless local name must match the written exception list under WinINet's own
+    /// matching rules, so no client that honors the list sends a local service to the proxy.
+    /// </summary>
+    [Theory]
+    [InlineData("127.0.0.1")]
+    [InlineData("127.1.2.3")]
+    [InlineData("127.255.255.254")]
+    [InlineData("localhost")]
+    [InlineData("[::1]")]
+    [InlineData("intranet")]
+    public void EnableProxy_WritesAnExceptionListThatKeepsLocalTrafficOutOfTheProxy(string host)
+    {
+        FakeWindowsProxyRegistryStore registry = new(Snapshot(false, null, null, null));
+        WindowsProxyService service = new(registry, new FakeWindowsProxyMutationJournalStore());
+
+        service.EnableProxy("127.0.0.1:19090");
+
+        Assert.True(BypassesProxy(registry.Current.ProxyOverride.Value!, host), host);
+    }
+
+    /// <summary>A routable address must not be swallowed by the loopback entries.</summary>
+    [Theory]
+    [InlineData("128.0.0.1")]
+    [InlineData("192.168.1.10")]
+    [InlineData("example.com")]
+    [InlineData("12.7.0.1")]
+    public void EnableProxy_ExceptionListStillProxiesEverythingThatIsNotLocal(string host)
+    {
+        FakeWindowsProxyRegistryStore registry = new(Snapshot(false, null, null, null));
+        WindowsProxyService service = new(registry, new FakeWindowsProxyMutationJournalStore());
+
+        service.EnableProxy("127.0.0.1:19090");
+
+        Assert.False(BypassesProxy(registry.Current.ProxyOverride.Value!, host), host);
+    }
+
+    /// <summary>
+    /// A proxy that an earlier build applied and a crash left behind carries the old exception list; the new build
+    /// still recognizes it as its own, so recovery and the startup checks keep working across an upgrade.
+    /// </summary>
+    [Fact]
+    public void MatchesOwnedProxy_RecognizesTheTupleAnEarlierBuildApplied()
+    {
+        WindowsProxyRegistrySnapshot baseline = Snapshot(false, null, null, null);
+        WindowsProxyRegistrySnapshot applied = Snapshot(true, "127.0.0.1:19090", WindowsProxyService.LegacyBypassList, null);
+        WindowsProxyOwnershipObservation legacy = new(applied, new WindowsProxyMutationJournal(
+            WindowsProxyMutationJournal.CurrentSchemaVersion, baseline, applied));
+        WindowsProxyRegistrySnapshot current = Snapshot(true, "127.0.0.1:19090", WindowsProxyService.BypassList, null);
+        WindowsProxyOwnershipObservation modern = new(current, new WindowsProxyMutationJournal(
+            WindowsProxyMutationJournal.CurrentSchemaVersion, baseline, current));
+        WindowsProxyRegistrySnapshot foreign = Snapshot(true, "127.0.0.1:19090", "localhost;corp.example", null);
+        WindowsProxyOwnershipObservation unrelated = new(foreign, new WindowsProxyMutationJournal(
+            WindowsProxyMutationJournal.CurrentSchemaVersion, baseline, foreign));
+
+        Assert.True(legacy.MatchesOwnedProxy("127.0.0.1:19090"));
+        Assert.True(modern.MatchesOwnedProxy("127.0.0.1:19090"));
+        Assert.False(unrelated.MatchesOwnedProxy("127.0.0.1:19090"));
+    }
+
+    /// <summary>WinINet matching of one host against an exception list: ';' separates entries, '*' is a wildcard, and
+    /// &lt;local&gt; matches names without a dot. This independent oracle does not reuse the production constant.</summary>
+    private static bool BypassesProxy(string list, string host)
+    {
+        foreach (string entry in list.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (entry == "<local>")
+            {
+                if (!host.Contains('.', StringComparison.Ordinal) && !host.StartsWith('[')) { return true; }
+                continue;
+            }
+
+            string pattern = "^" + System.Text.RegularExpressions.Regex.Escape(entry).Replace("\\*", ".*", StringComparison.Ordinal) + "$";
+            if (System.Text.RegularExpressions.Regex.IsMatch(host, pattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     [Theory]
     [InlineData(false, null)]
     [InlineData(true, "corporate.example:8080")]
@@ -117,7 +199,7 @@ public sealed class WindowsProxyServiceTests
         WindowsProxyService service = new(registry, journal);
 
         service.EnableProxy("127.0.0.1:19090");
-        Assert.Equal("<local>", registry.Current.ProxyOverride.Value);
+        Assert.Equal(WindowsProxyService.BypassList, registry.Current.ProxyOverride.Value);
         Assert.False(registry.Current.AutoConfigUrl.Exists);
         service.DisableProxy();
 
