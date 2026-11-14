@@ -9,7 +9,7 @@
 | 项目 | 结果 |
 | --- | --- |
 | 产品源码 | `a6709ba0530c2a64ebc9bfee4ef54d5381e29712`，已推送 main（其后只有文档提交） |
-| 完整 CI | [43553428136](https://github.com/Water-Run/ClashSharp/actions/runs/43553428136)：主程序 7,204、安装器核心 4,291、表示层 402、Windows 适配层 1,833，共 13,730，0 失败、0 跳过；离线安装包任务同样成功 |
+| 完整 CI | [43553428136](https://github.com/Water-Run/ClashSharp/actions/runs/43553428136)：主程序 7,204、安装器核心 4,291、表示层 402、Windows 适配层 1,833，共 13,730，0 失败、0 跳过；离线安装包任务同样成功。其后新增固定指纹自签名正式版配置的提交 `8eed4f3f` 的 [CI 43654053416](https://github.com/Water-Run/ClashSharp/actions/runs/43654053416) 同样全绿：主程序 7,204、安装器核心 4,291、表示层 402、Windows 适配层 1,857（新增 24 项），共 13,754，0 失败、0 跳过，覆盖率下限全部成立 |
 | 最终内部候选 | [43555383220](https://github.com/Water-Run/ClashSharp/actions/runs/43555383220)，对应 `a6709ba0`。制品 14098815566，Setup `ED50D8C9B1AF1FB5A49DB120FD9855B7E7F7F1E327520F263AC85BAE3DDD10CE`，身份 `65c30d29…`。测试签名，不是正式发布包 |
 | 蓝机已装 | 上面的最终候选，用户数据已还原，应用和服务运行中，核心状态与代理模式按用户自己的设置（没有替用户改任何设置） |
 | 桌面交付 | `Desktop\Clash#` 现为最终候选的完整解压布局（11 个文件，`Setup.exe` 在根部，无 ZIP）。上一次的交付目录原样移到蓝机 `C:\ClashSharpValidation\round10-20261114\desktop-original`，没有删除 |
@@ -43,13 +43,13 @@
 
 完整 CI 用例数（0 失败、0 跳过）：
 
-| 测试项目 | 基线 `b2dd482e` | 本轮 `a6709ba0` |
+| 测试项目 | 基线 `b2dd482e` | 本轮 `8eed4f3f` |
 | --- | ---: | ---: |
 | 主程序 `ClashSharp.Tests` | 5,052 | 7,204 |
 | 安装器核心 `ClashSharp.Installer.Tests` | 1,141 | 4,291 |
 | 安装器表示层 `ClashSharp.Installer.Presentation.Tests` | 240 | 402 |
-| 安装器 Windows 适配层 `ClashSharp.Installer.Windows.Tests` | 1,403 | 1,833 |
-| 合计 | 7,836 | 13,730 |
+| 安装器 Windows 适配层 `ClashSharp.Installer.Windows.Tests` | 1,403 | 1,857 |
+| 合计 | 7,836 | 13,754 |
 
 新增约 94 个测试文件、约 3.7 万行测试代码。方法以契约为主，不钉单个事故样例：
 
