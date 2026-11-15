@@ -242,6 +242,7 @@ public sealed class RepositoryTopologyTests
             "ClashSharp.SettingsProbe",
             "ClashSharp.StartupProbe",
             "ClashSharp.TriggerProbe",
+            "ClashSharp.DialogProbe",
         ];
 
         foreach (string probeName in probeNames)

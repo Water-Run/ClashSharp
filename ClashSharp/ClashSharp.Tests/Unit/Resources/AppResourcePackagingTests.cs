@@ -3130,7 +3130,8 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("XamlRoot = GetDialogXamlRoot()", settingsCode, StringComparison.Ordinal);
         Assert.Contains("HorizontalAlignment=\"Center\"", guideXaml, StringComparison.Ordinal);
         Assert.Contains("VerticalAlignment=\"Center\"", guideXaml, StringComparison.Ordinal);
-        Assert.Contains("GuideContent.Width = Math.Clamp(root.Size.Width - 96, 240, 640)", guideCode, StringComparison.Ordinal);
+        Assert.Contains("DialogViewport.GetAvailableSize(root)", guideCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("root.Size.Width", guideCode, StringComparison.Ordinal);
         // Let native measurement reserve the actual scaled header/title/footer, rather than
         // estimating their height from the window. The remaining row must constrain scrolling.
         XNamespace presentation = "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
@@ -3162,7 +3163,7 @@ public sealed class AppResourcePackagingTests
             StringComparison.Ordinal);
         Assert.DoesNotContain("CenteredDialogOverlay", guideCode, StringComparison.Ordinal);
         Assert.Contains(
-            "WindowDialogCoordinator.ShowAsync(dialog, cancellationToken)",
+            "WindowDialogCoordinator.ShowAsync(dialog, xamlRoot, cancellationToken)",
             guidePresenterCode,
             StringComparison.Ordinal);
         Assert.Contains(
@@ -3176,7 +3177,8 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("ThemedContentDialog dialog = new()", overlayCode, StringComparison.Ordinal);
         Assert.Contains("XamlRoot = xamlRoot", overlayCode, StringComparison.Ordinal);
         Assert.Contains("ContentDialogMaxWidth", overlayCode, StringComparison.Ordinal);
-        Assert.Contains("body.MaxHeight = Math.Max(120, xamlRoot.Size.Height - 240)", overlayCode, StringComparison.Ordinal);
+        Assert.Contains("DialogViewport.GetAvailableSize(xamlRoot)", overlayCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("xamlRoot.Size.Height", overlayCode, StringComparison.Ordinal);
         Assert.Contains("await dialog.ShowManagedAsync(cancellationToken)", overlayCode, StringComparison.Ordinal);
         Assert.Contains("MaxHeight = Math.Min(420", presenterCode, StringComparison.Ordinal);
     }

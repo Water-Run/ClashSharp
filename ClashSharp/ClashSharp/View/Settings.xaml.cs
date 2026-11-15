@@ -596,13 +596,13 @@ public sealed partial class Settings : Page, ILocalizedPresentation
                 HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
                 VerticalScrollMode = ScrollMode.Enabled,
                 VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-                MaxHeight = Math.Max(160, xamlRoot.Size.Height - 200),
+                MaxHeight = Math.Max(1, DialogViewport.GetAvailableSize(xamlRoot).Height - 200),
             };
             AutomationProperties.SetAutomationId(pickerScroll, "AccentColorScrollViewer");
             // Keep room for the native title and action row. An unconstrained child measure
             // lets the picker expose all channels instead of clipping its final input rows.
             void UpdatePickerViewport(XamlRoot sender, XamlRootChangedEventArgs args) =>
-                pickerScroll.MaxHeight = Math.Max(160, sender.Size.Height - 200);
+                pickerScroll.MaxHeight = Math.Max(1, DialogViewport.GetAvailableSize(sender).Height - 200);
 
             ThemedContentDialog dialog = new()
             {
@@ -611,7 +611,7 @@ public sealed partial class Settings : Page, ILocalizedPresentation
                 PrimaryButtonText = _viewModel.AppAccentColorPickText,
                 CloseButtonText = _getString("Command.Cancel"),
                 DefaultButton = ContentDialogButton.Primary,
-                XamlRoot = xamlRoot,
+                OwnerXamlRoot = xamlRoot,
             };
             dialog.Resources["ContentDialogMaxWidth"] = 420d;
             dialog.Localize(() =>
@@ -656,7 +656,7 @@ public sealed partial class Settings : Page, ILocalizedPresentation
                 PrimaryButtonText = _getString("Command.Save"),
                 CloseButtonText = _getString("Command.Cancel"),
                 DefaultButton = ContentDialogButton.Primary,
-                XamlRoot = GetDialogXamlRoot(),
+                OwnerXamlRoot = GetDialogXamlRoot(),
             };
             dialog.Content = BuildConnectionTestUrlsPanel(
                 dialog, proxyUrl1Box, proxyUrl2Box, directUrlBox, validationError);
@@ -829,7 +829,7 @@ public sealed partial class Settings : Page, ILocalizedPresentation
             PrimaryButtonText = _viewModel.ResetGroupToDefaultsText,
             CloseButtonText = _getString("Command.Cancel"),
             DefaultButton = ContentDialogButton.Close,
-            XamlRoot = GetDialogXamlRoot(),
+            OwnerXamlRoot = GetDialogXamlRoot(),
         };
         dialog.Localize(() =>
         {
@@ -889,7 +889,7 @@ public sealed partial class Settings : Page, ILocalizedPresentation
                 PrimaryButtonText = _getString("Command.Save"),
                 CloseButtonText = _getString("Command.Cancel"),
                 DefaultButton = ContentDialogButton.Primary,
-                XamlRoot = GetDialogXamlRoot(),
+                OwnerXamlRoot = GetDialogXamlRoot(),
             };
 
             optionList.SelectionChanged += (_, _) => dialog.IsPrimaryButtonEnabled = optionList.SelectedOptions.Count > 0;
@@ -1043,7 +1043,7 @@ public sealed partial class Settings : Page, ILocalizedPresentation
             Content = panel,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
-            MaxHeight = Math.Max(240, XamlRoot.Size.Height - 220),
+            MaxHeight = Math.Max(1, DialogViewport.GetAvailableSize(GetDialogXamlRoot()).Height - 220),
             Padding = new Thickness(0, 0, 12, 0),
         };
     }
@@ -1267,7 +1267,7 @@ public sealed partial class Settings : Page, ILocalizedPresentation
             PrimaryButtonText = _mcp.ManualCopyButtonText,
             CloseButtonText = _getString("Command.Close"),
             DefaultButton = ContentDialogButton.Primary,
-            XamlRoot = GetDialogXamlRoot(),
+            OwnerXamlRoot = GetDialogXamlRoot(),
         };
         dialog.Localize(() =>
         {
@@ -1326,7 +1326,7 @@ public sealed partial class Settings : Page, ILocalizedPresentation
             PrimaryButtonText = primaryButtonText,
             CloseButtonText = _getString("Command.Cancel"),
             DefaultButton = ContentDialogButton.Close,
-            XamlRoot = GetDialogXamlRoot(),
+            OwnerXamlRoot = GetDialogXamlRoot(),
         };
 
         return await dialog.ShowManagedAsync(cancellationToken) is ContentDialogResult.Primary;

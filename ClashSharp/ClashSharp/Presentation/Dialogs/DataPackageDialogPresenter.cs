@@ -220,7 +220,7 @@ internal sealed class DataPackageDialogPresenter
         CancellationToken cancellationToken)
     {
         ThemedContentDialog dialog = CreateDialog(xamlRoot);
-        StackPanel panel = new() { Spacing = 12, Width = Math.Clamp(xamlRoot.Size.Width - 144, 320, 600) };
+        StackPanel panel = new() { Spacing = 12, Width = Math.Max(1, Math.Min(DialogViewport.GetAvailableSize(xamlRoot).Width - 144, 600)) };
         TextBlock introduction = new()
         {
             TextWrapping = TextWrapping.WrapWholeWords,
@@ -267,7 +267,7 @@ internal sealed class DataPackageDialogPresenter
         scopeSelector.SelectedIndex = 0;
         panel.Children.Add(scopeSelector);
 
-        dialog.Content = new ScrollViewer { Content = panel, MaxHeight = Math.Max(160, xamlRoot.Size.Height - 240) };
+        dialog.Content = new ScrollViewer { Content = panel, MaxHeight = Math.Max(1, DialogViewport.GetAvailableSize(xamlRoot).Height - 240) };
         dialog.DefaultButton = ContentDialogButton.Primary;
         dialog.Localize(() =>
         {
@@ -333,7 +333,7 @@ internal sealed class DataPackageDialogPresenter
 
     private static ThemedContentDialog CreateDialog(XamlRoot xamlRoot)
     {
-        ThemedContentDialog dialog = new() { XamlRoot = xamlRoot };
+        ThemedContentDialog dialog = new() { OwnerXamlRoot = xamlRoot };
         dialog.Resources["ContentDialogMinWidth"] = 0d;
         dialog.Resources["ContentDialogMaxWidth"] = 688d;
         return dialog;

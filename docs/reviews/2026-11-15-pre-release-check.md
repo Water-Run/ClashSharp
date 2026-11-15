@@ -2,9 +2,9 @@
 
 ## 当前结论
 
-产品修复已推送 main，提交 `97150e787e32b1b22e07c88456611e81246876b4`。完整 CI 的 13,754 项测试全部通过，零失败、零跳过；正式签名 ZIP 已生成并核对全部归档字节。完整安装器的沙盒启动验收还等待 UI 安装确认，未将这一项记为通过。没有在宿主系统安装 Clash#，没有发布 GitHub Release。
+首轮安全修复提交 `97150e787e32b1b22e07c88456611e81246876b4` 的完整 CI 共 13,754 项测试全部通过，零失败、零跳过。用户随后批准了完整安装器的沙盒安装，安装、服务部署及启动验收通过。试装时指出的弹窗尺寸问题已继续修复，见[独立模态窗口记录](2026-11-15-dialog-screen-bounds.md)；首轮 ZIP 已被这次修复后的交付替代。没有在宿主系统安装 Clash#，没有发布 GitHub Release。
 
-本轮沿用维护者已接受的长期自签名发行方案和[上一轮验收边界](2026-11-10-release-pass.md)。产品 C# 逻辑没有改动；本轮更新了内置 Mihomo、对应源码材料、发布检查脚本及资源契约测试。
+本轮沿用维护者已接受的长期自签名发行方案和[上一轮验收边界](2026-11-10-release-pass.md)。本轮更新了内置 Mihomo、对应源码材料、发布检查脚本及资源契约测试，并将共用 ContentDialog 改为独立的原生模态宿主，尺寸按显示器工作区和 DPI 计算。
 
 ## 发现与修复
 
@@ -59,7 +59,7 @@
 - 最终 `Setup.exe --verify-payload`：passed，版本 1.0.0.0，4 个载荷文件、7 个机器文件条目，stderr 为空。
 - 单独复制成品并篡改公开 CER 的一个字节：同一最终 Setup 的只读入口退出 3，正确拒绝；正式交付目录未改变。
 - 干净沙盒 `install-only`：依赖、主包注册、包身份及全部清理通过。
-- 原 `launch-no-proxy` 脚本只注册 MSIX，未经过完整安装器建立服务关联；应用报告 `service.provisioning.association_missing`，脚本正确判失败而非把错误窗口当作成功启动。因此另外准备完整 Setup 沙盒验收，已观察到安装器显示“可以安装”；尚未点击安装，等待 UI 安装操作确认。该临时客体已关闭并核对准确的会话 ID 不再存在，避免留下无人值守的沙盒；确认后可用同一冻结 ZIP 重新建立。证据：`full-installer-sandbox/reports/ready.json`、`full-installer-sandbox/host-pending-result.json`。
+- 原 `launch-no-proxy` 脚本只注册 MSIX，未经过完整安装器建立服务关联；应用报告 `service.provisioning.association_missing`，脚本正确判失败而非把错误窗口当作成功启动。用户批准后已用首轮准确的正式 ZIP 完成真实 Setup 安装：`ClashSharpMihomo` 运行，主窗口稳定 31,325ms，credential/window/pipeline 完成各一次、启动失败为 0，已安装内核摘要匹配；证书只在 TrustedPeople、未进入 Root。客体 `4b6a3d26-bbfa-4b1b-8485-8b40c4c21eff` 已销毁。证据：`full-installer-sandbox-approved-20261115/reports/verified-result.json`、同目录上层 `host-result.json`。这份证据绑定首轮安装器，后续弹窗修复另有原生后台验证，不能混称为最终 ZIP 的再次人工安装。
 
 交付文件：
 

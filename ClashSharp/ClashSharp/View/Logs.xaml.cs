@@ -354,7 +354,7 @@ public sealed partial class Logs : Page
             CloseButtonText = _getString("Command.Cancel"),
             DefaultButton = ContentDialogButton.Close,
             IsPrimaryButtonEnabled = false,
-            XamlRoot = XamlRoot,
+            OwnerXamlRoot = XamlRoot,
         };
         // Size the dialog surface without constraining the full-window popup host.
         dialog.Resources["ContentDialogMaxWidth"] = 720d;

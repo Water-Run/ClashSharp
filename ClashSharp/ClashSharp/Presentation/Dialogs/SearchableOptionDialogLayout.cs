@@ -14,11 +14,11 @@ internal sealed class SearchableOptionDialogLayout : IDisposable
     private readonly SearchableOptionList _content;
     private readonly XamlRoot _root;
 
-    public SearchableOptionDialogLayout(ContentDialog dialog, SearchableOptionList content)
+    public SearchableOptionDialogLayout(ThemedContentDialog dialog, SearchableOptionList content)
     {
         _dialog = dialog;
         _content = content;
-        _root = dialog.XamlRoot ?? throw new ArgumentException("The dialog must have a XamlRoot.", nameof(dialog));
+        _root = dialog.OwnerXamlRoot ?? throw new ArgumentException("The dialog must have an owning XamlRoot.", nameof(dialog));
         UpdateBounds();
         _root.Changed += Root_Changed;
     }
@@ -32,7 +32,8 @@ internal sealed class SearchableOptionDialogLayout : IDisposable
 
     private void UpdateBounds()
     {
-        double width = Math.Clamp(_root.Size.Width - 96, 280, 560);
+        var available = DialogViewport.GetAvailableSize(_root);
+        double width = Math.Max(1, Math.Min(available.Width - 96, 560));
         if (_content.Width != width)
         {
             _content.Width = width;
@@ -40,6 +41,6 @@ internal sealed class SearchableOptionDialogLayout : IDisposable
         }
         double headerHeight = string.IsNullOrWhiteSpace(_content.SearchHeader) ? 0 : 32;
         double reorderHintHeight = _content.MeasureReorderHintHeight(width);
-        _content.MaxListHeight = Math.Clamp(_root.Size.Height - VerticalChrome - headerHeight - reorderHintHeight, 80, 360);
+        _content.MaxListHeight = Math.Max(1, Math.Min(available.Height - VerticalChrome - headerHeight - reorderHintHeight, 360));
     }
 }

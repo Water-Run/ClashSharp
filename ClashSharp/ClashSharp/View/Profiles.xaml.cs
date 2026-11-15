@@ -184,7 +184,7 @@ public sealed partial class Profiles : Page
                 PrimaryButtonText = _getString("Command.Save"),
                 CloseButtonText = _getString("Command.Cancel"),
                 DefaultButton = ContentDialogButton.Primary,
-                XamlRoot = XamlRoot,
+                OwnerXamlRoot = XamlRoot,
             };
             dialog.Localize(() =>
             {
@@ -229,7 +229,7 @@ public sealed partial class Profiles : Page
                 PrimaryButtonText = _getString("Command.Delete"),
                 CloseButtonText = _getString("Command.Cancel"),
                 DefaultButton = ContentDialogButton.Close,
-                XamlRoot = XamlRoot,
+                OwnerXamlRoot = XamlRoot,
             };
             dialog.Localize(() =>
             {
@@ -307,7 +307,7 @@ public sealed partial class Profiles : Page
                 CloseButtonText = _getString("Command.Close"),
                 IsPrimaryButtonEnabled = SelectedRestorableHistory(versionList) is not null,
                 DefaultButton = ContentDialogButton.Close,
-                XamlRoot = XamlRoot,
+                OwnerXamlRoot = XamlRoot,
             };
             dialog.Localize(() =>
             {

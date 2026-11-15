@@ -62,10 +62,7 @@ internal sealed class StartupGuidePresenter : IStartupGuidePresenter
                 await _checks.GetChecksAsync(cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
 
-            StartupGuideDialog dialog = new(checks, _getString, _navigate is not null)
-            {
-                XamlRoot = xamlRoot,
-            };
+            StartupGuideDialog dialog = new(checks, _getString, _navigate is not null);
             using CancellationTokenSource refreshLifetime = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             AsyncRelayCommand refresh = new(async _ =>
             {
@@ -94,7 +91,7 @@ internal sealed class StartupGuidePresenter : IStartupGuidePresenter
             dialog.SetRefreshCommand(refresh);
             try
             {
-                _ = await WindowDialogCoordinator.ShowAsync(dialog, cancellationToken);
+                _ = await WindowDialogCoordinator.ShowAsync(dialog, xamlRoot, cancellationToken);
             }
             finally
             {

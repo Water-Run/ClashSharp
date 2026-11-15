@@ -41,14 +41,12 @@ public sealed partial class MasterControl : Page
     private const double HeroStatusHorizontalMargin = 10;
     private const double MinHeroStatusItemWidth = 120;
     private const double PreferredHeroStatusItemWidth = 220;
-    private const double HeroStatusEditorMinListHeight = 80;
     private const double HeroStatusEditorMaxListHeight = 420;
     private const double HeroStatusEditorVerticalChrome = 220;
     private const double MinInfoTileWidth = 220;
     private const double PreferredInfoTileWidth = 280;
     private const double InfoTileHorizontalMargin = 10;
     private const int MaxInfoTileColumns = 4;
-    private const double InfoTileEditorMinWidth = 420;
     private const double InfoTileEditorPreferredWidth = 620;
     private const double InfoTileEditorHorizontalChrome = 96;
     private const double InfoTileEditorMinListHeight = 80;
@@ -235,15 +233,16 @@ public sealed partial class MasterControl : Page
         if (sender is not FrameworkElement || lifetime is null || !_dataReady) { return; }
         XamlRoot visualRoot = GetDialogXamlRoot();
         StackPanel content = BuildHeroStatusEditorContent(out ScrollViewer slotScroller);
-        ThemedContentDialog dialog = new() { XamlRoot = visualRoot, Content = content };
+        ThemedContentDialog dialog = new() { OwnerXamlRoot = visualRoot, Content = content };
         dialog.Resources["ContentDialogMinWidth"] = 0d;
         dialog.Resources["ContentDialogMaxWidth"] = 688d;
         void MeasureBounds()
         {
-            content.Width = Math.Min(560, Math.Max(1, visualRoot.Size.Width - 96));
+            var available = DialogViewport.GetAvailableSize(visualRoot);
+            content.Width = Math.Min(560, Math.Max(1, available.Width - 96));
             content.Measure(new Size(content.Width, double.PositiveInfinity));
             double chrome = Math.Max(0, content.DesiredSize.Height - slotScroller.DesiredSize.Height);
-            slotScroller.MaxHeight = Math.Max(1, Math.Min(HeroStatusEditorMaxListHeight, visualRoot.Size.Height - 240 - chrome));
+            slotScroller.MaxHeight = Math.Max(1, Math.Min(HeroStatusEditorMaxListHeight, available.Height - 240 - chrome));
         }
         void UpdateBounds(XamlRoot root, XamlRootChangedEventArgs args) => MeasureBounds();
         dialog.Localize(() =>
@@ -460,9 +459,9 @@ public sealed partial class MasterControl : Page
         ThemedContentDialog dialog = new()
         {
             Title = _getString(update ? "About.Update.Title" : publicIp ? "Master.Tile.PublicIp" : "Master.Tile.ConnectionTest"),
-            Content = new ScrollViewer { Content = content, MaxHeight = Math.Max(160, GetDialogXamlRoot().Size.Height - 240) },
+            Content = new ScrollViewer { Content = content, MaxHeight = Math.Max(1, DialogViewport.GetAvailableSize(GetDialogXamlRoot()).Height - 240) },
             CloseButtonText = _getString("Command.Cancel"),
-            XamlRoot = GetDialogXamlRoot(),
+            OwnerXamlRoot = GetDialogXamlRoot(),
         };
         Task operation = Task.CompletedTask;
         dialog.Opened += OnOpened;
@@ -578,7 +577,7 @@ public sealed partial class MasterControl : Page
             Title = _getString("Master.LatencyDialog.Title"),
             Content = content,
             CloseButtonText = _getString("Command.Cancel"),
-            XamlRoot = GetDialogXamlRoot(),
+            OwnerXamlRoot = GetDialogXamlRoot(),
         };
 
         Task latencyTask = Task.CompletedTask;
@@ -1116,7 +1115,7 @@ public sealed partial class MasterControl : Page
             PrimaryButtonText = _getString("Command.Save"),
             CloseButtonText = _getString("Command.Cancel"),
             DefaultButton = ContentDialogButton.Primary,
-            XamlRoot = dialogRoot,
+            OwnerXamlRoot = dialogRoot,
         };
         dialog.Resources["ContentDialogMaxWidth"] = editorWidth + InfoTileEditorDialogFrame;
 
@@ -1373,10 +1372,8 @@ public sealed partial class MasterControl : Page
 
     private static double CalculateInfoTilesEditorWidth(XamlRoot dialogRoot)
     {
-        double availableWidth = dialogRoot.Size.Width > 0
-            ? dialogRoot.Size.Width - InfoTileEditorHorizontalChrome
-            : InfoTileEditorPreferredWidth;
-        return Math.Clamp(availableWidth, InfoTileEditorMinWidth, InfoTileEditorPreferredWidth);
+        double availableWidth = DialogViewport.GetAvailableSize(dialogRoot).Width - InfoTileEditorHorizontalChrome;
+        return Math.Max(1, Math.Min(availableWidth, InfoTileEditorPreferredWidth));
     }
 
     private static double CalculateInfoTilesEditorListHeight(
@@ -1388,21 +1385,15 @@ public sealed partial class MasterControl : Page
         // must reduce the scrolling list, rather than push the dialog into the title bar.
         content.Measure(new Size(content.Width, double.PositiveInfinity));
         double contentChrome = Math.Max(0, content.DesiredSize.Height - optionList.MaxListHeight);
-        double availableHeight = dialogRoot.Size.Height > 0
-            ? Math.Min(dialogRoot.Size.Height, InfoTileEditorMaxDialogHeight) - InfoTileEditorWindowChrome - contentChrome
-            : InfoTileEditorMinListHeight;
-        return Math.Clamp(availableHeight, InfoTileEditorMinListHeight, InfoTileEditorMaxListHeight);
+        double availableHeight = Math.Min(DialogViewport.GetAvailableSize(dialogRoot).Height, InfoTileEditorMaxDialogHeight)
+            - InfoTileEditorWindowChrome - contentChrome;
+        return Math.Max(1, Math.Min(availableHeight, InfoTileEditorMaxListHeight));
     }
 
     private static double CalculateHeroStatusEditorListHeight(XamlRoot dialogRoot)
     {
-        double availableHeight = dialogRoot.Size.Height > 0
-            ? dialogRoot.Size.Height - HeroStatusEditorVerticalChrome
-            : HeroStatusEditorMaxListHeight;
-        return Math.Clamp(
-            availableHeight,
-            HeroStatusEditorMinListHeight,
-            HeroStatusEditorMaxListHeight);
+        double availableHeight = DialogViewport.GetAvailableSize(dialogRoot).Height - HeroStatusEditorVerticalChrome;
+        return Math.Max(1, Math.Min(availableHeight, HeroStatusEditorMaxListHeight));
     }
 
     private void RootScrollViewer_SizeChanged(object sender, SizeChangedEventArgs e)

@@ -177,7 +177,7 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
         _trayCommandService = trayCommandService ?? throw new ArgumentNullException(nameof(trayCommandService));
         _startupConflicts = startupConflicts ?? throw new ArgumentNullException(nameof(startupConflicts));
         _runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
-        notifications?.SetForegroundProbe(() => Volatile.Read(ref _isForegroundActive));
+        notifications?.SetForegroundProbe(() => Volatile.Read(ref _isForegroundActive) || WindowDialogCoordinator.IsDialogForeground);
         _notificationRegistration = notifications?.Register(() =>
             DispatcherQueue.TryEnqueue(() => PrimaryWindowActivation.BringToFront(this)));
         if (_windowPlacementView is not null)
@@ -886,7 +886,7 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
             PrimaryButtonText = Runtime.GetString("Command.Close"),
             CloseButtonText = Runtime.GetString("Command.Cancel"),
             DefaultButton = ContentDialogButton.Close,
-            XamlRoot = GetDialogXamlRoot(),
+            OwnerXamlRoot = GetDialogXamlRoot(),
         };
         dialog.Localize(() =>
         {

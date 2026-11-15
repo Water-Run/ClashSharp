@@ -129,7 +129,7 @@ public sealed partial class About : Page
         {
             Title = _viewModel.ProxyInformationTitleText,
             CloseButtonText = _getString("Command.Close"),
-            XamlRoot = XamlRoot,
+            OwnerXamlRoot = XamlRoot,
         };
         dialog.Content = BuildProxyInformationPanel(dialog);
         dialog.Localize(() =>

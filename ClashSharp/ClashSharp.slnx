@@ -44,4 +44,7 @@
   <Project Path="ClashSharp.SettingsProbe/ClashSharp.SettingsProbe.csproj">
     <Platform Project="x64" />
   </Project>
+  <Project Path="ClashSharp.DialogProbe/ClashSharp.DialogProbe.csproj">
+    <Platform Project="x64" />
+  </Project>
 </Solution>

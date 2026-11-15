@@ -735,7 +735,7 @@ public partial class App : Microsoft.UI.Xaml.Application
                     Content = maintenanceMessage,
                     CloseButtonText = maintenanceClose,
                     DefaultButton = ContentDialogButton.Close,
-                    XamlRoot = root.XamlRoot,
+                    OwnerXamlRoot = root.XamlRoot,
                 };
                 await dialog.ShowManagedAsync();
             }

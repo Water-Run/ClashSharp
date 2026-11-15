@@ -35,7 +35,7 @@ internal static class CenteredDialogOverlay
         };
         ThemedContentDialog dialog = new()
         {
-            XamlRoot = xamlRoot,
+            OwnerXamlRoot = xamlRoot,
             Title = title,
             Content = body,
             CloseButtonText = closeButtonText,
@@ -47,10 +47,10 @@ internal static class CenteredDialogOverlay
 
         void UpdateBounds(XamlRoot sender, XamlRootChangedEventArgs args)
         {
-            body.MaxHeight = Math.Max(120, xamlRoot.Size.Height - 240);
+            body.MaxHeight = Math.Max(1, DialogViewport.GetAvailableSize(xamlRoot).Height - 240);
         }
 
-        body.MaxHeight = Math.Max(120, xamlRoot.Size.Height - 240);
+        body.MaxHeight = Math.Max(1, DialogViewport.GetAvailableSize(xamlRoot).Height - 240);
         xamlRoot.Changed += UpdateBounds;
         try
         {

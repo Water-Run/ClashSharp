@@ -22,6 +22,29 @@ public sealed class DialogPresentationArchitectureTests
         "ClashSharp",
         "ClashSharp");
 
+    [Fact]
+    public void ModalDialogsUseOwnedNativeWindowsAndMonitorWorkAreas()
+    {
+        string host = ReadApplicationSource("Presentation", "Dialogs", "OwnedDialogHost.cs");
+        string coordinator = ReadApplicationSource("Presentation", "Dialogs", "WindowDialogCoordinator.cs");
+        string viewport = ReadApplicationSource("Presentation", "Dialogs", "DialogViewport.cs");
+        Assert.Contains("AppWindow.Create(presenter, ownerId)", host, StringComparison.Ordinal);
+        Assert.Contains("presenter.IsModal = true", host, StringComparison.Ordinal);
+        Assert.Contains("_source.Initialize(_window.Id)", host, StringComparison.Ordinal);
+        Assert.Contains("_source?.Dispose()", host, StringComparison.Ordinal);
+        Assert.Contains("_root.Children.Add(_dialog)", host, StringComparison.Ordinal);
+        Assert.DoesNotContain("_dialog.XamlRoot =", host, StringComparison.Ordinal);
+        Assert.DoesNotContain("SetWindowLong", host, StringComparison.Ordinal);
+        Assert.Contains("OwnedDialogHost.Create(dialog, xamlRoot)", coordinator, StringComparison.Ordinal);
+        Assert.Contains("ContentDialogPlacement.InPlace", coordinator, StringComparison.Ordinal);
+        Assert.Contains("Gates.Add(hostedRoot, gate)", coordinator, StringComparison.Ordinal);
+        Assert.Contains("Gates.Remove(hostedRoot)", coordinator, StringComparison.Ordinal);
+        Assert.Contains("host.DismissForOwnerClose()", coordinator, StringComparison.Ordinal);
+        Assert.Contains(".WorkArea", viewport, StringComparison.Ordinal);
+        Assert.Contains("root.RasterizationScale", viewport, StringComparison.Ordinal);
+        Assert.DoesNotContain("root.Size", viewport, StringComparison.Ordinal);
+    }
+
     /// <summary>Verifies application call sites cannot bypass the window dialog coordinator.</summary>
     [Fact]
     public void ContentDialogCallSites_UseManagedPresentation()
@@ -100,7 +123,7 @@ public sealed class DialogPresentationArchitectureTests
 
         Assert.Contains("CancellationToken cancellationToken", overlay, StringComparison.Ordinal);
         Assert.Contains("await dialog.ShowManagedAsync(cancellationToken)", overlay, StringComparison.Ordinal);
-        Assert.Contains("ShowWithCancellationAsync(dialog, gate, cancellationToken)", coordinator, StringComparison.Ordinal);
+        Assert.Contains("ShowWithCancellationAsync(dialog, host, gate, cancellationToken)", coordinator, StringComparison.Ordinal);
         Assert.Contains("dialog.Hide()", coordinator, StringComparison.Ordinal);
         Assert.Contains("gate.TryDismiss(() => dialog.Hide())", coordinator, StringComparison.Ordinal);
         Assert.Contains("WindowDialogCoordinator.MarkWindowClosing(GetDialogXamlRoot())", mainWindow, StringComparison.Ordinal);
@@ -173,7 +196,7 @@ public sealed class DialogPresentationArchitectureTests
 
         Assert.Contains("_checks.GetChecksAsync(cancellationToken)", presenter, StringComparison.Ordinal);
         Assert.Contains(
-            "WindowDialogCoordinator.ShowAsync(dialog, cancellationToken)",
+            "WindowDialogCoordinator.ShowAsync(dialog, xamlRoot, cancellationToken)",
             presenter,
             StringComparison.Ordinal);
         Assert.DoesNotContain("CenteredDialogOverlay", presenter, StringComparison.Ordinal);

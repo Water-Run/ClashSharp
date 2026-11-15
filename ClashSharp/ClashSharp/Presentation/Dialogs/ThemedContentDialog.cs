@@ -12,6 +12,9 @@ internal sealed class ThemedContentDialog : ContentDialog, ILocalizedPresentatio
 {
     private Action? _refreshText;
 
+    /// <summary>Identifies the owning application root without binding this control to that root.</summary>
+    internal XamlRoot? OwnerXamlRoot { get; set; }
+
     /// <summary>Registers display-only updates; input values, selections and operation snapshots stay owned by the caller.</summary>
     public void Localize(Action refreshText)
     {
@@ -38,6 +41,7 @@ internal sealed class ThemedContentDialog : ContentDialog, ILocalizedPresentatio
     public Task<ContentDialogResult> ShowManagedAsync(
         CancellationToken cancellationToken = default)
     {
-        return WindowDialogCoordinator.ShowAsync(this, cancellationToken);
+        return WindowDialogCoordinator.ShowAsync(this,
+            OwnerXamlRoot ?? throw new InvalidOperationException("A dialog requires an owning XAML root."), cancellationToken);
     }
 }

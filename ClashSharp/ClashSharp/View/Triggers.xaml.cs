@@ -156,7 +156,7 @@ public sealed partial class Triggers : Page
                 PrimaryButtonText = _viewModel.DeleteText,
                 CloseButtonText = _viewModel.CancelText,
                 DefaultButton = ContentDialogButton.Close,
-                XamlRoot = XamlRoot,
+                OwnerXamlRoot = XamlRoot,
             };
             dialog.Localize(() =>
             {
@@ -380,7 +380,7 @@ public sealed partial class Triggers : Page
             CloseButtonText = _viewModel.CancelText,
             DefaultButton = ContentDialogButton.Primary,
             IsPrimaryButtonEnabled = content.SelectedOptions.Count == 1,
-            XamlRoot = XamlRoot,
+            OwnerXamlRoot = XamlRoot,
         };
         using SearchableOptionDialogLayout layout = new(dialog, content);
         using CancellationTokenSource lifetime = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);

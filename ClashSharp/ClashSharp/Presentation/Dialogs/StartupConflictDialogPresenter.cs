@@ -127,7 +127,7 @@ internal static class StartupConflictDialogPresenter
             Content = panel,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
-            MaxHeight = Math.Min(420, Math.Max(180, xamlRoot.Size.Height - 220)),
+            MaxHeight = Math.Min(420, Math.Max(1, DialogViewport.GetAvailableSize(xamlRoot).Height - 220)),
             Padding = new Thickness(0, 0, 12, 0),
         };
     }

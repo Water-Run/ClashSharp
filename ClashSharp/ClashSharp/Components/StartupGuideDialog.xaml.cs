@@ -5,6 +5,7 @@ using System.Linq;
 using System.Windows.Input;
 using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.Model;
+using ClashSharp.Presentation.Dialogs;
 using ClashSharp.ViewModel;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -122,7 +123,7 @@ public sealed partial class StartupGuideDialog : ContentDialog, ILocalizedPresen
         if (XamlRoot is { } root)
         {
             // A preferred reading width avoids the narrow, content-sized column of stacked diagnostics.
-            GuideContent.Width = Math.Clamp(root.Size.Width - 96, 240, 640);
+            GuideContent.Width = Math.Max(1, Math.Min(DialogViewport.GetAvailableSize(root).Width - 96, 640));
             // ItemsControl templates can otherwise measure Auto columns beyond the scroll viewport.
             // Constrain the entire row, including its status, before text is measured; reserve the scrollbar.
             ChecksList.Width = Math.Max(0, GuideContent.Width - ChecksScroll.Padding.Right - 16);

@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using ClashSharp.ApplicationModel.Diagnostics;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Windows.Foundation;
 
 namespace ClashSharp.Presentation.Dialogs;
 
@@ -17,19 +18,24 @@ namespace ClashSharp.Presentation.Dialogs;
 internal static class WindowDialogCoordinator
 {
     private static readonly ConditionalWeakTable<XamlRoot, DialogPresentationGate> Gates = new();
+    private static readonly ConditionalWeakTable<XamlRoot, OwnedDialogHost> Hosts = new();
+
+    /// <summary>Reports an active owned dialog without accessing a XAML root from a background caller.</summary>
+    internal static bool IsDialogForeground => OwnedDialogHost.IsForeground;
 
     /// <summary>Shows a content dialog when no other modal surface owns its visual root.</summary>
-    /// <param name="dialog">Configured dialog with a non-null XAML root.</param>
+    /// <param name="dialog">Configured, unparented dialog; its native host supplies the presentation root.</param>
+    /// <param name="xamlRoot">Application root owning admission, theme, and the native modal window.</param>
     /// <param name="cancellationToken">Dismisses the dialog when its owning visual lifetime ends.</param>
     /// <returns>The dialog result, or <see cref="ContentDialogResult.None"/> when another modal surface is active.</returns>
     public static async Task<ContentDialogResult> ShowAsync(
         ContentDialog dialog,
+        XamlRoot xamlRoot,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(dialog);
+        ArgumentNullException.ThrowIfNull(xamlRoot);
         cancellationToken.ThrowIfCancellationRequested();
-        XamlRoot xamlRoot = dialog.XamlRoot
-            ?? throw new InvalidOperationException("A content dialog requires a XamlRoot before it can be shown.");
         DialogPresentationGate gate = Gates.GetValue(xamlRoot, static _ => new DialogPresentationGate());
         if (!gate.TryEnter(out IDisposable? lease))
         {
@@ -41,7 +47,25 @@ internal static class WindowDialogCoordinator
             cancellationToken.ThrowIfCancellationRequested();
             // Native dialog content is outside the page tree and must follow its root for the entire presentation.
             using DialogRootPresentationBinding presentation = new(dialog, xamlRoot.Content as FrameworkElement, gate);
-            return await ShowWithCancellationAsync(dialog, gate, cancellationToken);
+            using OwnedDialogHost host = OwnedDialogHost.Create(dialog, xamlRoot);
+            XamlRoot hostedRoot = host.DialogRoot;
+            Gates.Add(hostedRoot, gate);
+            Hosts.Add(xamlRoot, host);
+            try
+            {
+                host.Show();
+                return await ShowWithCancellationAsync(dialog, host, gate, cancellationToken);
+            }
+            catch (OperationCanceledException) when (host.OwnerClosing.IsCancellationRequested)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                return ContentDialogResult.None;
+            }
+            finally
+            {
+                Hosts.Remove(xamlRoot);
+                Gates.Remove(hostedRoot);
+            }
         }
     }
 
@@ -51,6 +75,7 @@ internal static class WindowDialogCoordinator
     {
         if (xamlRoot is not null)
         {
+            if (Hosts.TryGetValue(xamlRoot, out OwnedDialogHost? host)) { host.DismissForOwnerClose(); }
             Gates.GetValue(xamlRoot, static _ => new DialogPresentationGate()).MarkWindowClosing();
         }
     }
@@ -98,15 +123,16 @@ internal static class WindowDialogCoordinator
 
     private static async Task<ContentDialogResult> ShowWithCancellationAsync(
         ContentDialog dialog,
+        OwnedDialogHost host,
         DialogPresentationGate gate,
         CancellationToken cancellationToken)
     {
         if (!cancellationToken.CanBeCanceled)
         {
-            return await dialog.ShowAsync();
+            return await ShowCoreAsync(dialog, host);
         }
 
-        Task<ContentDialogResult> showTask = ShowCoreAsync(dialog);
+        Task<ContentDialogResult> showTask = ShowCoreAsync(dialog, host);
         TaskCompletionSource<bool> cancellationSignal = new(
             TaskCreationOptions.RunContinuationsAsynchronously);
         using CancellationTokenRegistration registration = cancellationToken.Register(
@@ -146,8 +172,9 @@ internal static class WindowDialogCoordinator
         throw new OperationCanceledException(cancellationToken);
     }
 
-    private static async Task<ContentDialogResult> ShowCoreAsync(ContentDialog dialog)
+    private static Task<ContentDialogResult> ShowCoreAsync(ContentDialog dialog, OwnedDialogHost host)
     {
-        return await dialog.ShowAsync();
+        IAsyncOperation<ContentDialogResult> operation = dialog.ShowAsync(ContentDialogPlacement.InPlace);
+        return operation.AsTask(host.OwnerClosing);
     }
 }

@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <IsTestProject>true</IsTestProject>
+    <IsPublishable>false</IsPublishable>
+    <IsPackable>false</IsPackable>
+    <TargetFramework>net10.0-windows10.0.22000.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.22000.0</TargetPlatformMinVersion>
+    <UseWinUI>true</UseWinUI>
+    <WindowsPackageType>None</WindowsPackageType>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <SelfContained>true</SelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>ClashSharp.DialogProbe</RootNamespace>
+    <ApplicationManifest>..\ClashSharp\app.manifest</ApplicationManifest>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.6.5" />
+    <ProjectReference Include="..\ClashSharp.Application\ClashSharp.Application.csproj" />
+    <Compile Include="..\ClashSharp\Presentation\Dialogs\DialogPresentationGate.cs" Link="Dialogs\DialogPresentationGate.cs" />
+    <Compile Include="..\ClashSharp\Presentation\Dialogs\DialogRootPresentationBinding.cs" Link="Dialogs\DialogRootPresentationBinding.cs" />
+    <Compile Include="..\ClashSharp\Presentation\Dialogs\WindowDialogCoordinator.cs" Link="Dialogs\WindowDialogCoordinator.cs" />
+    <Compile Include="..\ClashSharp\Presentation\Dialogs\OwnedDialogHost.cs" Link="Dialogs\OwnedDialogHost.cs" />
+    <Compile Include="..\ClashSharp\Presentation\Dialogs\DialogViewport.cs" Link="Dialogs\DialogViewport.cs" />
+    <Compile Include="..\ClashSharp\Presentation\Dialogs\DialogWindowBoundsPolicy.cs" Link="Dialogs\DialogWindowBoundsPolicy.cs" />
+    <Compile Include="..\ClashSharp\Components\StartupGuideDialog.xaml.cs" Link="Components\StartupGuideDialog.xaml.cs" />
+    <Page Include="..\ClashSharp\Components\StartupGuideDialog.xaml" Link="Components\StartupGuideDialog.xaml" />
+    <Compile Include="..\ClashSharp\Converters\BooleanToVisibilityConverter.cs" Link="Converters\BooleanToVisibilityConverter.cs" />
+    <Compile Include="..\ClashSharp\Model\StartupCheckItem.cs" Link="Model\StartupCheckItem.cs" />
+    <Compile Include="..\ClashSharp\Model\LocalizedDisplayText.cs" Link="Model\LocalizedDisplayText.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\StartupCheckDisplay.cs" Link="ViewModel\StartupCheckDisplay.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\ObservableObject.cs" Link="ViewModel\ObservableObject.cs" />
+  </ItemGroup>
+</Project>

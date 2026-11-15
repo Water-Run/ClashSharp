@@ -108,7 +108,7 @@ public sealed partial class Links : Page
                 PrimaryButtonText = _getString("Command.Add"),
                 CloseButtonText = _getString("Command.Cancel"),
                 DefaultButton = ContentDialogButton.Primary,
-                XamlRoot = XamlRoot,
+                OwnerXamlRoot = XamlRoot,
             };
             ConfigureSubscriptionEditor(dialog, content);
 
@@ -196,7 +196,7 @@ public sealed partial class Links : Page
                 PrimaryButtonText = _getString("Command.Save"),
                 CloseButtonText = _getString("Command.Cancel"),
                 DefaultButton = ContentDialogButton.Primary,
-                XamlRoot = XamlRoot,
+                OwnerXamlRoot = XamlRoot,
             };
             ConfigureSubscriptionEditor(dialog, content);
             dialog.Localize(() =>
@@ -235,7 +235,8 @@ public sealed partial class Links : Page
         dialog.Resources["ContentDialogMinWidth"] = 0d;
         dialog.Resources["ContentDialogMaxWidth"] = 720d;
         content.Width = 620;
-        content.MaxWidth = Math.Max(240, (dialog.XamlRoot?.Size.Width ?? 720) - 96);
+        content.MaxWidth = Math.Max(1, DialogViewport.GetAvailableSize(dialog.OwnerXamlRoot
+            ?? throw new InvalidOperationException("A subscription editor requires an owning root.")).Width - 96);
         content.HorizontalAlignment = HorizontalAlignment.Stretch;
     }
 
@@ -256,7 +257,7 @@ public sealed partial class Links : Page
                 PrimaryButtonText = _getString("Command.Delete"),
                 CloseButtonText = _getString("Command.Cancel"),
                 DefaultButton = ContentDialogButton.Close,
-                XamlRoot = XamlRoot,
+                OwnerXamlRoot = XamlRoot,
             };
             dialog.Localize(() =>
             {
