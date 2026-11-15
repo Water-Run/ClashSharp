@@ -2,7 +2,7 @@
 
 ## 当前结论
 
-首轮安全修复提交 `97150e787e32b1b22e07c88456611e81246876b4` 的完整 CI 共 13,754 项测试全部通过，零失败、零跳过。用户随后批准了完整安装器的沙盒安装，安装、服务部署及启动验收通过。试装时指出的弹窗尺寸问题已继续修复，见[独立模态窗口记录](2026-11-15-dialog-screen-bounds.md)；首轮 ZIP 已被这次修复后的交付替代。没有在宿主系统安装 Clash#，没有发布 GitHub Release。
+最终产品提交 `84eaa1fcd207e694651a3405fe8fa160c6c190a7` 的[完整 CI 43706399221](https://github.com/Water-Run/ClashSharp/actions/runs/43706399221) 通过：四份下载后的实际 TRX 独立复核为 **13,767 项全部通过、零失败、零跳过**，覆盖率门槛和离线安装包也通过。正式签名 ZIP 已生成并核对全部归档字节。首轮安全包的完整安装器沙盒安装、服务部署及稳定启动已通过；随后的弹窗修复通过私有桌面原生验证，见[独立模态窗口记录](2026-11-15-dialog-screen-bounds.md)。首轮 ZIP 已被这次修复后的交付替代。未在宿主系统安装正式包，未发布 GitHub Release；后续连续数天体验由用户完成。
 
 本轮沿用维护者已接受的长期自签名发行方案和[上一轮验收边界](2026-11-10-release-pass.md)。本轮更新了内置 Mihomo、对应源码材料、发布检查脚本及资源契约测试，并将共用 ContentDialog 改为独立的原生模态宿主，尺寸按显示器工作区和 DPI 计算。
 
@@ -28,16 +28,17 @@
 | 安装器 Windows 适配层 | 1,844 通过，9 项按设计跳过；这些证书或系统目录用例要求一次性或提权环境。跳过的 theory 不展开数据行，故本地总数与隔离 CI 略有不同 |
 | 替换核心后的输入与架构回归 | 219 项通过；全量复测发现并修正旧版本号断言后，314 项资源与架构复验通过 |
 | 格式 | 本地诊断级 `dotnet format --verify-no-changes` 及最终提交的 CI 格式检查均通过 |
-| PowerShell | 5.1 和 7.6 解析 66 个跟踪源文件，0 语法错误；20 组 PowerShell 7 契约及适用的 5.1 契约通过，改动边界另作复验 |
+| PowerShell | 5.1 和 7.6 解析 67 个跟踪源文件，0 语法错误；20 组 PowerShell 7 契约及适用的 5.1 契约通过，改动边界另作复验 |
 | 第三方说明 | 41 个场景、74 项断言通过 |
 | 源码材料 | 29 个场景、57 项断言通过 |
 | NuGet 漏洞 | 包括传递依赖，未报告已知漏洞；完整 JSON 收据保留 |
 | Go 模块完整性 | `go mod verify`：all modules verified |
 | Go 基础与结构测试 | 选定的 common、CA、资源和 SOCKS 包测试及 Go vet 通过；不是全部上游协议的端到端测试 |
 | 新核心安全扫描 | 固定 `govulncheck@v1.9.0`，查询 `https://vuln.go.dev`：No vulnerabilities found，退出 0 |
-| 完整 CI | [43683802058](https://github.com/Water-Run/ClashSharp/actions/runs/43683802058)，对应产品提交 `97150e78`：主程序 7,204、安装器核心 4,291、表示层 402、Windows 适配层 1,857，共 13,754，全部通过、零跳过；离线安装包构建也通过。已下载四份实际 TRX，并由 `Test-DotNetResults.ps1` 独立复核及保存摘要 `verified-current-ci-evidence.json` |
+| 首轮安全修复 CI | [43683802058](https://github.com/Water-Run/ClashSharp/actions/runs/43683802058)，对应产品提交 `97150e78`：主程序 7,204、安装器核心 4,291、表示层 402、Windows 适配层 1,857，共 13,754，全部通过、零跳过；离线安装包构建也通过。已下载四份实际 TRX，并由 `Test-DotNetResults.ps1` 独立复核及保存摘要 `verified-current-ci-evidence.json` |
+| 最终弹窗修复 CI | [43706399221](https://github.com/Water-Run/ClashSharp/actions/runs/43706399221)，准确产品提交 `84eaa1fc`：主程序 7,217、安装器核心 4,291、表示层 402、Windows 适配层 1,857，共 **13,767**，全部通过、零失败、零跳过；格式、Release、运行组件发布、覆盖率门槛及离线安装包均通过。四份实际 TRX 已下载至 `dialog-product-ci/`，独立复核摘要为 `verified-dialog-ci-evidence.json` |
 
-覆盖率下限全部成立：Service 81.1%、ViewModel 87.0%、AppHost 68.9%、Model 93.7%、MihomoService 83.4%、RecoveryWatchdog 76.0%、Core 94.8%、Application 90.8%、Infrastructure 88.8%、MCP 93.8%。安装器核心为行 95.73%／分支 92.79%；安装器表示层自身为行 93.61%／分支 89.81%。表示层报告的跨程序集总率包含未被该组测试执行的 Core，不能用来代替表示层自身覆盖率。
+首轮覆盖率下限全部成立：Service 81.1%、ViewModel 87.0%、AppHost 68.9%、Model 93.7%、MihomoService 83.4%、RecoveryWatchdog 76.0%、Core 94.8%、Application 90.8%、Infrastructure 88.8%、MCP 93.8%。安装器核心为行 95.73%／分支 92.79%；安装器表示层自身为行 93.61%／分支 89.81%。最终提交的 CI 再次通过全部覆盖率门槛。表示层报告的跨程序集总率包含未被该组测试执行的 Core，不能用来代替表示层自身覆盖率。
 
 ## 新核心实测
 
@@ -58,33 +59,33 @@
 
 - 最终 `Setup.exe --verify-payload`：passed，版本 1.0.0.0，4 个载荷文件、7 个机器文件条目，stderr 为空。
 - 单独复制成品并篡改公开 CER 的一个字节：同一最终 Setup 的只读入口退出 3，正确拒绝；正式交付目录未改变。
-- 干净沙盒 `install-only`：依赖、主包注册、包身份及全部清理通过。
+- 首轮签名包的干净沙盒 `install-only`：依赖、主包注册、包身份及全部清理通过。
 - 原 `launch-no-proxy` 脚本只注册 MSIX，未经过完整安装器建立服务关联；应用报告 `service.provisioning.association_missing`，脚本正确判失败而非把错误窗口当作成功启动。用户批准后已用首轮准确的正式 ZIP 完成真实 Setup 安装：`ClashSharpMihomo` 运行，主窗口稳定 31,325ms，credential/window/pipeline 完成各一次、启动失败为 0，已安装内核摘要匹配；证书只在 TrustedPeople、未进入 Root。客体 `4b6a3d26-bbfa-4b1b-8485-8b40c4c21eff` 已销毁。证据：`full-installer-sandbox-approved-20261115/reports/verified-result.json`、同目录上层 `host-result.json`。这份证据绑定首轮安装器，后续弹窗修复另有原生后台验证，不能混称为最终 ZIP 的再次人工安装。
 
 交付文件：
 
 ```text
-artifacts/deliverables/20261115-release/Clash#.zip
-artifacts/deliverables/20261115-release/Clash#.zip.sha256
+artifacts/deliverables/20261115-release-dialogs/Clash#.zip
+artifacts/deliverables/20261115-release-dialogs/Clash#.zip.sha256
 ```
 
-ZIP 为 **471,655,715 字节**，SHA-256：
+ZIP 为 **471,665,819 字节**，SHA-256：
 
 ```text
-9fcf2b895da7151ea95074a83ca2b59ac40a5e1b08af409755af15ffe3fe425b
+ad989b8501188da4dd4bd43d56a92a7f7cb1f9e2ef13939d01f4d7928211b3e5
 ```
 
 Setup SHA-256：
 
 ```text
-17f37fada983268147a5ed4c6ed4760d370f7c5912c6f3ba11c63f4be5c008d0
+69c6adb4a3ffc2437a45c0eed16427826e492eae657ef2217df214a174773075
 ```
 
-ZIP 内共 10 个文件，已逐项解压流核对长度及 SHA-256；最外层仅有 `Setup.exe`、`LICENSE`、`README.md`，以及 payload、licenses、metadata 子目录。没有 PFX、私钥、调试符号或开发版标识。`release-delivery.json` 保存完整文件清单。
+ZIP 内共 10 个文件，已逐项解压流核对长度及 SHA-256；最外层仅有 `Setup.exe`、`LICENSE`、`README.md`，以及 payload、licenses、metadata 子目录。没有 PFX、私钥、调试符号或开发版标识。`release-dialogs-delivery.json` 保存完整文件清单，源码提交为 `84eaa1fcd207e694651a3405fe8fa160c6c190a7`。准确的最终 MSIX 中已核对独立弹窗宿主类型，未包含 DialogProbe；内置 Mihomo 摘要保持上述安全构建值。最终签名及只读拒绝复验见 `dialog-final-artifact/result.json`，包内代码与内核核对见 `dialog-final-package-contents.json`。
 
 ## 安装与完成边界
 
-完整解压 ZIP，再运行其中的 Setup.exe。包版本维持 1.0.0.0；若目标机已有内容不同的旧 1.0.0，先在旧版导出备份，用旧版对应的 Setup 卸载，再安装此包并导入。旧正式包完整保存在 `artifacts/release-check-20261115/previous-signed-release/`，可供对应旧版本卸载使用。
+完整解压 ZIP，再运行其中的 Setup.exe。包版本维持 1.0.0.0；若目标机已有内容不同的旧 1.0.0，先在旧版导出备份，用旧版对应的 Setup 卸载，再安装此包并导入。旧正式包完整保存在 `artifacts/release-check-20261115/previous-signed-release/`，可供对应旧版本卸载使用。本机当前还存在 `CN=linzh` 的开发注册，包家族后缀为 `vj7sjtzkt239a`；正式身份的家族后缀为 `n1h4vndby9va0`。开发注册应在导出备份后通过 Windows“已安装的应用”卸载，再安装此正式包；没有自动移除该注册、修改它的数据或安装正式包到宿主。
 
 继续沿用已接受的自签名限制：在未信任该证书的机器上，管理员提示可能显示“未知发布者”；安装器自身的固定指纹不能防御整份安装器被另一份自签名程序替换。私钥和签名身份没有轮换。完整安装器会按需管理软件包的 TrustedPeople 证书；只读校验不改变证书存储。
 

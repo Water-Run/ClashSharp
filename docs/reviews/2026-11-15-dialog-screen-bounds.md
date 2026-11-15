@@ -13,8 +13,9 @@
 ## 验证
 
 - `DialogWindowBoundsPolicyTests` 对 100% 至 400% DPI、负坐标显示器、屏幕外 owner 和 2,000 组工作区/尺寸组合检查位置与大小不越出工作区；小 owner 和大 owner 不改变同一弹窗的首选尺寸。
-- 弹窗、资源及架构的本地定向回归 338 项通过，零失败、零跳过。锁定还原与 Release 全解决方案构建通过，零警告、零错误；最终提交的完整 CI 和签名包在收尾时记录。
+- 弹窗、资源及架构的本地定向回归 338 项通过，零失败、零跳过。锁定还原与 Release 全解决方案构建通过，零警告、零错误。[准确提交的完整 CI 43706399221](https://github.com/Water-Run/ClashSharp/actions/runs/43706399221) 的四份实际 TRX 已下载并独立复核：主程序 7,217、安装器核心 4,291、表示层 402、Windows 适配层 1,857，共 **13,767 项全部通过、零失败、零跳过**，格式、覆盖率、运行组件发布和离线安装包均通过。独立摘要为 `artifacts/release-check-20261115/verified-dialog-ci-evidence.json`。
 - 原生 `ClashSharp.DialogProbe` 直接链接实际宿主、协调器、启动检查 XAML 及显示模型，不属于产品载荷。它使用应用 API 测试，没有注入鼠标或键盘。
+- 另复核导入导出调用链：导出范围弹窗已完成并释放后才打开系统保存选择器，导入文件选择器在确认弹窗之前完成；页面及冲突诊断的生成绑定显式指定模型来源，不依赖主窗口的 DataContext 继承。这是静态调用链复核，不替代系统选择器的人工操作验收。
 - 用户要求继续使用电脑后，停止前台 Computer Use。沙盒连接的私有桌面绑定复核未成立，该尝试不作为后台隔离证据；客体已停止。最终验证改为直接在未切换到的私有 Windows desktop 创建测试程序，实际 WinUI 线程在创建测试窗口前验证并报告桌面名称。未调用 SwitchDesktop，未安装产品，进程通过独占句柄回收。缺少 shell switcher 的桌面允许跳过可选的切换器外观设置，原生 owner 和模态关系保持。
 
 最终原生记录：`artifacts/validation/dialog-probes/05824c829e794a37913510795a01e473/`。实际 UI 线程桌面为 `ClashSharpValidation-b3991334c4d641a2bb2bd131ad4f2b53`，与启动参数一致。探针托管程序集 SHA-256 为 `8ee71361740bec477a7e82128a74786ed5c0f1b0d618be9143a1c53b250ce535`。
@@ -34,4 +35,6 @@
 
 ## 交付
 
-本修复替代同日最初的试装包；最终产品提交、CI 与更新后的 ZIP 摘要将在完成构建验收后补入本节。
+产品提交 `84eaa1fcd207e694651a3405fe8fa160c6c190a7`。使用原有长期证书和 `PinnedSelfSignedRelease` 构建，准确的 Setup/MSIX 签名及时间戳验证通过；只读校验为 4 个载荷文件、7 个机器文件条目，损坏证书副本退出 3。准确 MSIX 内包含新的独立宿主，未包含 DialogProbe；内核摘要保持安全构建值。该版本未在宿主系统安装，也未再次执行前台人工安装验收。
+
+更新后的交付为 `artifacts/deliverables/20261115-release-dialogs/Clash#.zip`，471,665,819 字节，SHA-256 `ad989b8501188da4dd4bd43d56a92a7f7cb1f9e2ef13939d01f4d7928211b3e5`；Setup 摘要 `69c6adb4a3ffc2437a45c0eed16427826e492eae657ef2217df214a174773075`。归档的 10 个文件均逐项核对长度和摘要，收据为 `artifacts/release-check-20261115/release-dialogs-delivery.json`。它替代同日最初的试装包；用户后续连续数天试用仍待用户完成，尚未公开发布。
