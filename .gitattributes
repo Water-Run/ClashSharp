@@ -16,9 +16,11 @@
 *.sqlite binary
 *.webp binary
 *.zip binary
+*.tar.gz binary
 
 # Upstream attribution snapshots are byte-pinned; preserve their original line endings.
 ClashSharp/Installer/ThirdParty/*.txt -text
 ClashSharp/Installer/ThirdParty/geodata-readme.md -text -whitespace
 ClashSharp/Installer/ThirdParty/*.rtf binary
+ClashSharp/Installer/SourceMaterials/*.patch -whitespace
 ClashSharp/Installer/ThirdParty/geodata-generation.yml.txt -whitespace

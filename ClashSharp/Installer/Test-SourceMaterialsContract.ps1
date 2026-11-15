@@ -34,7 +34,7 @@ function New-Fixture([string] $Name) {
     $support = Join-Path $root 'ClashSharp/Installer/SourceMaterials'
     $binaries = Join-Path $root 'ClashSharp/ClashSharp/Binaries'
     foreach ($path in @($cache, $support, $binaries)) { $null = New-Item -ItemType Directory -Path $path -Force }
-    foreach ($file in @('README.md', 'BUILD-OFFLINE.py')) {
+    foreach ($file in @('README.md', 'BUILD-OFFLINE.py', 'security-dependencies.patch')) {
         Copy-Item -LiteralPath (Join-Path $PSScriptRoot ('SourceMaterials/' + $file)) -Destination (Join-Path $support $file)
     }
     Copy-Item -LiteralPath (Join-Path $repositoryRoot 'ClashSharp/ClashSharp/Binaries/mihomo-LICENSE.txt') -Destination (Join-Path $binaries 'mihomo-LICENSE.txt')
@@ -90,7 +90,7 @@ try {
     $first = New-ClashSharpMihomoSourceMaterials -RepositoryRoot $fixture.Root -InputRoot $fixture.Cache -OutputPath (Join-Path $fixture.Root 'first.zip')
     $second = New-ClashSharpMihomoSourceMaterials -RepositoryRoot $fixture.Root -InputRoot $fixture.Cache -OutputPath (Join-Path $fixture.Root 'second.zip')
     Assert-Condition ($first.Sha256 -ceq $second.Sha256) 'Identical pinned inputs did not produce identical ZIP bytes.'
-    Assert-Condition ($first.FileCount -eq 8) 'Source archive did not contain the complete eight-file set.'
+    Assert-Condition ($first.FileCount -eq 10) 'Source archive did not contain the complete ten-file set.'
     $contract = Get-ClashSharpMihomoSourceMaterialsContract -RepositoryRoot $fixture.Root -LiteralPath $first.Path
     Assert-Condition ($contract.Sha256 -ceq (Get-FileHash -LiteralPath $first.Path).Hash.ToLowerInvariant()) 'Independent whole-file digest did not match.'
     $script:scenarios.Add('deterministic-complete-archive')
@@ -100,7 +100,7 @@ try {
     Assert-Rejected { New-ClashSharpMihomoSourceMaterials -RepositoryRoot $fixture.Root -InputRoot $fixture.Cache -OutputPath $first.Path } 'existing-output-preserved'
     Assert-Condition ((Get-FileHash -LiteralPath $first.Path).Hash.ToLowerInvariant() -ceq $first.Sha256) 'Existing output was replaced.'
 
-    foreach ($fault in @('missing-input', 'changed-input', 'wrong-length', 'duplicate-role', 'case-changed-role', 'wrong-origin', 'unsafe-name', 'wrong-binary', 'ca-outside-binary')) {
+    foreach ($fault in @('missing-input', 'changed-input', 'wrong-length', 'duplicate-role', 'case-changed-role', 'wrong-origin', 'wrong-toolchain-origin', 'wrong-overlay-origin', 'changed-overlay', 'unsafe-name', 'wrong-binary', 'ca-outside-binary')) {
         $bad = New-Fixture $fault
         $pins = $bad.Manifest
         switch ($fault) {
@@ -113,6 +113,12 @@ try {
             'duplicate-role' { $pins.files[1].role = 'source' }
             'case-changed-role' { $pins.files[1].role = 'VENDOR' }
             'wrong-origin' { $pins.files[0].sourceUrl = 'https://example.invalid/untrusted-input' }
+            'wrong-toolchain-origin' { $pins.files[2].sourceUrl = 'https://example.invalid/toolchain.tar.gz' }
+            'wrong-overlay-origin' { $pins.files[4].repositoryPath = '../outside.tar.gz' }
+            'changed-overlay' {
+                $path = Join-Path $bad.Cache $pins.files[4].file
+                $bytes = [IO.File]::ReadAllBytes($path); $bytes[0] = [byte]($bytes[0] -bxor 1); [IO.File]::WriteAllBytes($path, $bytes)
+            }
             'unsafe-name' { $pins.files[0].file = '../outside.tar.gz' }
             'wrong-binary' { $pins.bundledBinary.sha256 = ('b' * 64) }
             'ca-outside-binary' { $pins.files[3].binaryOffset = 65536 }
@@ -124,7 +130,7 @@ try {
         Assert-Condition (@(Get-ChildItem -LiteralPath $bad.Root -File -Filter '.source-materials-*').Count -eq 0) 'Rejected source inputs left a temporary archive.'
     }
 
-    foreach ($fault in @('changed-archive-input', 'changed-script', 'extra-entry', 'missing-entry', 'traversal-entry', 'duplicate-entry',
+    foreach ($fault in @('changed-archive-input', 'changed-script', 'changed-overlay-entry', 'changed-security-patch', 'extra-entry', 'missing-entry', 'traversal-entry', 'duplicate-entry',
             'case-collision', 'wrong-source-commit', 'wrong-binary-metadata', 'hidden-vcs-modification', 'false-reproduction-claim', 'duplicate-inventory', 'oversized-manifest')) {
         $altered = @(Read-Zip $first.Path)
         $metadataEntry = @($altered | Where-Object Name -CEQ 'SOURCE-MATERIALS.json')[0]
@@ -132,6 +138,8 @@ try {
         switch ($fault) {
             'changed-archive-input' { @($altered | Where-Object Name -CEQ 'source.tar.gz')[0].Bytes[0] = [byte]65 }
             'changed-script' { @($altered | Where-Object Name -CEQ 'BUILD-OFFLINE.py')[0].Bytes[0] = [byte]65 }
+            'changed-overlay-entry' { @($altered | Where-Object Name -CEQ 'security-overlay.tar.gz')[0].Bytes[0] = [byte]65 }
+            'changed-security-patch' { @($altered | Where-Object Name -CEQ 'SECURITY-DEPENDENCIES.patch')[0].Bytes[0] = [byte]65 }
             'extra-entry' { $altered += [pscustomobject]@{ Name = 'extra'; Bytes = $utf8.GetBytes('unexpected') } }
             'missing-entry' { $altered = @($altered | Where-Object Name -CNE 'vendor.tar.gz') }
             'traversal-entry' { @($altered | Where-Object Name -CEQ 'vendor.tar.gz')[0].Name = '../vendor.tar.gz' }

@@ -88,12 +88,12 @@ function Get-ClashSharpMihomoSourceManifest {
         $manifest.bundledBinary.releaseAssetId -lt 1 -or $manifest.bundledBinary.releaseAssetSha256 -cnotmatch '^[0-9a-f]{64}$' -or
         $binary.schemaVersion -ne 1 -or $binary.version -cne $manifest.version -or
         $binary.sha256 -cne $manifest.bundledBinary.sha256 -or $binary.length -ne $manifest.bundledBinary.length -or
-        $manifest.files.Count -ne 4) { throw 'Source materials are not bound to the selected bundled core.' }
-    $expected = @{ source = 'source.tar.gz'; vendor = 'vendor.tar.gz'; toolchain = 'toolchain.tar.gz'; 'public-ca' = 'ca-certificates.crt' }
+        $manifest.files.Count -ne 5) { throw 'Source materials are not bound to the selected bundled core.' }
+    $expected = @{ source = 'source.tar.gz'; vendor = 'vendor.tar.gz'; toolchain = 'toolchain.tar.gz'; 'public-ca' = 'ca-certificates.crt'; 'security-overlay' = 'security-overlay.tar.gz' }
     $roles = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     $names = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
     foreach ($file in $manifest.files) {
-        if ($file.role -cnotin @('source', 'vendor', 'toolchain', 'public-ca') -or -not $roles.Add($file.role) -or
+        if ($file.role -cnotin @('source', 'vendor', 'toolchain', 'public-ca', 'security-overlay') -or -not $roles.Add($file.role) -or
             $file.archivePath -cne $expected[$file.role] -or $file.file -cnotmatch '^[A-Za-z0-9][A-Za-z0-9._-]{1,100}$' -or
             -not $names.Add($file.file) -or ($file.length -isnot [long] -and $file.length -isnot [int]) -or
             $file.length -lt 1 -or $file.length -gt 268435456 -or $file.sha256 -cnotmatch '^[0-9a-f]{64}$') {
@@ -104,13 +104,18 @@ function Get-ClashSharpMihomoSourceManifest {
                 $file.length -gt 1048576 -or $file.binaryOffset -gt ($manifest.bundledBinary.length - $file.length)) {
                 throw 'Observed public CA range is outside the fixed binary.'
             }
+        } elseif ($file.role -ceq 'security-overlay') {
+            if ($file.repositoryPath -cne 'ClashSharp/Installer/SourceMaterials/security-overlay.tar.gz') {
+                throw 'Security dependency overlay is outside its fixed repository path.'
+            }
         } else {
             $expectedUrl = if ($file.role -ceq 'source') { 'https://codeload.github.com/MetaCubeX/mihomo/tar.gz/' + $manifest.sourceCommit }
+                elseif ($file.role -ceq 'toolchain') { 'https://go.dev/dl/' + $manifest.goVersion + '.linux-amd64.tar.gz' }
                 else { 'https://github.com/MetaCubeX/mihomo/releases/download/' + $manifest.version + '/' + $file.archivePath }
             if ($file.sourceUrl -cne $expectedUrl) { throw 'Source input origin is outside the fixed upstream contract.' }
         }
     }
-    if (-not $roles.SetEquals([string[]]@('source', 'vendor', 'toolchain', 'public-ca'))) { throw 'Source manifest must contain all four canonical input roles.' }
+    if (-not $roles.SetEquals([string[]]@('source', 'vendor', 'toolchain', 'public-ca', 'security-overlay'))) { throw 'Source manifest must contain all five canonical input roles.' }
     return [pscustomobject]@{ Root = $root; Manifest = $manifest; ManifestSha256 = Get-ClashSharpSourceHash $bytes }
 }
 
@@ -129,6 +134,7 @@ function Get-ClashSharpSourceTemplates {
         'BUILD-OFFLINE.py' = Read-ClashSharpSourceDocument -LiteralPath (Join-Path $root 'SourceMaterials/BUILD-OFFLINE.py')
         'LICENSE' = Read-ClashSharpSourceDocument -LiteralPath (Join-Path $RepositoryRoot 'ClashSharp/ClashSharp/Binaries/mihomo-LICENSE.txt')
         'README.md' = Read-ClashSharpSourceDocument -LiteralPath (Join-Path $root 'SourceMaterials/README.md')
+        'SECURITY-DEPENDENCIES.patch' = Read-ClashSharpSourceDocument -LiteralPath (Join-Path $root 'SourceMaterials/security-dependencies.patch')
     }
 }
 
@@ -137,13 +143,13 @@ function New-ClashSharpMihomoSourceMaterials {
     .SYNOPSIS
         Generates a deterministic pinned source-materials ZIP from an offline input cache.
     .DESCRIPTION
-        Holds all four verified input files read-locked while streaming them into a fresh ZIP.
+        Holds all five verified input files read-locked while streaming them into a fresh ZIP.
         Validates the completed temporary archive before an atomic, non-overwriting promotion.
         Does not extract archives, execute inputs, download, sign, or change certificates.
     .PARAMETER RepositoryRoot
         Repository whose source and binary pins define the release contract.
     .PARAMETER InputRoot
-        Ordinary offline cache with the exact four pinned files.
+        Ordinary offline cache with the exact five pinned files.
     .PARAMETER OutputPath
         New ZIP destination. An existing file is preserved and rejected.
     #>
@@ -241,7 +247,7 @@ function Get-ClashSharpMihomoSourceMaterialsContract {
         $length = $stream.Length
         $zip = [IO.Compression.ZipArchive]::new($stream, [IO.Compression.ZipArchiveMode]::Read, $true)
         try {
-            if ($zip.Entries.Count -ne 8) { throw 'Source ZIP contains an unexpected material count.' }
+            if ($zip.Entries.Count -ne $expected.Count + 1) { throw 'Source ZIP contains an unexpected material count.' }
             $seen = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
             $manifest = $null
             foreach ($entry in $zip.Entries) {
@@ -277,7 +283,7 @@ function Get-ClashSharpMihomoSourceMaterialsContract {
                 $manifest.bundledBinary.releaseAssetSha256 -cne $pins.Manifest.bundledBinary.releaseAssetSha256 -or
                 $manifest.bundledBinary.vcsModified -isnot [bool] -or $manifest.bundledBinary.vcsModified -ne $pins.Manifest.bundledBinary.vcsModified -or
                 $manifest.scope -cne 'Pinned offline compilation inputs; byte-identical reproduction is not claimed.' -or
-                $manifest.files.Count -ne 7) { throw 'Source ZIP metadata is not bound to the selected core.' }
+                $manifest.files.Count -ne $expected.Count) { throw 'Source ZIP metadata is not bound to the selected core.' }
             $references = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
             foreach ($file in $manifest.files) {
                 if (-not $expected.ContainsKey($file.path) -or -not $references.Add($file.path) -or
@@ -288,7 +294,7 @@ function Get-ClashSharpMihomoSourceMaterialsContract {
         $stream.Position = 0
         $hash = Get-ClashSharpSourceStreamHash $stream $length
         return [pscustomobject]@{ Length = $length; Sha256 = $hash; SourceCommit = $pins.Manifest.sourceCommit
-            BinarySha256 = $pins.Manifest.bundledBinary.sha256; FileCount = 8 }
+            BinarySha256 = $pins.Manifest.bundledBinary.sha256; FileCount = $expected.Count + 1 }
     } finally { $stream.Dispose() }
 }
 

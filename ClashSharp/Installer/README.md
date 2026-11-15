@@ -65,7 +65,7 @@ source-materials.json 将内置 mihomo 的精确程序摘要绑定到源码提�
 归档及编译时使用的公开 CA 输入。Get-MihomoSourceMaterials.ps1 只取得固定摘要的输入，
 公开 CA 从已核验的内置程序提取；已有缓存须匹配，构建过程只读取缓存并生成
 MIHOMO-SOURCE-MATERIALS.zip。该材料包随完整发行目录提供，payload-provenance.json
-记录它的摘要和对应内核；晋升到 release 目录前再次核验八项材料及元数据。
+记录它的摘要和对应内核；晋升到 release 目录前再次核验完整材料及元数据。
 
 材料内的 BUILD-OFFLINE.py 可在 Linux x86_64、Python 3.12+ 上使用随附工具链进行离线
 交叉编译，明确禁用 Go 下载，不执行生成的 Windows 程序。原始许可、vendor 与公开 CA

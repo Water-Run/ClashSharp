@@ -42,6 +42,13 @@ try {
                     }
                     $output = [IO.File]::Open($temporary, 'CreateNew', 'Write', 'None')
                     try { $output.Write($bytes, 0, $bytes.Length) } finally { $output.Dispose() }
+                } elseif ($file.role -ceq 'security-overlay') {
+                    $tracked = Assert-ClashSharpOrdinaryPath -LiteralPath (Join-Path $repositoryRoot $file.repositoryPath) -RequireFile
+                    if ((Get-Item -LiteralPath $tracked).Length -ne $file.length -or
+                        (Get-FileHash -LiteralPath $tracked).Hash.ToLowerInvariant() -cne $file.sha256) {
+                        throw 'Tracked security dependency overlay does not match its fixed digest.'
+                    }
+                    Copy-Item -LiteralPath $tracked -Destination $temporary
                 } else {
                     if ($null -eq $client) { $client = [Net.Http.HttpClient]::new() }
                     $timeout = [Threading.CancellationTokenSource]::new([TimeSpan]::FromMinutes(3))

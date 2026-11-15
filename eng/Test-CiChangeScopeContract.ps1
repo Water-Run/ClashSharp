@@ -6,10 +6,13 @@
     Scope module under review. Defaults to the adjacent module.
 #>
 [CmdletBinding()]
-param([string] $ModulePath = (Join-Path $PSScriptRoot 'CiChangeScope.psm1'))
+param([string] $ModulePath)
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+if (-not $PSBoundParameters.ContainsKey('ModulePath')) {
+    $ModulePath = Join-Path $PSScriptRoot 'CiChangeScope.psm1'
+}
 Import-Module $ModulePath -Force
 $script:checks = 0
 function Assert-Condition([bool] $Value, [string] $Message) {

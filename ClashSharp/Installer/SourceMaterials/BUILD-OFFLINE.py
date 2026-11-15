@@ -28,6 +28,7 @@ def verify_inputs(root, manifest):
         raise RuntimeError("Invalid source identity or toolchain pin")
     files = manifest.get("files", [])
     expected = {"source.tar.gz", "vendor.tar.gz", "toolchain.tar.gz", "ca-certificates.crt",
+                "security-overlay.tar.gz", "SECURITY-DEPENDENCIES.patch",
                 "LICENSE", "README.md", "BUILD-OFFLINE.py"}
     if len(files) != len(expected) or {entry.get("path") for entry in files} != expected:
         raise RuntimeError("Unexpected source-materials input set")
@@ -40,6 +41,38 @@ def verify_inputs(root, manifest):
             raise RuntimeError("Input is missing, unsafe or has the wrong length: " + entry["path"])
         if digest(path) != entry["sha256"]:
             raise RuntimeError("Input digest mismatch: " + entry["path"])
+
+
+def apply_security_overlay(root, work, source):
+    """Replace the upstream vendor snapshot with the pinned security dependency sources."""
+    overlay = work / "security-overlay"
+    overlay.mkdir(mode=0o700)
+    seen = set()
+    with tarfile.open(root / "security-overlay.tar.gz") as archive:
+        members = archive.getmembers()
+        total = 0
+        for member in members:
+            name = member.name
+            if (name in seen or "\\" in name or name.startswith("/")
+                    or any(part in {"", ".", ".."} for part in name.split("/"))
+                    or not (member.isfile() or member.isdir())
+                    or not (name in {"go.mod", "go.sum", "vendor", "common/structure/structure.go"} or name.startswith("vendor/"))):
+                raise RuntimeError("Unsafe or unexpected security overlay member")
+            seen.add(name)
+            total += member.size
+            if total > 268435456 or len(seen) > 30000:
+                raise RuntimeError("Security overlay exceeds its extraction budget")
+        if not {"go.mod", "go.sum", "vendor/modules.txt", "common/structure/structure.go"}.issubset(seen):
+            raise RuntimeError("Security overlay is missing its dependency lock or vendor inventory")
+        archive.extractall(overlay, filter="data")
+    vendor = source / "vendor"
+    if vendor.is_symlink() or not vendor.is_dir() or vendor.parent.resolve() != source.resolve():
+        raise RuntimeError("Unexpected upstream vendor directory")
+    shutil.rmtree(vendor)
+    shutil.move(str(overlay / "vendor"), vendor)
+    for name in ("go.mod", "go.sum"):
+        shutil.copyfile(overlay / name, source / name)
+    shutil.copyfile(overlay / "common/structure/structure.go", source / "common/structure/structure.go")
 
 
 def run_build(root):
@@ -67,6 +100,7 @@ def run_build(root):
         source = work / "source" / ("mihomo-" + manifest["sourceCommit"])
         with tarfile.open(root / "vendor.tar.gz") as archive:
             archive.extractall(source, filter="data")
+        apply_security_overlay(root, work, source)
         shutil.copyfile(root / "ca-certificates.crt", source / "component/ca/ca-certificates.crt")
         go_root = work / "toolchain/go"
         go = str(go_root / "bin/go")
@@ -81,7 +115,7 @@ def run_build(root):
             raise RuntimeError("Unexpected pinned toolchain version")
         result["toolchainVersion"] = version
         output = work / "mihomo-windows-amd64-v1.exe"
-        flags = ("-extldflags --static -X github.com/metacubex/mihomo/constant.Version=" + manifest["version"]
+        flags = ("-extldflags --static -X github.com/metacubex/mihomo/constant.Version=" + manifest["version"] + "-clashsharp-security"
                  + " -X github.com/metacubex/mihomo/constant.BuildTime=source-build -w -s -buildid=")
         command = [go, "build", "-p=2", "-mod=vendor", "-buildvcs=false", "-trimpath",
                    "-tags=with_gvisor", "-ldflags=" + flags, "-o", str(output), "."]

@@ -9,9 +9,12 @@
     Product-CI module under review.
 #>
 [CmdletBinding()]
-param([string] $ModulePath = (Join-Path $PSScriptRoot 'ProductCiRun.psm1'))
+param([string] $ModulePath)
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+if (-not $PSBoundParameters.ContainsKey('ModulePath')) {
+    $ModulePath = Join-Path $PSScriptRoot 'ProductCiRun.psm1'
+}
 Import-Module $ModulePath -Force
 $script:checks = 0
 function Assert-Condition([bool] $Condition, [string] $Message) {
