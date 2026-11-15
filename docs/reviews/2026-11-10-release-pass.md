@@ -8,12 +8,12 @@
 
 | 项目 | 结果 |
 | --- | --- |
-| 产品源码 | `a6709ba0530c2a64ebc9bfee4ef54d5381e29712`，已推送 main（其后只有文档提交） |
+| 产品源码 | `8eed4f3f`（含安装器“固定指纹自签名正式版”配置）；产品本体源码与蓝机验收过的候选对应的 `a6709ba0` 相同，已推送 main |
 | 完整 CI | [43553428136](https://github.com/Water-Run/ClashSharp/actions/runs/43553428136)：主程序 7,204、安装器核心 4,291、表示层 402、Windows 适配层 1,833，共 13,730，0 失败、0 跳过；离线安装包任务同样成功。其后新增固定指纹自签名正式版配置的提交 `8eed4f3f` 的 [CI 43654053416](https://github.com/Water-Run/ClashSharp/actions/runs/43654053416) 同样全绿：主程序 7,204、安装器核心 4,291、表示层 402、Windows 适配层 1,857（新增 24 项），共 13,754，0 失败、0 跳过，覆盖率下限全部成立 |
 | 最终内部候选 | [43555383220](https://github.com/Water-Run/ClashSharp/actions/runs/43555383220)，对应 `a6709ba0`。制品 14098815566，Setup `ED50D8C9B1AF1FB5A49DB120FD9855B7E7F7F1E327520F263AC85BAE3DDD10CE`，身份 `65c30d29…`。测试签名，不是正式发布包 |
-| 蓝机已装 | 上面的最终候选，用户数据已还原，应用和服务运行中，核心状态与代理模式按用户自己的设置（没有替用户改任何设置） |
-| 桌面交付 | `Desktop\Clash#` 现为最终候选的完整解压布局（11 个文件，`Setup.exe` 在根部，无 ZIP）。上一次的交付目录原样移到蓝机 `C:\ClashSharpValidation\round10-20261114\desktop-original`，没有删除 |
-| 正式签名包 | 11 月 15 日在本机用 `build.ps1 -PinnedSelfSignedRelease` 从最终源码构建（`ClashSharp/` 下除安装器校验改动外与 `a6709ba0` 相同）。`Setup.exe` SHA-256 `B7169697AB6F23464EC31DBAFB7EE1AD1BADF54D10A94BDE20E32F20239B5F88`，主 MSIX 与 `Setup.exe` 都由 `CN=WaterRun, OU="Clash#"` 签名（指纹 `59ED7BC9…`，3072 位 RSA，有效期至 2036-11-14），各带 DigiCert 的 SHA-256 RFC3161 时间戳，`signtool verify /pa /all /tw` 两个都通过，`Setup.exe --verify-payload` 收据为 passed，构建出的安装器程序集里默认校验策略读出为 `PinnedSelfSignedRelease`。目录 `artifacts/installer/release/`（被 Git 忽略，首层只有 `Setup.exe`、`LICENSE`、`README.md`）。隔离的 Windows 沙盒中 `install-only` 通过（第一次在清理阶段因包移除失败 0x80073CFA 而标为失败，此前的导入证书、安装依赖、安装主包、核对包全部通过；原样重跑一次通过）。**没有在蓝机上做完整安装**：约 440 MB，经不稳定的 SSH 隧道传不动。11 月 14 日构建的、要求系统信任的严格版本留在 `artifacts/formal-signing/strict-release-20261114/` |
+| 蓝机已装 | **11 月 15 日起装的是正式签名包**（见下一行），用户数据已还原，应用和服务运行中，核心状态与代理模式按用户自己的设置。更早验收过的 CI 候选已用它自己匹配的 Setup 卸载 |
+| 桌面交付 | `Desktop\Clash#` 现为正式签名包的完整解压布局（首层 `Setup.exe`、`LICENSE`、`README.md`，无 ZIP，`Setup.exe` SHA-256 与下一行一致）。此前的 CI 候选目录原样移到蓝机 `C:\ClashSharpValidation\round11-20261115\desktop-original`，没有删除 |
+| 正式签名包 | 11 月 15 日在本机用 `build.ps1 -PinnedSelfSignedRelease` 构建。产品本体源码与 `a6709ba0` 相同；构建时安装器配置改动尚未提交，所以应用的产品版本串里是当时的 HEAD `971ef5e4`，改动随后原样提交为 `8eed4f3f`。`Setup.exe` SHA-256 `B7169697AB6F23464EC31DBAFB7EE1AD1BADF54D10A94BDE20E32F20239B5F88`，主 MSIX 与 `Setup.exe` 都由 `CN=WaterRun, OU="Clash#"` 签名（指纹 `59ED7BC9…`，3072 位 RSA，有效期至 2036-11-14），各带 DigiCert 的 SHA-256 RFC3161 时间戳，`signtool verify /pa /all /tw` 两个都通过，`Setup.exe --verify-payload` 收据为 passed，构建出的安装器程序集里默认校验策略读出为 `PinnedSelfSignedRelease`。目录 `artifacts/installer/release/`（被 Git 忽略）。**在蓝机上做了完整真实安装**：蓝机的 Windows 并不信任这份证书（`Get-AuthenticodeSignature` 为 `UnknownError`，证书不在受信任的根里）。流程：先退出应用、保护用户数据（157 个文件，清单 `157C8011…`）、用匹配的 Setup 卸载 CI 候选、再通过真实的安装器窗口运行正式版 Setup。安装器通过自己的固定指纹校验放行提权，完成页诊断 `installer.completed`；应用包注册成功（发布者 `CN=WaterRun, OU="Clash#"`，状态 Ok），服务运行，证书由安装器加入 `LocalMachine\TrustedPeople`、没有进 `Root`，应用从完成页启动。随后退出应用、逐文件校验哈希还原用户数据（157 个文件，清单一致，15 个新装产生的多余文件移入私有目录），启动应用，主控与设置读回与还原前一致。隔离的 Windows 沙盒中 `install-only` 通过（第一次在清理阶段因包移除失败 0x80073CFA 而标为失败，此前的导入证书、安装依赖、安装主包、核对包全部通过；原样重跑一次通过）。11 月 14 日构建的、要求系统信任的严格版本留在 `artifacts/formal-signing/strict-release-20261114/` |
 | 用户数据 | 验收前保护的原始数据（清单 `0EF8A707…`，156 个文件）逐个校验哈希还原，新装产生的 21 个多余文件移入私有目录。还原前另存了一份当时状态的安全快照（清单 `DF3771FF…`，200 个文件） |
 
 ## 产品修复

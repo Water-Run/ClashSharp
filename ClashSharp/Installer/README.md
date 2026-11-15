@@ -142,7 +142,7 @@ CLASHSHARP_WINDOWS_SDK_VERSION。脚本验证签名与时间戳后才产生正�
 3. 在构建机上信任该证书，让构建时的 `signtool verify /pa /all /tw` 能建立链（只影响这台构建机）。
 4. 设置 `CLASHSHARP_AUTHENTICODE_TIMESTAMP_URL`（如 `http://timestamp.digicert.com`）和 `CLASHSHARP_WINDOWS_SDK_VERSION`，运行 `build.ps1 -PinnedSelfSignedRelease`。RFC3161 时间戳使签名在证书到期后仍然有效。
 
-2026-11-15 已按此方案在受控的开发机上产出固定指纹自签名正式包，证书指纹以 `59ED7BC9` 开头；备份位置由维护者保管。证书私钥一旦丢失，只能换新证书和新的包家族，用户需要卸载重装；因此要像保管发布密钥一样备份 PFX 与口令。
+2026-11-15 已按此方案在受控的开发机上产出固定指纹自签名正式包，证书指纹以 `59ED7BC9` 开头；备份位置由维护者保管。同一天在一台不信任该证书的 Windows 机器上，通过真实的安装器窗口完成了这份包的安装：安装器放行提权，完成页诊断 `installer.completed`，证书由安装器加入 `LocalMachine\TrustedPeople` 而没有进入受信任的根，应用与服务正常运行。证书私钥一旦丢失，只能换新证书和新的包家族，用户需要卸载重装；因此要像保管发布密钥一样备份 PFX 与口令。
 
 时间戳地址须为绝对 URI，不能含用户凭据、片段或空白。使用时间戳服务商公布的
 RFC3161 地址；例如 [DigiCert 官方地址](https://knowledge.digicert.com/general-information/rfc3161-compliant-time-stamp-authority-server)
